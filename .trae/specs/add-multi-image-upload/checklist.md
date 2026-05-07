@@ -1,0 +1,18 @@
+- [ ] page.tsx 中 userImage 改为 userImages: string[]，支持多图状态
+- [ ] page.tsx handleImageUpload 支持多文件上传，校验数量≤16、总大小≤50MB
+- [ ] page.tsx 图片预览区域横向排列带序号标签（①②③）的缩略图
+- [ ] page.tsx 每张图片可单独删除，删除后序号自动重排
+- [ ] page.tsx sendMessage 将多张图片作为多个 image_url 传递给 API
+- [ ] page.tsx file input 添加 multiple 属性
+- [ ] ImageGeneratorWorkflow.tsx referenceImage 改为 referenceImages: string[]
+- [ ] ImageGeneratorWorkflow.tsx 支持多文件上传和带序号标签预览
+- [ ] ImageGeneratorWorkflow.tsx API 请求传递 referenceImages 数组
+- [ ] EcommerceWorkflow.tsx referenceImage 改为 referenceImages: string[]
+- [ ] EcommerceWorkflow.tsx 支持多文件上传和带序号标签预览
+- [ ] EcommerceWorkflow.tsx API 请求传递 referenceImages 数组
+- [ ] /api/chat/route.ts 支持从消息中提取多张图片
+- [ ] /api/chat/route.ts generateWithGPTImage2 支持多图 image_url 数组
+- [ ] /api/chat/route.ts generateWithGPTImage2Edit 支持多图 FormData
+- [ ] /api/generate/route.ts 解析 referenceImages 数组参数
+- [ ] /api/generate/route.ts edits 端点将多张图片作为多个 image 字段附加
+- [ ] 不影响其他组件功能

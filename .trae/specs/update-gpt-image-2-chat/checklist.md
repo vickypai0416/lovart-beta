@@ -1,0 +1,10 @@
+- [x] image-models.ts 中 gpt-image-2 模型名称更新为包含"对话生图+图片识别"
+- [x] gpt-image-2 模型描述明确说明支持图文输入和文本/图片输出
+- [x] generateWithGPTImage2 函数请求格式符合文档规范
+- [x] 请求包含完整的系统提示词 "You are a helpful assistant."
+- [x] 响应解析逻辑支持多种格式（content、image_url、data[0].url）
+- [x] 支持图片识别模式，返回纯文本分析结果
+- [x] page.tsx 对话助手组件添加图片识别模式选项
+- [x] 模型选择器明确标识 GPT Image 2 的功能
+- [x] 图片识别结果正确展示在对话中
+- [x] 不影响其他模型和组件的功能

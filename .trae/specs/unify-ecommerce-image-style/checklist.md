@@ -1,0 +1,9 @@
+- [x] `/api/generate-prompts` 返回的响应中包含 `styleAnchor` 对象（colorPalette, lightingStyle, visualStyle, moodKeyword）
+- [x] 每个 prompt 末尾追加了统一的风格锚定词片段
+- [x] `/api/generate` 支持接收 `styleReferenceImage` 参数，并将其作为第二个 image 字段传入 FormData
+- [x] `/api/generate` 在有 styleReferenceImage 时，prompt 末尾追加了风格一致性指令
+- [x] `/api/generate` 在无 styleReferenceImage 时行为与原来完全一致
+- [x] EcommerceWorkflow 的 generateImages 实现了"首图驱动"流程：先生成主图，再用主图作为风格参考
+- [x] 主图生成失败时降级为独立生成流程，不会阻塞后续图片生成
+- [x] UI 在生成过程中显示分阶段提示（"正在生成主图..." → "正在以主图风格生成其余图片..."）
+- [x] 6张生成的商品图在风格、配色、光影上比改造前更加统一

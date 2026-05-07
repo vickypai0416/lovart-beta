@@ -1,0 +1,12 @@
+- [ ] Stage 组件的 width 属性大于 0
+- [ ] Stage 组件的 height 属性大于 0
+- [ ] containerRef 正确绑定到 DOM 元素
+- [ ] updateSize 函数正确获取容器尺寸
+- [ ] ResizeObserver 正确监听尺寸变化
+- [ ] Stage DOM 元素存在且尺寸正确
+- [ ] Stage 样式没有被覆盖
+- [ ] Layer 组件包含网格 Rect 元素
+- [ ] 网格背景可见
+- [ ] 缩放功能正常工作
+- [ ] 拖拽功能正常工作
+- [ ] 上传图片能显示在画布上
