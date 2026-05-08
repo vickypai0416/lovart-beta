@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createEvent, createGeneration, createFeedback, createMessage, Generation } from '@/lib/analytics';
 
 export async function POST(request: NextRequest) {
-  const { action } = await request.json();
+  // 只读取一次 request body
+  const body = await request.json();
+  const { action } = body;
 
   try {
     switch (action) {
       case 'track_event': {
-        const { sessionId, type, payload } = await request.json();
+        const { sessionId, type, payload } = body;
         if (!sessionId || !type) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
@@ -16,15 +18,14 @@ export async function POST(request: NextRequest) {
       }
 
       case 'track_generation': {
-        const data = await request.json();
-        const { sessionId, prompt, size, quality, model, count } = data;
+        const { sessionId, prompt, size, quality, model, count, displayPrompt } = body;
         if (!sessionId || !prompt || !size || !quality || !model || count === undefined) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
         const generation = await createGeneration({
           sessionId,
           prompt,
-          displayPrompt: data.displayPrompt,
+          displayPrompt,
           size,
           quality,
           model,
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'update_generation': {
-        const { id, updates } = await request.json();
+        const { id, updates } = body;
         if (!id) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'track_feedback': {
-        const { sessionId, generationId, rating, comment } = await request.json();
+        const { sessionId, generationId, rating, comment } = body;
         if (!sessionId) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
@@ -60,18 +61,25 @@ export async function POST(request: NextRequest) {
       }
 
       case 'track_message': {
-        const { sessionId, content, model, hasImages, imageCount } = await request.json();
+        const { sessionId, content, model, hasImages, imageCount } = body;
+        console.log('[Track API] track_message called with:', { sessionId, content, model, hasImages, imageCount });
         if (!sessionId || !content || !model) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
-        const message = await createMessage({
-          sessionId,
-          content,
-          model,
-          hasImages: hasImages || false,
-          imageCount: imageCount || 0,
-        });
-        return NextResponse.json({ success: true, message });
+        try {
+          const message = await createMessage({
+            sessionId,
+            content,
+            model,
+            hasImages: hasImages || false,
+            imageCount: imageCount || 0,
+          });
+          console.log('[Track API] track_message succeeded:', message.id);
+          return NextResponse.json({ success: true, message });
+        } catch (error) {
+          console.error('[Track API] createMessage failed:', error);
+          throw error;
+        }
       }
 
       default:

@@ -1,0 +1,11 @@
+[
+  {
+    "sessionId": "test-session-123",
+    "content": "????",
+    "model": "gpt-4",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1778235410685-7ltwv0egm",
+    "createdAt": "2026-05-08T10:16:50.685Z"
+  }
+]

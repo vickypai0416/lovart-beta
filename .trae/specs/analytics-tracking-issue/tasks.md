@@ -1,7 +1,10 @@
 # 数据分析仪表盘无记录问题排查 - 任务列表
 
 ## [x] Task 1: 添加详细调试日志
-## [/] Task 2: 修复 trackMessage 调用位置
+## [x] Task 2: 修复 trackMessage 调用位置
+## [x] Task 3: 验证存储后端工作正常
+## [x] Task 4: 验证仪表盘查询 API
+## [x] Task 5: 测试端到端追踪流程
 - **Priority**: P0
 - **Depends On**: None
 - **Description**: 在追踪流程的关键节点添加详细的 console.log，包括：
