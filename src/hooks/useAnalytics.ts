@@ -8,7 +8,9 @@ function getSessionIdClient(): string {
   if (!sessionId) {
     sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     localStorage.setItem('analytics_session_id', sessionId);
+    console.log('[Analytics] Created new session:', sessionId);
   }
+  console.log('[Analytics] Got sessionId:', sessionId);
   return sessionId;
 }
 
@@ -27,17 +29,25 @@ export function useAnalytics() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    console.log('[Analytics] Initializing analytics hook...');
     // 只在客户端初始化 sessionId
-    waitForSessionId(setSessionId).then(() => {
+    waitForSessionId(setSessionId).then((id) => {
+      console.log('[Analytics] Session initialized:', id);
       setIsInitialized(true);
+    }).catch((error) => {
+      console.error('[Analytics] Failed to initialize session:', error);
     });
   }, []);
 
   // 追踪事件
   const trackEvent = useCallback(async (type: string, payload: Record<string, unknown> = {}) => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      console.warn('[Analytics] trackEvent: sessionId not available');
+      return;
+    }
+    console.log('[Analytics] trackEvent called:', type, payload);
     try {
-      await fetch('/api/track', {
+      const response = await fetch('/api/track', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,13 +59,16 @@ export function useAnalytics() {
           payload,
         }),
       });
+      const result = await response.json();
+      console.log('[Analytics] trackEvent response:', result);
     } catch (error) {
-      console.warn('[Analytics] Failed to track event:', error);
+      console.error('[Analytics] Failed to track event:', error);
     }
   }, [sessionId]);
 
   // 追踪工作流切换
   const trackWorkflowSwitch = useCallback((workflow: string) => {
+    console.log('[Analytics] trackWorkflowSwitch:', workflow);
     trackEvent('workflow_switch', { workflow });
   }, [trackEvent]);
 
@@ -66,13 +79,16 @@ export function useAnalytics() {
     hasImages?: boolean;
     imageCount?: number;
   }) => {
+    console.log('[Analytics] trackMessage called with data:', data);
+    
     // 如果 sessionId 还未初始化，等待初始化完成
     if (!sessionId) {
-      console.log('[Analytics] Waiting for sessionId for message tracking...');
+      console.log('[Analytics] trackMessage: sessionId not available, waiting...');
       await new Promise((resolve) => {
         const interval = setInterval(() => {
           const id = localStorage.getItem('analytics_session_id');
           if (id) {
+            console.log('[Analytics] trackMessage: got sessionId from localStorage:', id);
             clearInterval(interval);
             setSessionId(id);
             resolve(id);
@@ -82,9 +98,11 @@ export function useAnalytics() {
     }
     
     if (!sessionId) {
-      console.warn('[Analytics] sessionId not available for message tracking');
+      console.error('[Analytics] trackMessage: sessionId still not available after waiting');
       return null;
     }
+
+    console.log('[Analytics] trackMessage: sending to API, sessionId:', sessionId);
 
     try {
       const response = await fetch('/api/track', {
@@ -99,11 +117,15 @@ export function useAnalytics() {
         }),
       });
       const result = await response.json();
+      console.log('[Analytics] trackMessage API response:', result);
       if (result.success && result.message) {
+        console.log('[Analytics] trackMessage succeeded, message ID:', result.message.id);
         return result.message.id;
+      } else {
+        console.error('[Analytics] trackMessage failed:', result.error);
       }
     } catch (error) {
-      console.warn('[Analytics] Failed to track message:', error);
+      console.error('[Analytics] Failed to track message:', error);
     }
     return null;
   }, [sessionId]);
@@ -117,13 +139,16 @@ export function useAnalytics() {
     model: string;
     count: number;
   }) => {
+    console.log('[Analytics] trackGeneration called with data:', data);
+    
     // 如果 sessionId 还未初始化，等待初始化完成
     if (!sessionId) {
-      console.log('[Analytics] Waiting for sessionId...');
+      console.log('[Analytics] trackGeneration: sessionId not available, waiting...');
       await new Promise((resolve) => {
         const interval = setInterval(() => {
           const id = localStorage.getItem('analytics_session_id');
           if (id) {
+            console.log('[Analytics] trackGeneration: got sessionId from localStorage:', id);
             clearInterval(interval);
             setSessionId(id);
             resolve(id);
@@ -134,9 +159,11 @@ export function useAnalytics() {
     
     // 再次检查 sessionId
     if (!sessionId) {
-      console.warn('[Analytics] sessionId not available');
+      console.error('[Analytics] trackGeneration: sessionId not available');
       return null;
     }
+
+    console.log('[Analytics] trackGeneration: sending to API, sessionId:', sessionId);
 
     try {
       const response = await fetch('/api/track', {
@@ -151,11 +178,15 @@ export function useAnalytics() {
         }),
       });
       const result = await response.json();
+      console.log('[Analytics] trackGeneration API response:', result);
       if (result.success && result.generation) {
+        console.log('[Analytics] trackGeneration succeeded, generation ID:', result.generation.id);
         return result.generation.id;
+      } else {
+        console.error('[Analytics] trackGeneration failed:', result.error);
       }
     } catch (error) {
-      console.warn('[Analytics] Failed to track generation:', error);
+      console.error('[Analytics] Failed to track generation:', error);
     }
     return null;
   }, [sessionId]);
@@ -167,8 +198,9 @@ export function useAnalytics() {
     imageUrl?: string;
     error?: string;
   }) => {
+    console.log('[Analytics] updateGeneration called:', id, updates);
     try {
-      await fetch('/api/track', {
+      const response = await fetch('/api/track', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,8 +211,10 @@ export function useAnalytics() {
           updates,
         }),
       });
+      const result = await response.json();
+      console.log('[Analytics] updateGeneration response:', result);
     } catch (error) {
-      console.warn('[Analytics] Failed to update generation:', error);
+      console.error('[Analytics] Failed to update generation:', error);
     }
   }, []);
 
@@ -190,7 +224,11 @@ export function useAnalytics() {
     rating?: number;
     comment?: string;
   }) => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      console.warn('[Analytics] submitFeedback: sessionId not available');
+      return;
+    }
+    console.log('[Analytics] submitFeedback called:', data);
     try {
       await fetch('/api/track', {
         method: 'POST',
@@ -211,6 +249,7 @@ export function useAnalytics() {
   // 页面加载时追踪页面浏览
   useEffect(() => {
     if (sessionId) {
+      console.log('[Analytics] Tracking page view:', window.location.pathname);
       trackEvent('page_view', {
         path: window.location.pathname,
         referrer: document.referrer,

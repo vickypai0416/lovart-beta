@@ -397,13 +397,16 @@ export default function Home() {
 
     // 追踪所有用户消息（文本或图片）
     if (effectiveContent.trim()) {
+      console.log('[Analytics] Preparing to track message:', effectiveContent.trim());
       const messageId = await trackMessage({
         content: effectiveContent.trim(),
         model: effectiveModel,
         hasImages: currentImages.length > 0,
         imageCount: currentImages.length,
       });
-      console.log('[Analytics] Tracked message:', messageId);
+      console.log('[Analytics] Message tracking completed, ID:', messageId);
+    } else {
+      console.log('[Analytics] Empty content, skipping message tracking');
     }
 
     try {
