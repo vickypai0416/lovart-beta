@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         const startDate = startDateStr ? new Date(startDateStr) : undefined;
         const endDate = endDateStr ? new Date(endDateStr) : undefined;
         
-        const summary = getSummary(startDate, endDate);
+        const summary = await getSummary(startDate, endDate);
         return NextResponse.json({ success: true, data: summary });
       }
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         const pageSize = parseInt(searchParams.get('pageSize') || '20');
         const status = searchParams.get('status') || undefined;
         
-        const result = getGenerations(page, pageSize, status);
+        const result = await getGenerations(page, pageSize, status);
         return NextResponse.json({ success: true, data: result });
       }
 
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
         const page = parseInt(searchParams.get('page') || '1');
         const pageSize = parseInt(searchParams.get('pageSize') || '20');
         
-        const result = getFeedbacks(page, pageSize);
+        const result = await getFeedbacks(page, pageSize);
         return NextResponse.json({ success: true, data: result });
       }
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         const startDate = startDateStr ? new Date(startDateStr) : undefined;
         const endDate = endDateStr ? new Date(endDateStr) : undefined;
         
-        const stats = getEventStats(startDate, endDate);
+        const stats = await getEventStats(startDate, endDate);
         return NextResponse.json({ success: true, data: stats });
       }
 

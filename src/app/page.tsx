@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useAnalytics } from '@/hooks/useAnalytics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -84,6 +85,9 @@ export default function Home() {
   const [selectedPersona, setSelectedPersona] = useState<string>('default');
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { trackGeneration, updateGeneration } = useAnalytics();
+  const generationIdRef = useRef<string | null>(null);
+  const requestStartTimeRef = useRef<number>(0);
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -361,6 +365,22 @@ export default function Home() {
       abortControllerRef.current?.abort();
     }, timeoutMs);
 
+    const imageModels: ImageModelId[] = ['gpt-image-2', 'gpt-image-2-gen', 'gpt-image-2-edit'];
+    const isImageGeneration = imageModels.includes(effectiveModel as ImageModelId);
+    
+    if (isImageGeneration) {
+      requestStartTimeRef.current = Date.now();
+      const generationId = await trackGeneration({
+        prompt: effectiveContent,
+        displayPrompt: effectiveContent,
+        size: selectedSize,
+        quality: selectedQuality,
+        model: effectiveModel,
+        count: selectedCount,
+      });
+      generationIdRef.current = generationId;
+    }
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -422,6 +442,14 @@ export default function Home() {
                 product: data.product || '生成图片',
                 scene: data.scene || '',
               });
+              if (generationIdRef.current) {
+                const duration = Date.now() - requestStartTimeRef.current;
+                updateGeneration(generationIdRef.current, {
+                  status: 'success',
+                  duration,
+                  imageUrl: data.url,
+                });
+              }
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessageId
@@ -446,6 +474,14 @@ export default function Home() {
                 )
               );
             } else if (data.type === 'error') {
+              if (generationIdRef.current) {
+                const duration = Date.now() - requestStartTimeRef.current;
+                updateGeneration(generationIdRef.current, {
+                  status: 'failed',
+                  duration,
+                  error: data.message || '生成失败',
+                });
+              }
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessageId
@@ -462,6 +498,14 @@ export default function Home() {
     } catch (error: unknown) {
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('[Chat Error]', error);
+        if (generationIdRef.current) {
+          const duration = Date.now() - requestStartTimeRef.current;
+          updateGeneration(generationIdRef.current, {
+            status: 'failed',
+            duration,
+            error: error instanceof Error ? error.message : '网络错误',
+          });
+        }
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMessageId
@@ -473,6 +517,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      generationIdRef.current = null;
     }
   };
 

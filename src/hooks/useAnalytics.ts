@@ -2,8 +2,8 @@
 
 import { useEffect, useCallback, useState } from 'react';
 
-// 获取或创建会话ID
-function getSessionId(): string {
+// 获取或创建会话ID（仅在客户端调用）
+function getSessionIdClient(): string {
   let sessionId = localStorage.getItem('analytics_session_id');
   if (!sessionId) {
     sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -13,10 +13,17 @@ function getSessionId(): string {
 }
 
 export function useAnalytics() {
-  const [sessionId] = useState(getSessionId);
+  // 使用 useState 初始化，但使用 useEffect 确保只在客户端执行
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 只在客户端初始化 sessionId
+    setSessionId(getSessionIdClient());
+  }, []);
 
   // 追踪事件
   const trackEvent = useCallback(async (type: string, payload: Record<string, unknown> = {}) => {
+    if (!sessionId) return;
     try {
       await fetch('/api/track', {
         method: 'POST',
@@ -49,6 +56,7 @@ export function useAnalytics() {
     model: string;
     count: number;
   }) => {
+    if (!sessionId) return null;
     try {
       const response = await fetch('/api/track', {
         method: 'POST',
@@ -101,6 +109,7 @@ export function useAnalytics() {
     rating?: number;
     comment?: string;
   }) => {
+    if (!sessionId) return;
     try {
       await fetch('/api/track', {
         method: 'POST',
@@ -120,11 +129,13 @@ export function useAnalytics() {
 
   // 页面加载时追踪页面浏览
   useEffect(() => {
-    trackEvent('page_view', {
-      path: window.location.pathname,
-      referrer: document.referrer,
-    });
-  }, [trackEvent]);
+    if (sessionId) {
+      trackEvent('page_view', {
+        path: window.location.pathname,
+        referrer: document.referrer,
+      });
+    }
+  }, [trackEvent, sessionId]);
 
   return {
     sessionId,

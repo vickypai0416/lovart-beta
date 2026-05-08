@@ -11,8 +11,10 @@ import {
 import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, History, Eye } from 'lucide-react';
 import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearImgGenHistory, ImgGenHistoryItem } from '@/lib/history-manager';
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function ImageGeneratorWorkflow() {
+  const { trackGeneration, updateGeneration } = useAnalytics();
   const [prompt, setPrompt] = useState('');
   const [selectedSize, setSelectedSize] = useState('1024x1024');
   const [selectedQuality, setSelectedQuality] = useState('high');
@@ -27,6 +29,7 @@ export default function ImageGeneratorWorkflow() {
   const [englishPrompt, setEnglishPrompt] = useState<string>('');
   const [showTemplates, setShowTemplates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const generationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -60,6 +63,16 @@ export default function ImageGeneratorWorkflow() {
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
+    const startTime = Date.now();
+
+    const generationId = await trackGeneration({
+      prompt: englishPrompt || prompt.trim(),
+      size: selectedSize,
+      quality: selectedQuality,
+      model: selectedModel,
+      count: selectedCount,
+    });
+    generationIdRef.current = generationId;
 
     const maxRetries = 2;
     const timeoutMs = 60000; // 60秒超时
@@ -97,8 +110,24 @@ export default function ImageGeneratorWorkflow() {
             setImageHistory(updatedHistory);
             setGeneratedImages(urls);
             setEnglishPrompt('');
+            
+            if (generationId) {
+              await updateGeneration(generationId, {
+                status: 'success',
+                imageUrl: urls[0],
+                duration: Date.now() - startTime,
+              });
+            }
           } else {
-            alert('生成失败: 未获取到图片');
+            const errorMsg = '生成失败: 未获取到图片';
+            alert(errorMsg);
+            if (generationId) {
+              await updateGeneration(generationId, {
+                status: 'failed',
+                error: errorMsg,
+                duration: Date.now() - startTime,
+              });
+            }
           }
         } else {
           if (retry < maxRetries) {
@@ -106,7 +135,15 @@ export default function ImageGeneratorWorkflow() {
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
-          alert('生成失败: ' + (result.error || '未知错误'));
+          const errorMsg = '生成失败: ' + (result.error || '未知错误');
+          alert(errorMsg);
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'failed',
+              error: result.error || '未知错误',
+              duration: Date.now() - startTime,
+            });
+          }
         }
         break;
       } catch (error) {
@@ -116,7 +153,15 @@ export default function ImageGeneratorWorkflow() {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
-        alert('生成失败，请重试: ' + (error instanceof Error ? error.message : '网络错误'));
+        const errorMsg = '生成失败，请重试: ' + (error instanceof Error ? error.message : '网络错误');
+        alert(errorMsg);
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : '网络错误',
+            duration: Date.now() - startTime,
+          });
+        }
       }
     }
 

@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         if (!sessionId || !type) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
-        const event = createEvent(sessionId, type, payload || {});
+        const event = await createEvent(sessionId, type, payload || {});
         return NextResponse.json({ success: true, event });
       }
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
         if (!sessionId || !prompt || !size || !quality || !model || count === undefined) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
-        const generation = createGeneration({
+        const generation = await createGeneration({
           sessionId,
           prompt,
           displayPrompt: data.displayPrompt,
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         }
         // 更新生成记录（在 analytics.ts 中处理）
         const { updateGeneration } = await import('@/lib/analytics');
-        updateGeneration(id, updates);
+        await updateGeneration(id, updates);
         return NextResponse.json({ success: true });
       }
 
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         if (!sessionId) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
-        const feedback = createFeedback({
+        const feedback = await createFeedback({
           sessionId,
           generationId,
           rating: rating ? Number(rating) : undefined,
