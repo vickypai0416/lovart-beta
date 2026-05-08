@@ -14,7 +14,7 @@ import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function ImageGeneratorWorkflow() {
-  const { trackGeneration, updateGeneration } = useAnalytics();
+  const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
   const [prompt, setPrompt] = useState('');
   const [selectedSize, setSelectedSize] = useState('1024x1024');
   const [selectedQuality, setSelectedQuality] = useState('high');
@@ -65,6 +65,20 @@ export default function ImageGeneratorWorkflow() {
     setIsGenerating(true);
     const startTime = Date.now();
 
+    // 确保 analytics 初始化完成
+    if (!isInitialized) {
+      console.log('[Analytics] Waiting for initialization...');
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          const id = localStorage.getItem('analytics_session_id');
+          if (id) {
+            clearInterval(interval);
+            resolve(id);
+          }
+        }, 50);
+      });
+    }
+
     const generationId = await trackGeneration({
       prompt: englishPrompt || prompt.trim(),
       size: selectedSize,
@@ -73,6 +87,7 @@ export default function ImageGeneratorWorkflow() {
       count: selectedCount,
     });
     generationIdRef.current = generationId;
+    console.log('[Analytics] Tracked generation:', generationId);
 
     const maxRetries = 2;
     const timeoutMs = 60000; // 60秒超时

@@ -85,7 +85,7 @@ export default function Home() {
   const [selectedPersona, setSelectedPersona] = useState<string>('default');
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { trackGeneration, updateGeneration } = useAnalytics();
+  const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
   const generationIdRef = useRef<string | null>(null);
   const requestStartTimeRef = useRef<number>(0);
 
@@ -370,6 +370,19 @@ export default function Home() {
     
     if (isImageGeneration) {
       requestStartTimeRef.current = Date.now();
+      // 确保 analytics 初始化完成
+      if (!isInitialized) {
+        console.log('[Analytics] Waiting for initialization...');
+        await new Promise((resolve) => {
+          const interval = setInterval(() => {
+            const id = localStorage.getItem('analytics_session_id');
+            if (id) {
+              clearInterval(interval);
+              resolve(id);
+            }
+          }, 50);
+        });
+      }
       const generationId = await trackGeneration({
         prompt: effectiveContent,
         displayPrompt: effectiveContent,
@@ -379,6 +392,7 @@ export default function Home() {
         count: selectedCount,
       });
       generationIdRef.current = generationId;
+      console.log('[Analytics] Tracked generation:', generationId);
     }
 
     try {

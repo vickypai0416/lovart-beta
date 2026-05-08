@@ -12,13 +12,25 @@ function getSessionIdClient(): string {
   return sessionId;
 }
 
+// 等待 sessionId 可用
+async function waitForSessionId(setSessionId: (sessionId: string) => void): Promise<string> {
+  return new Promise((resolve) => {
+    const sessionId = getSessionIdClient();
+    setSessionId(sessionId);
+    resolve(sessionId);
+  });
+}
+
 export function useAnalytics() {
   // 使用 useState 初始化，但使用 useEffect 确保只在客户端执行
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     // 只在客户端初始化 sessionId
-    setSessionId(getSessionIdClient());
+    waitForSessionId(setSessionId).then(() => {
+      setIsInitialized(true);
+    });
   }, []);
 
   // 追踪事件
@@ -47,7 +59,7 @@ export function useAnalytics() {
     trackEvent('workflow_switch', { workflow });
   }, [trackEvent]);
 
-  // 追踪图片生成请求
+  // 追踪图片生成请求（确保 sessionId 已初始化）
   const trackGeneration = useCallback(async (data: {
     prompt: string;
     displayPrompt?: string;
@@ -56,7 +68,27 @@ export function useAnalytics() {
     model: string;
     count: number;
   }) => {
-    if (!sessionId) return null;
+    // 如果 sessionId 还未初始化，等待初始化完成
+    if (!sessionId) {
+      console.log('[Analytics] Waiting for sessionId...');
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          const id = localStorage.getItem('analytics_session_id');
+          if (id) {
+            clearInterval(interval);
+            setSessionId(id);
+            resolve(id);
+          }
+        }, 50);
+      });
+    }
+    
+    // 再次检查 sessionId
+    if (!sessionId) {
+      console.warn('[Analytics] sessionId not available');
+      return null;
+    }
+
     try {
       const response = await fetch('/api/track', {
         method: 'POST',
@@ -139,6 +171,7 @@ export function useAnalytics() {
 
   return {
     sessionId,
+    isInitialized,
     trackEvent,
     trackWorkflowSwitch,
     trackGeneration,
