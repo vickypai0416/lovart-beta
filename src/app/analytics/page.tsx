@@ -10,7 +10,7 @@ import {
 import { 
   TrendingUp, Users, Clock, Star, 
   Image, AlertCircle, CheckCircle, 
-  Download, RefreshCw 
+  Download, RefreshCw, MessageSquare 
 } from 'lucide-react';
 
 type SummaryData = {
@@ -50,9 +50,14 @@ type FeedbackData = {
   createdAt: string;
 };
 
-type EventStats = {
-  events: { type: string; count: number }[];
-  dailyStats: { date: string; count: number }[];
+type MessageData = {
+  id: string;
+  sessionId: string;
+  content: string;
+  model: string;
+  hasImages?: boolean;
+  imageCount?: number;
+  createdAt: string;
 };
 
 export default function AnalyticsDashboard() {
@@ -60,28 +65,32 @@ export default function AnalyticsDashboard() {
   const [generations, setGenerations] = useState<GenerationData[]>([]);
   const [feedbacks, setFeedbacks] = useState<FeedbackData[]>([]);
   const [eventStats, setEventStats] = useState<EventStats | null>(null);
+  const [messages, setMessages] = useState<MessageData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'summary' | 'generations' | 'feedbacks'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'generations' | 'feedbacks' | 'messages'>('summary');
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [summaryRes, generationsRes, feedbacksRes, eventsRes] = await Promise.all([
+      const [summaryRes, generationsRes, feedbacksRes, eventsRes, messagesRes] = await Promise.all([
         fetch('/api/analytics?endpoint=summary'),
         fetch('/api/analytics?endpoint=generations&pageSize=10'),
         fetch('/api/analytics?endpoint=feedbacks&pageSize=10'),
         fetch('/api/analytics?endpoint=events'),
+        fetch('/api/analytics?endpoint=messages'),
       ]);
 
       const summaryData = await summaryRes.json();
       const generationsData = await generationsRes.json();
       const feedbacksData = await feedbacksRes.json();
       const eventsData = await eventsRes.json();
+      const messagesData = await messagesRes.json();
 
       if (summaryData.success) setSummary(summaryData.data);
       if (generationsData.success) setGenerations(generationsData.data.data);
       if (feedbacksData.success) setFeedbacks(feedbacksData.data.data);
       if (eventsData.success) setEventStats(eventsData.data);
+      if (messagesData.success) setMessages(messagesData.data);
     } catch (error) {
       console.error('Failed to fetch analytics data:', error);
     } finally {
@@ -183,6 +192,12 @@ export default function AnalyticsDashboard() {
             onClick={() => setActiveTab('feedbacks')}
           >
             用户反馈
+          </Button>
+          <Button
+            variant={activeTab === 'messages' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('messages')}
+          >
+            消息记录
           </Button>
         </div>
 
@@ -469,6 +484,46 @@ export default function AnalyticsDashboard() {
                 <div className="flex flex-col items-center justify-center h-64 text-gray-400">
                   <Star className="w-12 h-12 mb-4" />
                   <p>暂无用户反馈</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'messages' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>消息记录</CardTitle>
+              <p className="text-sm text-gray-500">用户发送的所有消息记录</p>
+            </CardHeader>
+            <CardContent>
+              {messages.length > 0 ? (
+                <div className="space-y-4">
+                  {messages.map((msg) => (
+                    <div key={msg.id} className="p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{msg.content}</p>
+                          <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                            <span>模型: {msg.model}</span>
+                            {msg.hasImages && (
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
+                                包含图片 ({msg.imageCount})
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-2">
+                            {new Date(msg.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                  <MessageSquare className="w-12 h-12 mb-4" />
+                  <p>暂无消息记录</p>
                 </div>
               )}
             </CardContent>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createEvent, createGeneration, createFeedback, Generation } from '@/lib/analytics';
+import { createEvent, createGeneration, createFeedback, createMessage, Generation } from '@/lib/analytics';
 
 export async function POST(request: NextRequest) {
   const { action } = await request.json();
@@ -57,6 +57,21 @@ export async function POST(request: NextRequest) {
           comment,
         });
         return NextResponse.json({ success: true, feedback });
+      }
+
+      case 'track_message': {
+        const { sessionId, content, model, hasImages, imageCount } = await request.json();
+        if (!sessionId || !content || !model) {
+          return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
+        }
+        const message = await createMessage({
+          sessionId,
+          content,
+          model,
+          hasImages: hasImages || false,
+          imageCount: imageCount || 0,
+        });
+        return NextResponse.json({ success: true, message });
       }
 
       default:

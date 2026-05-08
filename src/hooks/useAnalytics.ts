@@ -59,6 +59,55 @@ export function useAnalytics() {
     trackEvent('workflow_switch', { workflow });
   }, [trackEvent]);
 
+  // 追踪用户消息（文本或图片）
+  const trackMessage = useCallback(async (data: {
+    content: string;
+    model: string;
+    hasImages?: boolean;
+    imageCount?: number;
+  }) => {
+    // 如果 sessionId 还未初始化，等待初始化完成
+    if (!sessionId) {
+      console.log('[Analytics] Waiting for sessionId for message tracking...');
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          const id = localStorage.getItem('analytics_session_id');
+          if (id) {
+            clearInterval(interval);
+            setSessionId(id);
+            resolve(id);
+          }
+        }, 50);
+      });
+    }
+    
+    if (!sessionId) {
+      console.warn('[Analytics] sessionId not available for message tracking');
+      return null;
+    }
+
+    try {
+      const response = await fetch('/api/track', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'track_message',
+          sessionId,
+          ...data,
+        }),
+      });
+      const result = await response.json();
+      if (result.success && result.message) {
+        return result.message.id;
+      }
+    } catch (error) {
+      console.warn('[Analytics] Failed to track message:', error);
+    }
+    return null;
+  }, [sessionId]);
+
   // 追踪图片生成请求（确保 sessionId 已初始化）
   const trackGeneration = useCallback(async (data: {
     prompt: string;
@@ -174,6 +223,7 @@ export function useAnalytics() {
     isInitialized,
     trackEvent,
     trackWorkflowSwitch,
+    trackMessage,
     trackGeneration,
     updateGeneration,
     submitFeedback,

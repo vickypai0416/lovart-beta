@@ -37,6 +37,15 @@ export interface Feedback {
  comment?: string;
  createdAt: Date;
 }
+export interface Message {
+ id: string;
+ sessionId: string;
+ content: string;
+ model: string;
+ hasImages?: boolean;
+ imageCount?: number;
+ createdAt: Date;
+}
 // 存储适配器接口
 interface StorageAdapter {
  // Session operations
@@ -56,6 +65,10 @@ interface StorageAdapter {
  createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback>;
  getFeedbacksBySession(sessionId: string): Promise<Feedback[]>;
  getAllFeedbacks(): Promise<Feedback[]>;
+ // Message operations
+ createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message>;
+ getMessagesBySession(sessionId: string): Promise<Message[]>;
+ getAllMessages(): Promise<Message[]>;
 }
 // 生成唯一ID
 function generateId(): string {
@@ -177,6 +190,24 @@ class FileStorageAdapter implements StorageAdapter {
  }
  async getAllFeedbacks(): Promise<Feedback[]> {
  return this.readData<Feedback>('feedbacks');
+ }
+ async createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
+ const message: Message = {
+ ...data,
+ id: generateId(),
+ createdAt: new Date(),
+ };
+ const messages = this.readData<Message>('messages');
+ messages.push(message);
+ this.writeData('messages', messages);
+ return message;
+ }
+ async getMessagesBySession(sessionId: string): Promise<Message[]> {
+ const messages = this.readData<Message>('messages');
+ return messages.filter(m => m.sessionId === sessionId);
+ }
+ async getAllMessages(): Promise<Message[]> {
+ return this.readData<Message>('messages');
  }
 }
 // KV 存储适配器（使用 Vercel KV）
@@ -369,6 +400,48 @@ class KVStorageAdapter implements StorageAdapter {
  }
  return feedbacks;
  }
+ async createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
+ await this.init();
+ const message: Message = {
+ ...data,
+ id: generateId(),
+ createdAt: new Date(),
+ };
+ await this.kv.hset(this.getKey('messages', message.id), message);
+ await this.kv.sadd('analytics:messages:ids', message.id);
+ await this.kv.sadd(`analytics:sessions:${message.sessionId}:messages`, message.id);
+ return message;
+ }
+ async getMessagesBySession(sessionId: string): Promise<Message[]> {
+ await this.init();
+ const messageIds = await this.kv.smembers(`analytics:sessions:${sessionId}:messages`);
+ const messages: Message[] = [];
+ for (const id of messageIds) {
+ const data = await this.kv.hgetall(this.getKey('messages', id));
+ if (data && Object.keys(data).length > 0) {
+ messages.push({
+ ...data,
+ createdAt: new Date(data.createdAt),
+ });
+ }
+ }
+ return messages;
+ }
+ async getAllMessages(): Promise<Message[]> {
+ await this.init();
+ const ids = await this.kv.smembers('analytics:messages:ids');
+ const messages: Message[] = [];
+ for (const id of ids) {
+ const data = await this.kv.hgetall(this.getKey('messages', id));
+ if (data && Object.keys(data).length > 0) {
+ messages.push({
+ ...data,
+ createdAt: new Date(data.createdAt),
+ });
+ }
+ }
+ return messages;
+ }
 }
 // 获取存储适配器实例
 let storageInstance: StorageAdapter | null = null;
@@ -429,6 +502,18 @@ export async function createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): 
 // 获取会话的所有反馈
 export async function getFeedbacksBySession(sessionId: string): Promise<Feedback[]> {
  return getStorage().getFeedbacksBySession(sessionId);
+}
+// 创建消息记录
+export async function createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
+ return getStorage().createMessage(data);
+}
+// 获取会话的所有消息
+export async function getMessagesBySession(sessionId: string): Promise<Message[]> {
+ return getStorage().getMessagesBySession(sessionId);
+}
+// 获取所有消息
+export async function getAllMessages(): Promise<Message[]> {
+ return getStorage().getAllMessages();
 }
 // 获取汇总数据
 export async function getSummary(startDate?: Date, endDate?: Date): Promise<{

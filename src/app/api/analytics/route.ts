@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSummary, getGenerations, getFeedbacks, getEventStats } from '@/lib/analytics';
+import { getSummary, getGenerations, getFeedbacks, getEventStats, getAllMessages } from '@/lib/analytics';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -44,6 +44,11 @@ export async function GET(request: NextRequest) {
         
         const stats = await getEventStats(startDate, endDate);
         return NextResponse.json({ success: true, data: stats });
+      }
+
+      case 'messages': {
+        const messages = await getAllMessages();
+        return NextResponse.json({ success: true, data: messages });
       }
 
       default:

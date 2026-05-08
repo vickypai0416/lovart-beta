@@ -85,7 +85,7 @@ export default function Home() {
   const [selectedPersona, setSelectedPersona] = useState<string>('default');
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
+  const { trackGeneration, updateGeneration, trackMessage, isInitialized } = useAnalytics();
   const generationIdRef = useRef<string | null>(null);
   const requestStartTimeRef = useRef<number>(0);
 
@@ -393,6 +393,17 @@ export default function Home() {
       });
       generationIdRef.current = generationId;
       console.log('[Analytics] Tracked generation:', generationId);
+    }
+
+    // 追踪所有用户消息（文本或图片）
+    if (effectiveContent.trim()) {
+      const messageId = await trackMessage({
+        content: effectiveContent.trim(),
+        model: effectiveModel,
+        hasImages: currentImages.length > 0,
+        imageCount: currentImages.length,
+      });
+      console.log('[Analytics] Tracked message:', messageId);
     }
 
     try {
