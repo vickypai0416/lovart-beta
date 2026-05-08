@@ -153,18 +153,24 @@ async function generateWithRetry(
   maxRetries: number = 2,
   delayMs: number = 3000
 ): Promise<string[]> {
+  let lastError: unknown = null;
   for (let i = 0; i < maxRetries; i++) {
     try {
       const result = await generateFn();
       if (result && result.length > 0) {
         return result;
       }
+      lastError = new Error('生成结果为空');
     } catch (error) {
+      lastError = error;
       console.warn(`[Retry] 生成失败，正在重试 ${i + 1}/${maxRetries}:`, error);
     }
     if (i < maxRetries - 1) {
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
+  }
+  if (lastError) {
+    throw lastError;
   }
   return [];
 }
@@ -216,8 +222,8 @@ async function generateImageDirectly(
       } else if (modelId === 'gpt-image-2-gen') {
         return await generateWithGPTImage2Gen(enhancedPrompt, n, size, quality);
       } else if (modelId === 'gpt-image-2-edit') {
-        console.log(`[GenerateImage] 调用 generateWithGPTImage2Edit, n=${n}`);
-        return await generateWithGPTImage2Edit(enhancedPrompt, referenceImages, n, size);
+        console.log(`[GenerateImage] 调用 generateWithGPTImage2Edit, n=${n}, quality=${quality}`);
+        return await generateWithGPTImage2Edit(enhancedPrompt, referenceImages, n, size, quality);
       }
       console.log(`[GenerateImage] 未知模型: ${modelId}`);
       return [];
@@ -746,7 +752,7 @@ async function generateWithYunwuAPIStream(
         );
         
         try {
-          const imageUrls = await generateWithGPTImage2Edit(imagePrompt, referenceImages);
+          const imageUrls = await generateWithGPTImage2Edit(imagePrompt, referenceImages, 1, '1024x1024', 'high');
           
           if (imageUrls && imageUrls.length > 0) {
             for (let i = 0; i < imageUrls.length; i++) {
@@ -1083,7 +1089,7 @@ async function generateSingleImageWithGPTImage2Edit(prompt: string, imageBlob: B
   throw new Error('未能从响应中获取图片 URL');
 }
 
-export async function generateWithGPTImage2Edit(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024'): Promise<string[]> {
+export async function generateWithGPTImage2Edit(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
   const modelConfig = getModelConfig('gpt-image-2-edit');
   
   if (!modelConfig.apiKey) {
@@ -1100,7 +1106,7 @@ export async function generateWithGPTImage2Edit(prompt: string, referenceImages:
   console.log(`[GPT Image 2 Edit] 请求: ${endpoint}`);
   console.log(`[GPT Image 2 Edit] prompt: ${prompt}`);
   console.log(`[GPT Image 2 Edit] model: ${modelName}`);
-  console.log(`[GPT Image 2 Edit] n: ${n}`);
+  console.log(`[GPT Image 2 Edit] n: ${n}, size: ${size}, quality: ${quality}`);
   console.log(`[GPT Image 2 Edit] 参考图片数量: ${referenceImages.length}`);
 
   const imageBlobs: Blob[] = [];
@@ -1145,6 +1151,7 @@ export async function generateWithGPTImage2Edit(prompt: string, referenceImages:
       formData.append('model', modelName);
       formData.append('n', '1');
       formData.append('size', size);
+      formData.append('quality', quality);
 
       const url = await generateSingleImageWithGPTImage2EditFormData(formData, modelConfig);
       results.push(url);
