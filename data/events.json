@@ -29,6 +29,50 @@
       "path": "/",
       "referrer": "http://localhost:5000/"
     },
-    "createdAt": "2026-05-11T08:35:05.151Z"
+    "createdAt": "2026-05-11T08:35:05.151Z",
+    "updatedAt": "2026-05-11T09:36:35.695Z"
+  },
+  {
+    "id": "1778492195693-hz6p9l5oe",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-11T09:36:35.693Z",
+    "updatedAt": "2026-05-11T09:42:38.278Z"
+  },
+  {
+    "id": "1778492558276-vilem2sl7",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-11T09:42:38.276Z",
+    "updatedAt": "2026-05-11T09:42:38.323Z"
+  },
+  {
+    "id": "1778492558321-prl4xmj7u",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-11T09:42:38.321Z",
+    "updatedAt": "2026-05-11T09:42:38.367Z"
+  },
+  {
+    "id": "1778492558366-ddl7rbq77",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-11T09:42:38.366Z"
   }
 ]

@@ -12,13 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Gift } from 'lucide-react';
 import { saveChatImageToHistory, getChatHistory, getChatHistoryWithUrls, deleteChatImage, clearChatHistory, ChatImageHistoryItem, saveChatMessages, getChatMessages } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
 import { PERSONAS, PersonaConfig } from '@/lib/persona';
 import InfiniteCanvas from '@/components/InfiniteCanvas';
 import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflow';
 import EcommerceWorkflow from '@/components/workflows/EcommerceWorkflow';
+import AmazonCreativeDirectorWorkflow from '@/components/workflows/AmazonCreativeDirectorWorkflow';
 import { downloadImageByUrl } from '@/lib/download';
 
 interface Message {
@@ -721,6 +722,7 @@ export default function Home() {
               { id: 'chat', name: '对话助手', icon: Bot },
               { id: 'image-generator', name: '图片生成', icon: Sparkles },
               { id: 'ecommerce', name: '电商套图', icon: LayoutGrid },
+              { id: 'amazon-creative', name: '亚马逊创意总监', icon: Gift },
             ].map((workflow) => {
               const Icon = workflow.icon;
               const isActive = currentWorkflow === workflow.id;
@@ -863,6 +865,9 @@ export default function Home() {
         </div>
         <div style={{ display: currentWorkflow === 'ecommerce' ? 'flex' : 'none' }} className="h-full">
           <EcommerceWorkflow />
+        </div>
+        <div style={{ display: currentWorkflow === 'amazon-creative' ? 'flex' : 'none' }} className="h-full">
+          <AmazonCreativeDirectorWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'chat' ? 'flex' : 'none' }} className="h-full overflow-hidden flex flex-row-reverse">
           <div className="w-[480px] flex-shrink-0 flex flex-col border-l border-gray-200 h-full">
