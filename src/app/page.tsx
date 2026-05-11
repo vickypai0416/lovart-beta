@@ -243,6 +243,14 @@ export default function Home() {
             }
             
             if (jsonString.trim() === '[DONE]') {
+              // SSE 完成，关闭 isGenerating 状态
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessageId
+                    ? { ...msg, isGenerating: false }
+                    : msg
+                )
+              );
               continue;
             }
             
@@ -463,6 +471,14 @@ export default function Home() {
             }
             
             if (jsonString.trim() === '[DONE]') {
+              // SSE 完成，关闭 isGenerating 状态
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessageId
+                    ? { ...msg, isGenerating: false }
+                    : msg
+                )
+              );
               continue;
             }
             
