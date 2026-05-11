@@ -328,9 +328,16 @@ class KVStorageAdapter implements StorageAdapter {
  id: generateId(),
  createdAt: new Date(),
  };
+ console.log('[KVStorageAdapter] createGeneration called:', { generation });
+ try {
  await this.kv.hset(this.getKey('generations', generation.id), generation);
  await this.kv.sadd('analytics:generations:ids', generation.id);
  await this.kv.sadd(`analytics:sessions:${generation.sessionId}:generations`, generation.id);
+ console.log('[KVStorageAdapter] createGeneration completed successfully:', generation.id);
+ } catch (error) {
+ console.error('[KVStorageAdapter] createGeneration failed:', error);
+ throw error;
+ }
  return generation;
  }
  async updateGeneration(id: string, updates: Partial<Generation>): Promise<void> {
@@ -339,33 +346,79 @@ class KVStorageAdapter implements StorageAdapter {
  }
  async getGenerationsBySession(sessionId: string): Promise<Generation[]> {
  await this.init();
+ console.log('[KVStorageAdapter] getGenerationsBySession called:', { sessionId });
+ try {
  const generationIds = await this.kv.smembers(`analytics:sessions:${sessionId}:generations`);
+ console.log('[KVStorageAdapter] getGenerationsBySession found ids:', generationIds);
  const generations: Generation[] = [];
  for (const id of generationIds) {
  const data = await this.kv.hgetall(this.getKey('generations', id));
+ console.log('[KVStorageAdapter] getGenerationsBySession raw data for', id, ':', data);
  if (data && Object.keys(data).length > 0) {
- generations.push({
+ const generation = {
  ...data,
+ id: data.id,
+ sessionId: data.sessionId,
+ prompt: data.prompt,
+ displayPrompt: data.displayPrompt,
+ size: data.size,
+ quality: data.quality,
+ model: data.model,
+ count: typeof data.count === 'string' ? parseInt(data.count, 10) : data.count,
+ status: data.status as 'success' | 'failed' | 'pending',
+ duration: data.duration ? (typeof data.duration === 'string' ? parseInt(data.duration, 10) : data.duration) : undefined,
+ imageUrl: data.imageUrl,
+ error: data.error,
  createdAt: new Date(data.createdAt),
- });
+ };
+ generations.push(generation);
+ console.log('[KVStorageAdapter] getGenerationsBySession parsed generation:', generation);
  }
  }
+ console.log('[KVStorageAdapter] getGenerationsBySession returning:', generations.length, 'generations');
  return generations;
+ } catch (error) {
+ console.error('[KVStorageAdapter] getGenerationsBySession failed:', error);
+ throw error;
+ }
  }
  async getAllGenerations(): Promise<Generation[]> {
  await this.init();
+ console.log('[KVStorageAdapter] getAllGenerations called');
+ try {
  const ids = await this.kv.smembers('analytics:generations:ids');
+ console.log('[KVStorageAdapter] getAllGenerations found ids:', ids);
  const generations: Generation[] = [];
  for (const id of ids) {
  const data = await this.kv.hgetall(this.getKey('generations', id));
+ console.log('[KVStorageAdapter] getAllGenerations raw data for', id, ':', data);
  if (data && Object.keys(data).length > 0) {
- generations.push({
+ const generation = {
  ...data,
+ id: data.id,
+ sessionId: data.sessionId,
+ prompt: data.prompt,
+ displayPrompt: data.displayPrompt,
+ size: data.size,
+ quality: data.quality,
+ model: data.model,
+ count: typeof data.count === 'string' ? parseInt(data.count, 10) : data.count,
+ status: data.status as 'success' | 'failed' | 'pending',
+ duration: data.duration ? (typeof data.duration === 'string' ? parseInt(data.duration, 10) : data.duration) : undefined,
+ imageUrl: data.imageUrl,
+ error: data.error,
  createdAt: new Date(data.createdAt),
- });
+ };
+ generations.push(generation);
+ console.log('[KVStorageAdapter] getAllGenerations parsed generation:', generation);
  }
  }
+ console.log('[KVStorageAdapter] getAllGenerations returning:', generations.length, 'generations');
  return generations;
+ } catch (error) {
+ console.error('[KVStorageAdapter] getAllGenerations failed:', error);
+ throw error;
+ }
  }
  async createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback> {
  await this.init();
@@ -504,7 +557,15 @@ export async function getEventsBySession(sessionId: string): Promise<Event[]> {
 }
 // 创建生成记录
 export async function createGeneration(data: Omit<Generation, 'id' | 'createdAt'>): Promise<Generation> {
- return getStorage().createGeneration(data);
+ console.log('[Analytics] createGeneration called:', { data });
+ try {
+ const result = await getStorage().createGeneration(data);
+ console.log('[Analytics] createGeneration completed:', result.id);
+ return result;
+ } catch (error) {
+ console.error('[Analytics] createGeneration failed:', error);
+ throw error;
+ }
 }
 // 更新生成记录
 export async function updateGeneration(id: string, updates: Partial<Generation>): Promise<void> {
@@ -557,10 +618,18 @@ export async function getSummary(startDate?: Date, endDate?: Date): Promise<{
  count: number;
  }[];
 }> {
+ console.log('[Analytics] getSummary called:', { startDate, endDate });
+ try {
  const sessions = await getStorage().getAllSessions();
  const events = await getStorage().getAllEvents();
  const generations = await getStorage().getAllGenerations();
  const feedbacks = await getStorage().getAllFeedbacks();
+ console.log('[Analytics] getSummary raw data counts:', {
+ sessions: sessions.length,
+ events: events.length,
+ generations: generations.length,
+ feedbacks: feedbacks.length,
+ });
  // 按日期过滤
  const filterByDate = <T extends {
  createdAt: Date;
@@ -619,7 +688,7 @@ export async function getSummary(startDate?: Date, endDate?: Date): Promise<{
  const workflowDistribution = Object.entries(workflowCounts)
  .map(([workflow, count]) => ({ workflow, count }))
  .sort((a, b) => b.count - a.count);
- return {
+ const result = {
  totalSessions,
  totalEvents,
  totalGenerations,
@@ -632,6 +701,12 @@ export async function getSummary(startDate?: Date, endDate?: Date): Promise<{
  topSizes,
  workflowDistribution,
  };
+ console.log('[Analytics] getSummary returning:', result);
+ return result;
+ } catch (error) {
+ console.error('[Analytics] getSummary failed:', error);
+ throw error;
+ }
 }
 // 获取生成记录列表（支持分页）
 export async function getGenerations(page: number = 1, pageSize: number = 20, status?: string): Promise<{
@@ -639,7 +714,10 @@ export async function getGenerations(page: number = 1, pageSize: number = 20, st
  total: number;
  totalPages: number;
 }> {
+ console.log('[Analytics] getGenerations called:', { page, pageSize, status });
+ try {
  let generations = await getStorage().getAllGenerations();
+ console.log('[Analytics] getGenerations raw generations:', generations.length, generations);
  // 按状态过滤
  if (status) {
  generations = generations.filter(g => g.status === status);
@@ -651,7 +729,12 @@ export async function getGenerations(page: number = 1, pageSize: number = 20, st
  const totalPages = Math.ceil(total / pageSize);
  const offset = (page - 1) * pageSize;
  const data = generations.slice(offset, offset + pageSize);
+ console.log('[Analytics] getGenerations returning:', { total, totalPages, dataCount: data.length, data });
  return { data, total, totalPages };
+ } catch (error) {
+ console.error('[Analytics] getGenerations failed:', error);
+ throw error;
+ }
 }
 // 获取反馈列表
 export async function getFeedbacks(page: number = 1, pageSize: number = 20): Promise<{
