@@ -215,26 +215,33 @@ class KVStorageAdapter implements StorageAdapter {
  private kv: any;
  private initialized: boolean = false;
  private async init(): Promise<void> {
- if (this.initialized)
- return;
- try {
- // 优先尝试 Upstash Redis（推荐）
- const { Redis } = await import('@upstash/redis');
- this.kv = Redis.fromEnv();
- this.initialized = true;
- }
- catch {
- try {
- // 回退到 Vercel KV（已弃用）
- const { kv } = await import('@vercel/kv');
- this.kv = kv;
- this.initialized = true;
- }
- catch {
- throw new Error('Neither @upstash/redis nor @vercel/kv is installed');
- }
- }
- }
+    if (this.initialized)
+      return;
+    console.log('[KVStorageAdapter] init called');
+    try {
+      // 优先尝试 Upstash Redis（推荐）
+      const { Redis } = await import('@upstash/redis');
+      console.log('[KVStorageAdapter] Trying to initialize @upstash/redis');
+      this.kv = Redis.fromEnv();
+      this.initialized = true;
+      console.log('[KVStorageAdapter] @upstash/redis initialized successfully');
+    }
+    catch (error) {
+      console.error('[KVStorageAdapter] @upstash/redis failed:', error);
+      try {
+        // 回退到 Vercel KV（已弃用）
+        const { kv } = await import('@vercel/kv');
+        console.log('[KVStorageAdapter] Trying to initialize @vercel/kv');
+        this.kv = kv;
+        this.initialized = true;
+        console.log('[KVStorageAdapter] @vercel/kv initialized successfully');
+      }
+      catch (error2) {
+        console.error('[KVStorageAdapter] @vercel/kv also failed:', error2);
+        throw new Error('Neither @upstash/redis nor @vercel/kv is installed');
+      }
+    }
+  }
  private getKey(type: string, id?: string): string {
  if (id) {
  return `analytics:${type}:${id}`;
@@ -508,32 +515,39 @@ class KVStorageAdapter implements StorageAdapter {
 // 获取存储适配器实例
 let storageInstance: StorageAdapter | null = null;
 function getStorage(): StorageAdapter {
- if (storageInstance)
- return storageInstance;
- // 判断是否在 Vercel 环境（使用 KV/Redis）
- // Upstash Redis 使用 REDIS_URL 或 KV_REST_API_URL
- const isVercel = process.env.VERCEL === '1' || 
- process.env.KV_REST_API_URL || 
- process.env.REDIS_URL;
- if (isVercel) {
- try {
- // 优先尝试 @upstash/redis
- require.resolve('@upstash/redis');
- storageInstance = new KVStorageAdapter();
- }
- catch {
- try {
- // 回退到 @vercel/kv
- require.resolve('@vercel/kv');
- storageInstance = new KVStorageAdapter();
- }
- catch {
- // 都未安装，回退到文件存储
- console.warn('[Analytics] Neither @upstash/redis nor @vercel/kv installed, falling back to file storage');
- storageInstance = new FileStorageAdapter();
- }
- }
- }
+  if (storageInstance)
+    return storageInstance;
+  console.log('[Analytics] getStorage called');
+  console.log('[Analytics] process.env.VERCEL:', process.env.VERCEL);
+  console.log('[Analytics] process.env.KV_REST_API_URL:', process.env.KV_REST_API_URL ? 'exists' : 'not exists');
+  console.log('[Analytics] process.env.REDIS_URL:', process.env.REDIS_URL ? 'exists' : 'not exists');
+  // 判断是否在 Vercel 环境（使用 KV/Redis）
+  // Upstash Redis 使用 REDIS_URL 或 KV_REST_API_URL
+  const isVercel = process.env.VERCEL === '1' || 
+    process.env.KV_REST_API_URL || 
+    process.env.REDIS_URL;
+  console.log('[Analytics] isVercel:', isVercel);
+  if (isVercel) {
+    try {
+      // 优先尝试 @upstash/redis
+      require.resolve('@upstash/redis');
+      console.log('[Analytics] Using @upstash/redis');
+      storageInstance = new KVStorageAdapter();
+    }
+    catch {
+      try {
+        // 回退到 @vercel/kv
+        require.resolve('@vercel/kv');
+        console.log('[Analytics] Using @vercel/kv');
+        storageInstance = new KVStorageAdapter();
+      }
+      catch {
+        // 都未安装，回退到文件存储
+        console.warn('[Analytics] Neither @upstash/redis nor @vercel/kv installed, falling back to file storage');
+        storageInstance = new FileStorageAdapter();
+      }
+    }
+  }
  else {
  storageInstance = new FileStorageAdapter();
  }
