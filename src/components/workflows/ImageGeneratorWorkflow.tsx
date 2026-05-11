@@ -62,12 +62,13 @@ export default function ImageGeneratorWorkflow() {
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
+    console.log('[Analytics] ImageGeneratorWorkflow: generateImage called');
     setIsGenerating(true);
     const startTime = Date.now();
 
     // 确保 analytics 初始化完成
     if (!isInitialized) {
-      console.log('[Analytics] Waiting for initialization...');
+      console.log('[Analytics] ImageGeneratorWorkflow: Waiting for initialization...');
       await new Promise((resolve) => {
         const interval = setInterval(() => {
           const id = localStorage.getItem('analytics_session_id');
@@ -79,6 +80,7 @@ export default function ImageGeneratorWorkflow() {
       });
     }
 
+    console.log('[Analytics] ImageGeneratorWorkflow: Calling trackGeneration...');
     const generationId = await trackGeneration({
       prompt: englishPrompt || prompt.trim(),
       size: selectedSize,
@@ -87,7 +89,7 @@ export default function ImageGeneratorWorkflow() {
       count: selectedCount,
     });
     generationIdRef.current = generationId;
-    console.log('[Analytics] Tracked generation:', generationId);
+    console.log('[Analytics] ImageGeneratorWorkflow: Tracked generation:', generationId);
 
     const maxRetries = 2;
     const timeoutMs = 60000; // 60秒超时

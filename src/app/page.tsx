@@ -367,8 +367,14 @@ export default function Home() {
 
     const imageModels: ImageModelId[] = ['gpt-image-2', 'gpt-image-2-gen', 'gpt-image-2-edit'];
     const isImageGeneration = imageModels.includes(effectiveModel as ImageModelId);
+    console.log('[Analytics] Check isImageGeneration:', {
+      effectiveModel,
+      imageModels,
+      isImageGeneration
+    });
     
     if (isImageGeneration) {
+      console.log('[Analytics] isImageGeneration is true, starting to track generation...');
       requestStartTimeRef.current = Date.now();
       // 确保 analytics 初始化完成
       if (!isInitialized) {

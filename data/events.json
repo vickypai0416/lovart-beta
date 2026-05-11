@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1778488167591-5wjyfwa69",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-11T08:29:27.591Z",
+    "updatedAt": "2026-05-11T08:29:41.130Z"
+  },
+  {
+    "id": "1778488181129-1elipyjgw",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-11T08:29:41.129Z"
+  }
+]
