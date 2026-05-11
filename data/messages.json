@@ -6,6 +6,16 @@
     "hasImages": false,
     "imageCount": 0,
     "id": "1778235410685-7ltwv0egm",
-    "createdAt": "2026-05-08T10:16:50.685Z"
+    "createdAt": "2026-05-08T10:16:50.685Z",
+    "updatedAt": "2026-05-08T10:18:49.714Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "你好",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1778235529714-hn6maqohk",
+    "createdAt": "2026-05-08T10:18:49.714Z"
   }
 ]
