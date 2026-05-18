@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ImageGenerationClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
 import { getModelConfig } from '@/lib/image-models';
 
@@ -60,6 +59,7 @@ export async function POST(request: NextRequest) {
       specType = 'main',
       prompt,
       referenceImage,
+      referenceImages,
       styleReferenceImage,
       model,
       quality = 'high',
@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const imageCount = Math.min(Math.max(Number(requestN) || 1, 1), 4);
+    
+    const finalReferenceImages = referenceImages || (referenceImage ? [referenceImage] : []);
 
     let finalPrompt = prompt;
 
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (model === 'gpt-image-2-all' && !referenceImage) {
+    if (model === 'gpt-image-2-all' && finalReferenceImages.length === 0) {
       console.log('[Generate API] 使用 GPT Image 2 All 文生图模式（无参考图）');
       console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
       
@@ -219,9 +221,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (referenceImage) {
+    if (finalReferenceImages.length > 0) {
       console.log('[Generate API] 使用 GPT Image 2 编辑模型（有参考图）');
       console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
+      console.log('[Generate API] 参考图数量:', finalReferenceImages.length);
       
       const modelConfig = getModelConfig(model === 'gpt-image-2-all' ? 'gpt-image-2-all' : 'gpt-image-2-edit');
       
@@ -237,20 +240,25 @@ export async function POST(request: NextRequest) {
       const modelName = modelConfig.modelName || 'gpt-image-2-all';
 
       try {
-        let imageBlob: Blob;
-        if (referenceImage.startsWith('data:')) {
-          const base64Data = referenceImage.split(',')[1];
-          const mimeType = referenceImage.split(';')[0].split(':')[1];
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        const imageBlobs: Blob[] = [];
+        
+        for (const referenceImage of finalReferenceImages) {
+          let imageBlob: Blob;
+          if (referenceImage.startsWith('data:')) {
+            const base64Data = referenceImage.split(',')[1];
+            const mimeType = referenceImage.split(';')[0].split(':')[1];
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            imageBlob = new Blob([byteArray], { type: mimeType });
+          } else {
+            const imageResponse = await fetch(referenceImage);
+            imageBlob = await imageResponse.blob();
           }
-          const byteArray = new Uint8Array(byteNumbers);
-          imageBlob = new Blob([byteArray], { type: mimeType });
-        } else {
-          const imageResponse = await fetch(referenceImage);
-          imageBlob = await imageResponse.blob();
+          imageBlobs.push(imageBlob);
         }
 
         let styleRefBlob: Blob | null = null;
@@ -277,7 +285,9 @@ export async function POST(request: NextRequest) {
         }
 
         const formData = new FormData();
-        formData.append('image', imageBlob, 'product.png');
+        imageBlobs.forEach((blob, index) => {
+          formData.append('image', blob, `product_${index + 1}.png`);
+        });
         if (styleRefBlob) {
           formData.append('image', styleRefBlob, 'style_reference.png');
         }
@@ -288,7 +298,10 @@ export async function POST(request: NextRequest) {
         formData.append('quality', quality);
 
         console.log('[Generate API] 发送请求到:', endpoint);
-        console.log('[Generate API] 参考图片大小:', imageBlob.size, 'bytes');
+        console.log('[Generate API] 参考图片数量:', imageBlobs.length);
+        imageBlobs.forEach((blob, i) => {
+          console.log(`[Generate API] 图片 ${i + 1} 大小:`, blob.size, 'bytes');
+        });
         console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100));
         console.log('[Generate API] 模型:', modelName);
         console.log('[Generate API] 尺寸:', `${width}x${height}`);
@@ -378,31 +391,111 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('[Generate API] 使用 Coze SDK 生成图片（无参考图片）');
+    // 默认使用 GPT Image 2 All 文生图模式
+    console.log('[Generate API] 使用 GPT Image 2 All 文生图模式（默认）');
+    console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
     
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const config = new Config();
-    const client = new ImageGenerationClient(config, customHeaders);
-
-    const response = await client.generate({
-      prompt: finalPrompt,
-      size: `${width}x${height}`,
-      watermark: false,
-    });
-
-    const helper = client.getResponseHelper(response);
-
-    if (helper.success && helper.imageUrls.length > 0) {
-      return NextResponse.json({
-        success: true,
-        url: helper.imageUrls[0],
-        size: `${width}x${height}`,
-        specType,
-        model: 'coze',
-      });
-    } else {
+    const modelConfig = getModelConfig('gpt-image-2-all');
+    
+    if (!modelConfig.apiKey) {
+      console.error('[Generate API] GPT Image 2 All API Key 未配置');
       return NextResponse.json(
-        { success: false, error: helper.errorMessages.join(', ') || '图片生成失败' },
+        { success: false, error: '图片生成失败：GPT Image 2 All API Key 未配置' },
+        { status: 400 }
+      );
+    }
+
+    const genEndpoint = 'https://yunwu.ai/v1/images/generations';
+    const modelName = modelConfig.modelName || 'gpt-image-2-all';
+
+    try {
+      const requestBody: Record<string, unknown> = {
+        model: modelName,
+        prompt: finalPrompt,
+        n: imageCount,
+        size: `${width}x${height}`,
+        quality: quality,
+      };
+
+      console.log('[Generate API] 发送请求到:', genEndpoint);
+      console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100));
+      console.log('[Generate API] 模型:', modelName);
+      console.log('[Generate API] 尺寸:', `${width}x${height}`);
+      
+      const response = await fetch(genEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${modelConfig.apiKey}`,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('[Generate API] HTTP状态码:', response.status);
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[Generate API] 生图失败 - 状态码:', response.status);
+        console.error('[Generate API] 响应内容:', text.substring(0, 500));
+        return NextResponse.json(
+          { success: false, error: `图片生成失败：API 返回错误 ${response.status}` },
+          { status: 500 }
+        );
+      }
+
+      const responseText = await response.text();
+      console.log('[Generate API] 响应内容:', responseText.substring(0, 500));
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error('[Generate API] 响应不是有效 JSON');
+        return NextResponse.json(
+          { success: false, error: '图片生成失败：API 返回格式错误' },
+          { status: 500 }
+        );
+      }
+      
+      let imageUrls: string[] = [];
+      
+      if (data.data && data.data.length > 0) {
+        for (const item of data.data) {
+          if (item.b64_json) {
+            const b64 = item.b64_json;
+            imageUrls.push(b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`);
+          } else if (item.url) {
+            imageUrls.push(item.url);
+          }
+        }
+      }
+      
+      if (imageUrls.length === 0 && data.url) {
+        imageUrls.push(data.url);
+      }
+      
+      if (imageUrls.length > 0) {
+        console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
+        return NextResponse.json({
+          success: true,
+          url: imageUrls[0],
+          urls: imageUrls,
+          size,
+          specType,
+          model: 'gpt-image-2-all',
+        });
+      } else {
+        console.error('[Generate API] 无法从响应中提取图片 URL');
+        return NextResponse.json(
+          { success: false, error: '图片生成失败：无法获取图片 URL' },
+          { status: 500 }
+        );
+      }
+    } catch (error) {
+      console.error('[Generate API] 调用失败:', error);
+      return NextResponse.json(
+        { success: false, error: `图片生成失败：${error instanceof Error ? error.message : '未知错误'}` },
         { status: 500 }
       );
     }

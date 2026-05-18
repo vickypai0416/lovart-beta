@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import {
   Sparkles,
   Image as ImageIcon,
@@ -34,6 +35,9 @@ import {
   Target,
   Zap,
   Trash2,
+  Plus,
+  Upload,
+  Edit,
 } from 'lucide-react';
 import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearImgGenHistory, ImgGenHistoryItem } from '@/lib/history-manager';
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
@@ -53,6 +57,7 @@ const productTypes = [
   { value: 'frame', label: '定制相框', scene: '家居展示,温馨回忆,光线柔和,情感表达' },
   { value: 'keychain', label: '定制钥匙扣', scene: '手持展示,日常使用,便携感,礼品感' },
   { value: 'jewelry_box', label: '定制首饰盒', scene: '高端展示,优雅环境,礼品感,精致光线' },
+  { value: 'custom', label: '自定义产品', scene: '' },
 ];
 
 // 节日/情绪预设
@@ -111,10 +116,10 @@ const sixImageStructure = [
   },
   {
     id: 'gift',
-    name: '礼物属性图',
-    purpose: '强调礼品属性',
-    requirements: '礼盒包装,礼物氛围,送礼场景',
-    defaultPrompt: 'Product as gift, gift box packaging, festive wrapping, gifting scenario, warm atmosphere',
+    name: 'Gift Giving Scene',
+    purpose: 'Show authentic gift-giving moment with emotional connection',
+    requirements: 'real people interaction, full faces visible, no packaging, holiday themed',
+    defaultPrompt: 'Real gift giving moment, person handing product to recipient, genuine human interaction, full faces visible with natural grateful expressions, warm cinematic lighting, no gift wrapping, no gift box, no cards, no ribbons visible, professional lifestyle photography, emotional connection, holiday atmosphere',
   },
   {
     id: 'detail',
@@ -124,6 +129,12 @@ const sixImageStructure = [
     defaultPrompt: 'Extreme close-up product detail shot, macro photography, highlighting texture and material quality, sharp focus, professional studio lighting',
   },
 ];
+
+interface CustomProduct {
+  name: string;
+  image: string | null;
+  scene: string;
+}
 
 export default function AmazonCreativeDirectorWorkflow() {
   const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
@@ -139,7 +150,16 @@ export default function AmazonCreativeDirectorWorkflow() {
   const [imageHistory, setImageHistory] = useState<ImgGenHistoryItem[]>([]);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const productImageInputRef = useRef<HTMLInputElement>(null);
   const generationIdRef = useRef<string | null>(null);
+  
+  // 自定义产品状态
+  const [customProduct, setCustomProduct] = useState<CustomProduct>({
+    name: '',
+    image: null,
+    scene: '',
+  });
+  const [showCustomProductForm, setShowCustomProductForm] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -149,8 +169,20 @@ export default function AmazonCreativeDirectorWorkflow() {
 
   // 获取当前产品的场景提示词
   const getProductScene = () => {
+    if (selectedProduct === 'custom') {
+      return customProduct.scene;
+    }
     const product = productTypes.find(p => p.value === selectedProduct);
     return product?.scene || '';
+  };
+
+  // 获取产品名称
+  const getProductName = () => {
+    if (selectedProduct === 'custom') {
+      return customProduct.name || '自定义产品';
+    }
+    const product = productTypes.find(p => p.value === selectedProduct);
+    return product?.label || '';
   };
 
   // 获取节日情绪描述
@@ -162,7 +194,9 @@ export default function AmazonCreativeDirectorWorkflow() {
 
   // 为每张图生成完整提示词
   const generatePromptForImage = (imageType: string, basePrompt: string) => {
-    const product = productTypes.find(p => p.value === selectedProduct);
+    const product = selectedProduct === 'custom' 
+      ? { value: 'custom', label: customProduct.name, scene: customProduct.scene }
+      : productTypes.find(p => p.value === selectedProduct);
     const style = styles.find(s => s.value === selectedStyle);
     const holiday = selectedHoliday ? holidays.find(h => h.value === selectedHoliday) : null;
     
@@ -215,9 +249,9 @@ export default function AmazonCreativeDirectorWorkflow() {
     if (selectedImages.length === 0) return;
     
     setIsGenerating(true);
+    setGeneratedImages([]);
     const startTime = Date.now();
     
-    // 确保 analytics 初始化完成
     if (!isInitialized) {
       console.log('[Analytics] Waiting for initialization...');
       await new Promise((resolve) => {
@@ -237,42 +271,99 @@ export default function AmazonCreativeDirectorWorkflow() {
       return generatePromptForImage(imageId, imageConfig.defaultPrompt);
     }).filter(Boolean);
 
-    const newImages: string[] = [];
+    const newImages: (string | null)[] = new Array(allPrompts.length).fill(null);
     
     for (let i = 0; i < allPrompts.length; i++) {
       const prompt = allPrompts[i];
       if (!prompt) continue;
       
-      console.log('[Analytics] AmazonCreativeDirector: Calling trackGeneration...');
-      const generationId = await trackGeneration({
-        prompt,
-        size: '1024x1024',
-        quality: 'high',
-        model: 'gpt-image-2-all',
-        count: 1,
-      });
-      generationIdRef.current = generationId;
-      console.log('[Analytics] AmazonCreativeDirector: Tracked generation:', generationId);
-      
-      // 这里调用实际的图片生成 API
-      // 为了演示，我们先跳过实际生成
-      // 实际使用时，这里应该调用 /api/generate
-      
-      // 模拟图片生成
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // 临时用占位图
-      newImages.push('');
-      
-      if (generationId) {
-        await updateGeneration(generationId, {
-          status: 'success',
-          duration: Date.now() - startTime,
+      try {
+        console.log('[AmazonCreativeDirector] Generating image:', i + 1, '/', allPrompts.length);
+        
+        const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+          { type: 'text', text: prompt }
+        ];
+        
+        if (referenceImage) {
+          content.push({ type: 'image_url', image_url: { url: referenceImage } });
+        }
+        
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content }],
+            model: 'gpt-image-2-all',
+            size: '1024x1024',
+            quality: 'high',
+            n: 1,
+          }),
         });
+
+        if (!response.ok) {
+          console.error('Image generation failed:', response.status);
+          continue;
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) continue;
+
+        const decoder = new TextDecoder();
+        let imageUrl: string | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'image' && data.url) {
+                  imageUrl = data.url;
+                }
+              } catch {}
+            }
+          }
+        }
+
+        if (imageUrl) {
+          newImages[i] = imageUrl;
+          
+          const generationId = await trackGeneration({
+            prompt,
+            size: '1024x1024',
+            quality: 'high',
+            model: 'gpt-image-2-all',
+            count: 1,
+          });
+          
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'success',
+              duration: Date.now() - startTime,
+              imageUrl,
+            });
+          }
+          
+          const historyItem = await saveImgGenHistory(
+            imageUrl,
+            prompt,
+            '1024x1024',
+            'gpt-image-2-all'
+          );
+          
+          if (historyItem) {
+            setImageHistory(prev => [historyItem, ...prev]);
+          }
+        }
+      } catch (error) {
+        console.error('Error generating image:', error);
       }
     }
     
-    setGeneratedImages(newImages);
+    setGeneratedImages(newImages.filter(Boolean) as string[]);
     setIsGenerating(false);
   };
 
@@ -287,8 +378,29 @@ export default function AmazonCreativeDirectorWorkflow() {
     }
   };
 
+  const handleProductImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setCustomProduct(prev => ({
+          ...prev,
+          image: e.target?.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const removeReferenceImage = () => {
     setReferenceImage(null);
+  };
+
+  const removeProductImage = () => {
+    setCustomProduct(prev => ({
+      ...prev,
+      image: null,
+    }));
   };
 
   const copyPrompt = (imageId: string) => {
@@ -299,20 +411,22 @@ export default function AmazonCreativeDirectorWorkflow() {
     }
   };
 
-  const product = productTypes.find(p => p.value === selectedProduct);
+  const product = selectedProduct === 'custom' 
+    ? { value: 'custom', label: customProduct.name || '自定义产品', scene: customProduct.scene }
+    : productTypes.find(p => p.value === selectedProduct);
   const holiday = selectedHoliday ? holidays.find(h => h.value === selectedHoliday) : null;
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-4">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">🎬 亚马逊创意总监</h1>
-        <p className="text-gray-600">
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50">
+      <div className="flex-shrink-0 px-4 py-3 border-b bg-white">
+        <h1 className="text-xl font-bold mb-1">🎬 亚马逊创意总监</h1>
+        <p className="text-gray-600 text-sm">
           从"提升商品点击率（CTR）与转化率（CVR）"的角度，为定制类产品设计高商业价值的亚马逊Listing商品图
         </p>
       </div>
 
-      <Tabs defaultValue={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-        <TabsList className="grid w-full grid-cols-2 mb-6">
+      <Tabs defaultValue={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <TabsList className="grid w-full grid-cols-2 mx-4 mt-4 flex-shrink-0">
           <TabsTrigger value="generator">
             <Sparkles className="w-4 h-4 mr-2" />
             创意生成
@@ -323,307 +437,383 @@ export default function AmazonCreativeDirectorWorkflow() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="generator">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="generator" className="flex-1 min-h-0 overflow-hidden m-0 mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full px-4 pb-4">
             {/* 左侧配置区 */}
-            <div className="space-y-6">
-              {/* 产品选择 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <ImageIcon className="w-5 h-5 mr-2" />
-                    产品类型
-                  </CardTitle>
-                  <CardDescription>选择您的产品类型</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择产品类型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {productTypes.map(type => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {product && (
-                    <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                      <p>📋 推荐场景：{product.scene}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* 节日/情绪选择 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Calendar className="w-5 h-5 mr-2" />
-                    节日/情绪
-                  </CardTitle>
-                  <CardDescription>选择节日或情绪氛围</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Select value={selectedHoliday || ''} onValueChange={setSelectedHoliday}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择节日/情绪（可选）" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {holidays.map(h => (
-                        <SelectItem key={h.value} value={h.value}>
-                          {h.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {holiday && (
-                    <div className="mt-3 p-3 bg-purple-50 rounded-lg text-sm text-purple-700">
-                      <p>💭 情绪方向：{holiday.emotion}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* 风格选择 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Palette className="w-5 h-5 mr-2" />
-                    视觉风格
-                  </CardTitle>
-                  <CardDescription>选择图片风格</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择风格" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {styles.map(style => (
-                        <SelectItem key={style.value} value={style.value}>
-                          {style.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </CardContent>
-              </Card>
-
-              {/* 自定义描述 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Sparkles className="w-5 h-5 mr-2" />
-                    自定义描述
-                  </CardTitle>
-                  <CardDescription>添加额外的描述信息</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    placeholder="例如：展示产品细节、强调礼品包装、家庭场景..."
-                    value={customDescription}
-                    onChange={(e) => setCustomDescription(e.target.value)}
-                  />
-                </CardContent>
-              </Card>
-
-              {/* 参考图片上传 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <ImageIcon className="w-5 h-5 mr-2" />
-                    参考图片
-                  </CardTitle>
-                  <CardDescription>上传产品原图进行参考（可选）</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {!referenceImage ? (
-                    <div
-                      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
-                      onClick={() => fileInputRef.current?.click()}
+            <div className="h-full overflow-y-auto pr-2">
+              <div className="space-y-4 pb-4">
+                {/* 产品选择 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <ImageIcon className="w-5 h-5 mr-2" />
+                      产品类型
+                    </CardTitle>
+                    <CardDescription>选择您的产品类型或自定义产品</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Select 
+                      value={selectedProduct} 
+                      onValueChange={(value) => {
+                        setSelectedProduct(value);
+                        if (value === 'custom') {
+                          setShowCustomProductForm(true);
+                        } else {
+                          setShowCustomProductForm(false);
+                        }
+                      }}
                     >
-                      <ImageIcon className="w-12 h-12 mx-auto text-gray-400 mb-2" />
-                      <p className="text-gray-500">点击或拖拽上传参考图片</p>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <img
-                        src={referenceImage}
-                        alt="Reference"
-                        className="w-full h-48 object-contain rounded-lg"
-                      />
-                      <button
-                        onClick={removeReferenceImage}
-                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择产品类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productTypes.map(type => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {/* 自定义产品表单 */}
+                    {showCustomProductForm && (
+                      <div className="mt-3 pt-3 border-t">
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="customProductName">产品名称</Label>
+                            <Input
+                              id="customProductName"
+                              placeholder="例如：定制抱枕"
+                              value={customProduct.name}
+                              onChange={(e) => setCustomProduct(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="customProductScene">场景描述</Label>
+                            <Input
+                              id="customProductScene"
+                              placeholder="例如：温馨家居环境,舒适沙发背景"
+                              value={customProduct.scene}
+                              onChange={(e) => setCustomProduct(prev => ({ ...prev, scene: e.target.value }))}
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label>产品图片</Label>
+                            {!customProduct.image ? (
+                              <div
+                                className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 transition-colors mt-1"
+                                onClick={() => productImageInputRef.current?.click()}
+                              >
+                                <Upload className="w-8 h-8 mx-auto text-gray-400 mb-1" />
+                                <p className="text-gray-500 text-sm">点击上传产品图片</p>
+                                <input
+                                  ref={productImageInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleProductImageSelect}
+                                  className="hidden"
+                                />
+                              </div>
+                            ) : (
+                              <div className="relative mt-1">
+                                <img
+                                  src={customProduct.image}
+                                  alt="Product"
+                                  className="w-full h-32 object-contain rounded-lg"
+                                />
+                                <button
+                                  onClick={removeProductImage}
+                                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {product && !showCustomProductForm && (
+                      <div className="mt-2 p-2 bg-blue-50 rounded-lg text-sm text-blue-700">
+                        <p>📋 推荐场景：{product.scene}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-              {/* 生成按钮 */}
-              <Button
-                size="lg"
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                onClick={generateImages}
-                disabled={isGenerating || selectedImages.length === 0}
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    正在生成...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 mr-2" />
-                    生成 {selectedImages.length} 张图片
-                  </>
-                )}
-              </Button>
+                {/* 节日/情绪选择 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <Calendar className="w-5 h-5 mr-2" />
+                      节日/情绪
+                    </CardTitle>
+                    <CardDescription>选择节日或情绪氛围</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Select value={selectedHoliday || ''} onValueChange={setSelectedHoliday}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择节日/情绪（可选）" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {holidays.map(h => (
+                          <SelectItem key={h.value} value={h.value}>
+                            {h.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {holiday && (
+                      <div className="mt-2 p-2 bg-purple-50 rounded-lg text-sm text-purple-700">
+                        <p>💭 情绪方向：{holiday.emotion}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 风格选择 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <Palette className="w-5 h-5 mr-2" />
+                      视觉风格
+                    </CardTitle>
+                    <CardDescription>选择图片风格</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择风格" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {styles.map(style => (
+                          <SelectItem key={style.value} value={style.value}>
+                            {style.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+
+                {/* 自定义描述 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <Sparkles className="w-5 h-5 mr-2" />
+                      自定义描述
+                    </CardTitle>
+                    <CardDescription>添加额外的描述信息</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Input
+                      placeholder="例如：展示产品细节、强调礼品包装、家庭场景..."
+                      value={customDescription}
+                      onChange={(e) => setCustomDescription(e.target.value)}
+                    />
+                  </CardContent>
+                </Card>
+
+                {/* 参考图片上传 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <ImageIcon className="w-5 h-5 mr-2" />
+                      参考图片
+                    </CardTitle>
+                    <CardDescription>上传产品原图进行参考（可选）</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {!referenceImage ? (
+                      <div
+                        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition-colors"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <ImageIcon className="w-10 h-10 mx-auto text-gray-400 mb-2" />
+                        <p className="text-gray-500 text-sm">点击或拖拽上传参考图片</p>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <img
+                          src={referenceImage}
+                          alt="Reference"
+                          className="w-full h-40 object-contain rounded-lg"
+                        />
+                        <button
+                          onClick={removeReferenceImage}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 生成按钮 */}
+                <Button
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                  onClick={generateImages}
+                  disabled={isGenerating || selectedImages.length === 0}
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      正在生成...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 mr-2" />
+                      生成 {selectedImages.length} 张图片
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* 右侧6图规划区 */}
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Target className="w-5 h-5 mr-2" />
-                    亚马逊6图规划
-                  </CardTitle>
-                  <CardDescription>选择要生成的图片，最多6张</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-3">
-                    {sixImageStructure.map((image) => (
-                      <Card
-                        key={image.id}
-                        className={`cursor-pointer transition-all ${
-                          selectedImages.includes(image.id) 
-                            ? 'border-2 border-blue-500 bg-blue-50' 
-                            : 'border border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => toggleImageSelection(image.id)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center">
-                              <Checkbox
-                                checked={selectedImages.includes(image.id)}
-                                onCheckedChange={() => toggleImageSelection(image.id)}
-                                className="mr-2"
-                              />
-                              <h3 className="font-semibold text-sm">{image.name}</h3>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyPrompt(image.id);
-                              }}
-                            >
-                              <Copy className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <p className="text-xs text-gray-500 mb-1">{image.purpose}</p>
-                          <p className="text-xs text-gray-400">{image.requirements}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 生成的图片预览 */}
-              {generatedImages.length > 0 && (
+            <div className="h-full overflow-y-auto pl-2">
+              <div className="space-y-4 pb-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Eye className="w-5 h-5 mr-2" />
-                      生成的图片
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <Target className="w-5 h-5 mr-2" />
+                      亚马逊6图规划
                     </CardTitle>
+                    <CardDescription>选择要生成的图片，最多6张</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                      {generatedImages.map((img, idx) => (
-                        <div key={idx} className="relative aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                          {img ? (
-                            <img src={img} alt={`Generated ${idx + 1}`} className="w-full h-full object-contain rounded-lg" />
-                          ) : (
-                            <div className="text-gray-400 text-center">
-                              <ImageIcon className="w-8 h-8 mx-auto mb-2" />
-                              <p>图片 {idx + 1}</p>
-                              <p className="text-xs text-gray-300">（演示模式）</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {sixImageStructure.map((image) => (
+                        <Card
+                          key={image.id}
+                          className={`cursor-pointer transition-all ${
+                            selectedImages.includes(image.id) 
+                              ? 'border-2 border-blue-500 bg-blue-50' 
+                              : 'border border-gray-200 hover:border-gray-300'
+                          }`}
+                          onClick={() => toggleImageSelection(image.id)}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between mb-1">
+                              <div className="flex items-center">
+                                <Checkbox
+                                  checked={selectedImages.includes(image.id)}
+                                  onCheckedChange={() => toggleImageSelection(image.id)}
+                                  className="mr-2"
+                                />
+                                <h3 className="font-semibold text-sm">{image.name}</h3>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyPrompt(image.id);
+                                }}
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
                             </div>
-                          )}
-                        </div>
+                            <p className="text-xs text-gray-500 mb-1">{image.purpose}</p>
+                            <p className="text-xs text-gray-400">{image.requirements}</p>
+                          </CardContent>
+                        </Card>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
-              )}
 
-              {/* 策略卡片 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <TrendingUp className="w-5 h-5 mr-2" />
-                    视觉营销策略
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 text-sm">
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <div className="flex items-center mb-1">
-                        <Gift className="w-4 h-4 mr-2 text-green-600" />
-                        <span className="font-medium text-green-800">礼品属性</span>
+                {/* 生成的图片预览 */}
+                {generatedImages.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center text-lg">
+                        <Eye className="w-5 h-5 mr-2" />
+                        生成的图片
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-3">
+                        {generatedImages.map((img, idx) => (
+                          <div key={idx} className="relative aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                            {img ? (
+                              <img src={img} alt={`Generated ${idx + 1}`} className="w-full h-full object-contain rounded-lg" />
+                            ) : (
+                              <div className="text-gray-400 text-center">
+                                <ImageIcon className="w-6 h-6 mx-auto mb-1" />
+                                <p className="text-sm">图片 {idx + 1}</p>
+                                <p className="text-xs text-gray-300">（演示模式）</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-green-700 text-xs">
-                        定制类产品的核心：用户自己的名字、照片、纪念日所带来的情绪价值
-                      </p>
-                    </div>
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <div className="flex items-center mb-1">
-                        <Users className="w-4 h-4 mr-2 text-blue-600" />
-                        <span className="font-medium text-blue-800">节日情绪</span>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 策略卡片 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center text-lg">
+                      <TrendingUp className="w-5 h-5 mr-2" />
+                      视觉营销策略
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      <div className="p-2 bg-green-50 rounded-lg">
+                        <div className="flex items-center mb-1">
+                          <Gift className="w-4 h-4 mr-2 text-green-600" />
+                          <span className="font-medium text-green-800 text-sm">礼品属性</span>
+                        </div>
+                        <p className="text-green-700 text-xs">
+                          定制类产品的核心：用户自己的名字、照片、纪念日所带来的情绪价值
+                        </p>
                       </div>
-                      <p className="text-blue-700 text-xs">
-                        用户购买的不是产品，而是情绪。不同节日对应不同情绪
-                      </p>
-                    </div>
-                    <div className="p-3 bg-yellow-50 rounded-lg">
-                      <div className="flex items-center mb-1">
-                        <Camera className="w-4 h-4 mr-2 text-yellow-600" />
-                        <span className="font-medium text-yellow-800">商业摄影</span>
+                      <div className="p-2 bg-blue-50 rounded-lg">
+                        <div className="flex items-center mb-1">
+                          <Users className="w-4 h-4 mr-2 text-blue-600" />
+                          <span className="font-medium text-blue-800 text-sm">节日情绪</span>
+                        </div>
+                        <p className="text-blue-700 text-xs">
+                          用户购买的不是产品，而是情绪。不同节日对应不同情绪
+                        </p>
                       </div>
-                      <p className="text-yellow-700 text-xs">
-                        偏向商业摄影、高端电商视觉、情绪化营销、电影感构图
-                      </p>
+                      <div className="p-2 bg-yellow-50 rounded-lg">
+                        <div className="flex items-center mb-1">
+                          <Camera className="w-4 h-4 mr-2 text-yellow-600" />
+                          <span className="font-medium text-yellow-800 text-sm">商业摄影</span>
+                        </div>
+                        <p className="text-yellow-700 text-xs">
+                          偏向商业摄影、高端电商视觉、情绪化营销、电影感构图
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="history">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>历史记录</CardTitle>
+        <TabsContent value="history" className="flex-1 min-h-0 overflow-hidden m-0 mt-4">
+          <Card className="h-full flex flex-col mx-4 mb-4">
+            <CardHeader className="flex flex-row items-center justify-between pb-3 flex-shrink-0">
+              <CardTitle className="text-lg">历史记录</CardTitle>
               <Button
                 size="sm"
                 variant="ghost"
@@ -636,15 +826,14 @@ export default function AmazonCreativeDirectorWorkflow() {
                 清空历史
               </Button>
             </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[400px]">
-                {imageHistory.length === 0 ? (
+            <CardContent className="flex-1 min-h-0 overflow-y-auto">
+              {imageHistory.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
                     <History className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p>暂无历史记录</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {imageHistory.map((item) => (
                       <div key={item.id} className="relative group">
                         <img
@@ -665,7 +854,7 @@ export default function AmazonCreativeDirectorWorkflow() {
                             size="sm"
                             variant="ghost"
                             className="h-8 w-8 p-0 text-white hover:text-white hover:bg-white/20"
-                            onClick={() => downloadImageByUrl(item.url)}
+                            onClick={() => downloadImageByUrl(item.url, `amazon-creative-${item.id}.png`)}
                           >
                             <Download className="w-4 h-4" />
                           </Button>
@@ -675,11 +864,10 @@ export default function AmazonCreativeDirectorWorkflow() {
                     ))}
                   </div>
                 )}
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
+  }

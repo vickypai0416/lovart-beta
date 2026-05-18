@@ -1,7 +1,6 @@
 import { ProductAnalyzer, ProductAnalysis } from './product-analyzer';
 import { VisualStrategyGenerator, VisualStrategy, ListingImagePlan, SceneType } from './visual-strategy';
 import { ComplianceChecker, ComplianceResult } from './compliance-checker';
-import { ImageGenerationClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 
 export interface CtrAgentConfig {
   apiKey: string;
@@ -69,8 +68,11 @@ export class CtrAgent {
 
   async generateImages(plan: ListingImagePlan): Promise<GeneratedImage[]> {
     const images: GeneratedImage[] = [];
-    const config = new Config();
-    const client = new ImageGenerationClient(config, {});
+    const apiKey = process.env.YUNWU_API_KEY;
+    if (!apiKey) {
+      console.error('[CTR Agent] YUNWU_API_KEY 未配置');
+      return images;
+    }
 
     const planEntries = Object.entries(plan) as [string, typeof plan['image1']][];
 
@@ -85,16 +87,43 @@ export class CtrAgent {
 
       while (!success && retryCount < maxRetries) {
         try {
-          const response = await client.generate({
-            prompt: imagePlan.promptTemplate,
-            size: imagePlan.size,
-            watermark: false,
+          const response = await fetch('https://yunwu.ai/v1/images/generations', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-image-2-all',
+              prompt: imagePlan.promptTemplate,
+              n: 1,
+              size: imagePlan.size,
+              quality: 'standard',
+            }),
           });
 
-          const helper = client.getResponseHelper(response);
+          if (!response.ok) {
+            const text = await response.text();
+            console.error(`[CTR Agent] 生图失败 - 状态码: ${response.status}`, text.substring(0, 200));
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+            continue;
+          }
+
+          const data = await response.json();
+          let imageUrl = '';
           
-          if (helper.success && helper.imageUrls.length > 0) {
-            const imageUrl = helper.imageUrls[0];
+          if (data.data && data.data.length > 0) {
+            const item = data.data[0];
+            imageUrl = item.url || '';
+          } else if (data.url) {
+            imageUrl = data.url;
+          }
+
+          if (imageUrl) {
             console.log(`[CTR Agent] 图片生成成功，检查 URL 可访问性...`);
             
             const isAccessible = await this.checkImageUrl(imageUrl);
@@ -118,8 +147,7 @@ export class CtrAgent {
               }
             }
           } else {
-            const errorMsg = helper.errorMessages.join(', ') || '未知错误';
-            console.error(`[CTR Agent] 图片生成失败: ${errorMsg}`);
+            console.error('[CTR Agent] 无法从响应中提取图片 URL');
             retryCount++;
             if (retryCount < maxRetries) {
               await new Promise(resolve => setTimeout(resolve, 3000));

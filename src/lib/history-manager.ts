@@ -233,6 +233,14 @@ export interface PersistedMessage {
   userImage?: string;
   product?: string;
   scene?: string;
+  isAmazonPlan?: boolean;
+  planImages?: Array<{
+    index: number;
+    title: string;
+    prompt: string;
+    imageUrl?: string;
+    status: 'pending' | 'generating' | 'completed' | 'failed';
+  }>;
   timestamp: number;
 }
 

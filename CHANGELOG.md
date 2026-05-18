@@ -6,6 +6,36 @@
 
 ---
 
+## [v1.0.0] - 2026-05-14
+
+### 新增
+
+- ✅ 单元测试框架集成（Jest + ts-jest）
+- ✅ 选择性生图功能测试用例
+- ✅ 亚马逊方案检测测试用例
+- ✅ 测试脚本配置（`pnpm test`, `pnpm test:watch`, `pnpm test:coverage`）
+
+### 变更
+
+- ⚠️ 修改选择性生图检测逻辑：增加更严格的条件检查
+- ⚠️ 修改 `isSelectiveGenerationRequest`：移除过于宽泛的正则模式
+- ⚠️ 修改 `isAmazonVisualPlan`：支持多种破折号字符
+- ⚠️ 修改 `parseAmazonVisualPlan`：支持多种破折号字符
+- ⚠️ 修改 `getLastAmazonPlan`：使用 `useRef` 避免闭包问题，增加内容回退识别
+
+### 修复
+
+- ✅ 修复上传图片时被误判为选择性生图的问题
+- ✅ 修复亚马逊专家不分析新上传图片的问题
+- ✅ 修复 `Invalid URL` 错误（无效图片链接处理）
+- ✅ 修复消息持久化丢失 `isAmazonPlan` 和 `planImages` 属性的问题
+
+### 移除
+
+- ❌ 移除 `/第(\d+)张图/` 过于宽泛的正则模式
+
+---
+
 ## [未发布]
 
 ### 新增

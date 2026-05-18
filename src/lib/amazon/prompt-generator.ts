@@ -219,15 +219,18 @@ premium quality feel, sophisticated presentation`.replace(/\n/g, ' ').trim();
   }
 
   private buildGiftPrompt(analysis: ProductAnalysis, sceneConfig: typeof SCENE_CONFIG[SceneType]): string {
-    return `Gift giving moment with ${analysis.productName},
-person giving gift to ${analysis.targetAudience},
-${sceneConfig.emotion.join(', ')} expression,
-${sceneConfig.elements.slice(0, 2).join(', ')} elements,
-${sceneConfig.colors.join(', ')} color scheme,
-warm lighting, heartfelt emotion, no packaging visible,
-${BRAND_GUIDELINES.giftElements}, ${BRAND_GUIDELINES.quality},
-professional lifestyle photography, emotional connection,
-natural candid moment, magazine quality`.replace(/\n/g, ' ').trim();
+    return `Real gift giving moment with ${analysis.productName},
+person handing ${analysis.productName} to ${analysis.targetAudience},
+genuine human interaction, giver and receiver making eye contact,
+full faces visible with natural ${sceneConfig.emotion.join(', ')} expressions,
+${sceneConfig.colors.join(', ')} color palette matching ${sceneConfig.name} theme,
+${sceneConfig.elements.filter(e => !e.includes('gift box') && !e.includes('ribbon')).slice(0, 2).join(', ')} elements,
+warm cinematic lighting, heartfelt emotion,
+no gift wrapping, no gift box, no cards, no ribbons visible,
+${BRAND_GUIDELINES.quality}, professional lifestyle photography,
+emotional connection, natural candid moment, magazine quality,
+${analysis.productName} clearly visible in hands,
+${sceneConfig.name} holiday atmosphere`.replace(/\n/g, ' ').trim();
   }
 
   private buildClosingPrompt(analysis: ProductAnalysis, sceneConfig: typeof SCENE_CONFIG[SceneType]): string {

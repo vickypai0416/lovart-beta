@@ -1,0 +1,58 @@
+[
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "prompt": "礼品属性\n用途：提升“送礼不出错”的心理。  \n构图：  \n- 父亲节给父亲送的礼物，不需要包装卡片之类的\n- 光线更暖，强调“拿到手会很体面”。    \n风格：高端礼品感、温馨自然。",
+    "size": "1024x1024",
+    "quality": "high",
+    "model": "gpt-image-2-all",
+    "count": 1,
+    "status": "failed",
+    "id": "1778579076892-8zn02izw2",
+    "createdAt": "2026-05-12T09:44:36.892Z",
+    "updatedAt": "2026-05-12T09:47:40.971Z",
+    "error": "signal is aborted without reason",
+    "duration": 184088
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "prompt": "礼品属性\n用途：提升“送礼不出错”的心理。  \n构图：  \n- 父亲节给父亲送的礼物，不需要包装卡片之类的\n- 光线更暖，强调“拿到手会很体面”。    \n风格：高端礼品感、温馨自然。",
+    "size": "1024x1024",
+    "quality": "high",
+    "model": "gpt-image-2-all",
+    "count": 1,
+    "status": "failed",
+    "id": "1778579433968-xv8qhs5ia",
+    "createdAt": "2026-05-12T09:50:33.968Z",
+    "updatedAt": "2026-05-12T10:05:38.577Z",
+    "error": "signal is aborted without reason",
+    "duration": 904579
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "prompt": "将claude的图标做成Q版吉祥物，日漫风格",
+    "size": "1024x1024",
+    "quality": "high",
+    "model": "gpt-image-2-all",
+    "count": 1,
+    "status": "success",
+    "id": "1779068621470-7u82q7yrb",
+    "createdAt": "2026-05-18T01:43:41.470Z",
+    "updatedAt": "2026-05-18T01:44:16.532Z",
+    "imageUrl": "https://oss.filenest.top/uploads/a1b3bb9a-763c-4e31-b2d2-f0c12711f7ab.png",
+    "duration": 35012
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "prompt": "将图1切菜板上的图案换成图2这个图案",
+    "size": "1024x1024",
+    "quality": "high",
+    "model": "gpt-image-2-all",
+    "count": 1,
+    "status": "success",
+    "id": "1779069871424-7fjp8hc12",
+    "createdAt": "2026-05-18T02:04:31.424Z",
+    "updatedAt": "2026-05-18T02:05:02.368Z",
+    "imageUrl": "https://oss.filenest.top/uploads/2b3f985b-f8e0-4e2a-83aa-e2898a0efc58.png",
+    "duration": 30937
+  }
+]

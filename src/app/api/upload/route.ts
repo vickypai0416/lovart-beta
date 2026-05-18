@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Storage, HeaderUtils } from 'coze-coding-dev-sdk';
 import { writeFile, mkdir } from 'fs/promises';
 import { join, extname } from 'path';
 
@@ -22,49 +21,19 @@ export async function POST(request: NextRequest) {
     const ext = extname(file.name) || '.jpg';
     const fileName = `${timestamp}${ext}`;
 
-    const useS3 = process.env.COZE_BUCKET_ENDPOINT_URL && process.env.COZE_BUCKET_NAME;
+    const uploadDir = join(process.cwd(), 'public', 'uploads');
+    await mkdir(uploadDir, { recursive: true });
     
-    if (useS3) {
-      const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-      const storage = new S3Storage({
-        endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
-        accessKey: '',
-        secretKey: '',
-        bucketName: process.env.COZE_BUCKET_NAME,
-        region: 'cn-beijing',
-      });
+    const filePath = join(uploadDir, fileName);
+    await writeFile(filePath, buffer);
 
-      const key = await storage.uploadFile({
-        fileContent: buffer,
-        fileName: `uploads/${fileName}`,
-        contentType: file.type || 'image/jpeg',
-      });
+    const url = `${request.nextUrl.origin}/uploads/${fileName}`;
 
-      const url = await storage.generatePresignedUrl({
-        key,
-        expireTime: 3600,
-      });
-
-      return NextResponse.json({ 
-        success: true,
-        url,
-        key,
-      });
-    } else {
-      const uploadDir = join(process.cwd(), 'public', 'uploads');
-      await mkdir(uploadDir, { recursive: true });
-      
-      const filePath = join(uploadDir, fileName);
-      await writeFile(filePath, buffer);
-
-      const url = `${request.nextUrl.origin}/uploads/${fileName}`;
-
-      return NextResponse.json({ 
-        success: true,
-        url,
-        key: `uploads/${fileName}`,
-      });
-    }
+    return NextResponse.json({ 
+      success: true,
+      url,
+      key: `uploads/${fileName}`,
+    });
   } catch (error) {
     console.error('Upload error:', error);
     return NextResponse.json({ 

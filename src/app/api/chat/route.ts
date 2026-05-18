@@ -10,8 +10,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('[API] Received request');
     const body = await request.json();
-    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high' } = body as {
+    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high', referenceImages = [] } = body as {
       messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>;
       model?: ImageModel;
       autoGenerate?: boolean;
@@ -19,17 +20,25 @@ export async function POST(request: NextRequest) {
       persona?: string;
       size?: string;
       quality?: string;
+      referenceImages?: string[];
     };
+
+    console.log('[API] Request params:', { 
+      model: selectedModel, 
+      persona, 
+      messageCount: messages.length,
+      hasReferenceImages: referenceImages.length > 0 || messages.some(m => Array.isArray(m.content) && m.content.some(c => c.type === 'image_url'))
+    });
 
     const personaConfig = getPersonaById(persona);
 
-    // 从消息中提取参考图片（优先使用最新消息中的图片）
-    let referenceImages: string[] = [];
-    if (messages.length > 0) {
+    // 从消息中提取参考图片（优先使用最新消息中的图片，如果请求中有则使用请求中的）
+    let extractedReferenceImages: string[] = referenceImages.length > 0 ? referenceImages : [];
+    if (extractedReferenceImages.length === 0 && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (Array.isArray(lastMessage.content)) {
         const imageContents = lastMessage.content.filter((c) => c.type === 'image_url' && c.image_url?.url);
-        referenceImages = imageContents.map((c) => c.image_url!.url);
+        extractedReferenceImages = imageContents.map((c) => c.image_url!.url);
       }
     }
 
@@ -42,8 +51,8 @@ export async function POST(request: NextRequest) {
     console.log(`[API] 模型类型: ${modelConfig.type}, 模型名: ${modelConfig.modelName}`);
     console.log(`[API] available: ${modelConfig.available}, apiKey: ${modelConfig.apiKey ? modelConfig.apiKey.substring(0, 10) + '...' : '未配置'}`);
     console.log(`[API] 自动生成: ${autoGenerate ? '是' : '否'}`);
-    if (referenceImages.length > 0) {
-      console.log(`[API] 包含参考图片: ${referenceImages.length} 张`);
+    if (extractedReferenceImages.length > 0) {
+      console.log(`[API] 包含参考图片: ${extractedReferenceImages.length} 张`);
     } else {
       console.log(`[API] 不包含参考图片`);
     }
@@ -93,7 +102,7 @@ export async function POST(request: NextRequest) {
           } else {
             // 图片生成模型 - 直接生成图片
             console.log(`[API] 使用 ${modelConfig.name} 生成图片`);
-            await generateImageDirectly(modelId, userPrompt, referenceImages, controller, encoder, n, size, quality);
+            await generateImageDirectly(modelId, userPrompt, extractedReferenceImages, controller, encoder, n, size, quality);
           }
         } catch (error) {
           console.error('Stream error:', error);
@@ -726,9 +735,9 @@ async function generateWithYunwuAPIStream(
     }
 
     // 检测是否需要自动生成图片
-    console.log(`[API] 检查自动生成条件: autoGenerate=${autoGenerate}, referenceImages=${referenceImages.length}, fullContent长度=${fullContent.length}`);
+    console.log(`[API] 检查自动生成条件: autoGenerate=${autoGenerate}, referenceImages=${extractedReferenceImages.length}, fullContent长度=${fullContent.length}`);
     
-    if (autoGenerate && referenceImages.length > 0 && fullContent) {
+    if (autoGenerate && extractedReferenceImages.length > 0 && fullContent) {
       // 检测提示词标记 [GENERATE_IMAGE]...[/GENERATE_IMAGE]
       const promptMatch = fullContent.match(/\[GENERATE_IMAGE\]([\s\S]*?)\[\/GENERATE_IMAGE\]/);
       
@@ -752,7 +761,7 @@ async function generateWithYunwuAPIStream(
         );
         
         try {
-          const imageUrls = await generateWithGPTImage2Edit(imagePrompt, referenceImages, 1, '1024x1024', 'high');
+          const imageUrls = await generateWithGPTImage2Edit(imagePrompt, extractedReferenceImages, 1, '1024x1024', 'high');
           
           if (imageUrls && imageUrls.length > 0) {
             for (let i = 0; i < imageUrls.length; i++) {

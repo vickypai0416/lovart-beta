@@ -16,6 +16,36 @@
     "hasImages": false,
     "imageCount": 0,
     "id": "1778235529714-hn6maqohk",
-    "createdAt": "2026-05-08T10:18:49.714Z"
+    "createdAt": "2026-05-08T10:18:49.714Z",
+    "updatedAt": "2026-05-15T07:16:17.730Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "你好",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1778829377730-2nx7rej70",
+    "createdAt": "2026-05-15T07:16:17.730Z",
+    "updatedAt": "2026-05-15T09:48:41.335Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "你好",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1778838521335-i3x2rwlii",
+    "createdAt": "2026-05-15T09:48:41.335Z",
+    "updatedAt": "2026-05-15T09:56:41.234Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "你好",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1778839001234-gg96gnt1g",
+    "createdAt": "2026-05-15T09:56:41.234Z"
   }
 ]

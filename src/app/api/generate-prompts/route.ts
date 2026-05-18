@@ -225,9 +225,9 @@ export async function POST(request: Request) {
       {
         index: 5,
         type: 'gift',
-        purpose: '送礼场景 - 送礼瞬间',
-        displayPrompt: `送礼瞬间，${productName}，${featureStr}，人物将${productName}作为礼物送给爱人，产品清晰可见，自然的人物情感，温馨室内环境，柔和氛围光线`,
-        prompt: appendStyleAnchor(`Gift giving moment featuring ${productName}, ${featureStr}, person giving ${productName} as gift to loved one, product clearly visible and held by giver, natural human emotions, warm and grateful expressions, cozy indoor setting, soft ambient lighting, no gift wrapping visible, cinematic quality photography, heartfelt emotional connection, ${productName} is the center of attention`, styleAnchor, stylePrefix),
+        purpose: 'Gift Giving Scene - Authentic Moment',
+        displayPrompt: `Gift giving moment featuring ${productName}, ${featureStr}, person giving ${productName} as gift to loved one, product clearly visible, natural human emotions, warm indoor setting, soft ambient lighting, full faces visible`,
+        prompt: appendStyleAnchor(`Gift giving moment featuring ${productName}, ${featureStr}, person giving ${productName} as gift to loved one, product clearly visible and held by giver, natural human emotions, warm and grateful expressions, full faces visible, cozy indoor setting matching holiday theme, soft ambient lighting, no gift wrapping, no gift box, no cards, no ribbons visible, cinematic quality photography, heartfelt emotional connection, ${productName} is the center of attention`, styleAnchor, stylePrefix),
       },
       {
         index: 6,

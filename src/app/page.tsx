@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useReducer } from 'react';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,15 +12,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Gift } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Gift, Wand2, Plus } from 'lucide-react';
 import { saveChatImageToHistory, getChatHistory, getChatHistoryWithUrls, deleteChatImage, clearChatHistory, ChatImageHistoryItem, saveChatMessages, getChatMessages } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
 import { PERSONAS, PersonaConfig } from '@/lib/persona';
-import InfiniteCanvas from '@/components/InfiniteCanvas';
+
 import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflow';
 import EcommerceWorkflow from '@/components/workflows/EcommerceWorkflow';
 import AmazonCreativeDirectorWorkflow from '@/components/workflows/AmazonCreativeDirectorWorkflow';
+import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
 import { downloadImageByUrl } from '@/lib/download';
+import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import ChatSessionList from '@/components/ChatSessionList';
+import ChatMessages from '@/components/ChatMessages';
 
 interface Message {
   id: string;
@@ -31,11 +36,59 @@ interface Message {
   product?: string;
   scene?: string;
   isGenerating?: boolean;
+  isAmazonPlan?: boolean;
+  planImages?: GeneratedImagePlan[];
+}
+
+interface GeneratedImagePlan {
+  index: number;
+  title: string;
+  prompt: string;
+  imageUrl?: string;
+  status: 'pending' | 'generating' | 'completed' | 'failed' | 'error';
+  error?: string;
 }
 
 type ImageModelId = 'gpt-image-2' | 'gpt-image-2-gen' | 'gpt-image-2-edit';
 type TextModelId = 'gpt-5-nano' | 'gpt-5.4';
 type ImageMode = 'generate' | 'analyze';
+
+type ChatState = {
+  sessions: Session[];
+  currentSessionId: string | null;
+};
+
+type ChatAction =
+  | { type: 'INIT_SESSIONS'; sessions: Session[]; currentSessionId: string }
+  | { type: 'CREATE_SESSION'; session: Session }
+  | { type: 'SWITCH_SESSION'; sessionId: string }
+  | { type: 'DELETE_SESSION'; sessionId: string }
+  | { type: 'UPDATE_SESSION'; sessionId: string; updatedSession: Session };
+
+function chatReducer(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'INIT_SESSIONS':
+      return { sessions: action.sessions, currentSessionId: action.currentSessionId };
+    case 'CREATE_SESSION':
+      return { sessions: [...state.sessions, action.session], currentSessionId: action.session.id };
+    case 'SWITCH_SESSION':
+      return { ...state, currentSessionId: action.sessionId };
+    case 'DELETE_SESSION': {
+      const updatedSessions = state.sessions.filter(s => s.id !== action.sessionId);
+      const newCurrentId = state.currentSessionId === action.sessionId && updatedSessions.length > 0
+        ? updatedSessions[updatedSessions.length - 1].id
+        : state.currentSessionId;
+      return { sessions: updatedSessions, currentSessionId: newCurrentId };
+    }
+    case 'UPDATE_SESSION':
+      return {
+        ...state,
+        sessions: state.sessions.map(s => s.id === action.sessionId ? action.updatedSession : s),
+      };
+    default:
+      return state;
+  }
+}
 
 export default function Home() {
   const [currentWorkflow, setCurrentWorkflow] = useState('chat');
@@ -60,6 +113,8 @@ export default function Home() {
           userImages,
           product: m.product,
           scene: m.scene,
+          isAmazonPlan: m.isAmazonPlan,
+          planImages: m.planImages,
         };
       });
       setMessages(prev => [prev[0], ...migrated]);
@@ -71,11 +126,6 @@ export default function Home() {
   const [selectedSize, setSelectedSize] = useState('1024x1024');
   const [selectedQuality, setSelectedQuality] = useState('high');
   const [selectedCount, setSelectedCount] = useState(1);
-  const [currentImage, setCurrentImage] = useState<{
-    url: string;
-    product: string;
-    scene: string;
-  } | null>(null);
   const [userImages, setUserImages] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(false);
@@ -83,9 +133,28 @@ export default function Home() {
   const [imageMode, setImageMode] = useState<ImageMode>('generate');
   const [chatImageHistory, setChatImageHistory] = useState<ChatImageHistoryItem[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<string>('default');
-  const [scrollPosition, setScrollPosition] = useState(0);
+  const [selectedPersona, setSelectedPersona] = useState<string>('amazon-expert');
+  const scrollPositionRef = useRef(0);
+  const [chatState, dispatchChat] = useReducer(chatReducer, { sessions: [], currentSessionId: null });
+  const { sessions, currentSessionId } = chatState;
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // 使用 ref 存储最新的状态值，避免闭包问题
+  const sessionsRef = useRef<Session[]>([]);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const userImagesRef = useRef<string[]>([]);
+  
+  // 组件挂载状态，用于防止卸载后更新状态
+  const isMounted = useRef(true);
+  
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+  
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
   const { trackGeneration, updateGeneration, trackMessage, isInitialized } = useAnalytics();
   const generationIdRef = useRef<string | null>(null);
   const requestStartTimeRef = useRef<number>(0);
@@ -114,27 +183,77 @@ export default function Home() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const isNewMessageRef = useRef(false);
 
+  // 组件卸载时取消所有正在进行的请求
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     getChatHistoryWithUrls().then(setChatImageHistory);
   }, []);
 
-  useLayoutEffect(() => {
-    if (currentWorkflow === 'chat' && !showImageHistory && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollPosition;
+  useEffect(() => {
+    const loadedSessions = getSessions();
+    if (loadedSessions.length === 0) {
+      const newSession = createSession();
+      saveSession(newSession);
+      dispatchChat({ type: 'INIT_SESSIONS', sessions: [newSession], currentSessionId: newSession.id });
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: '你好！我是 AI 商品图生成助手 ✨\n\n告诉我商品和场景，或上传产品图，帮你生成专业图片。',
+        },
+      ]);
+    } else {
+      const lastSession = loadedSessions[loadedSessions.length - 1];
+      dispatchChat({ type: 'INIT_SESSIONS', sessions: loadedSessions, currentSessionId: lastSession.id });
+      if (lastSession.messages.length > 0) {
+        setMessages([
+          {
+            id: 'welcome',
+            role: 'assistant',
+            content: '你好！我是 AI 商品图生成助手 ✨\n\n告诉我商品和场景，或上传产品图，帮你生成专业图片。',
+          },
+          ...lastSession.messages,
+        ]);
+      }
     }
-  }, [currentWorkflow, showImageHistory]);
+  }, []);
 
   useEffect(() => {
-    return () => {
+    const savedPosition = sessionStorage.getItem('scrollPosition');
+    if (savedPosition && scrollRef.current) {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = parseInt(savedPosition, 10);
+        }
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
       if (scrollRef.current) {
-        setScrollPosition(scrollRef.current.scrollTop);
+        sessionStorage.setItem('scrollPosition', scrollRef.current.scrollTop.toString());
       }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
 
   const handleScroll = () => {
     if (scrollRef.current) {
-      setScrollPosition(scrollRef.current.scrollTop);
+      scrollPositionRef.current = scrollRef.current.scrollTop;
     }
   };
 
@@ -144,9 +263,114 @@ export default function Home() {
     }
   };
 
+  const createNewSession = useCallback(() => {
+    // 取消正在进行的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    const newSession = createSession();
+    dispatchChat({ type: 'CREATE_SESSION', session: newSession });
+    setMessages([
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: '你好！我是 AI 商品图生成助手 ✨\n\n告诉我商品和场景，或上传产品图，帮你生成专业图片。',
+      },
+    ]);
+  }, []);
+
+  const switchSession = useCallback((sessionId: string) => {
+    // 取消正在进行的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    const session = sessionsRef.current.find(s => s.id === sessionId);
+    if (session) {
+      dispatchChat({ type: 'SWITCH_SESSION', sessionId });
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: '你好！我是 AI 商品图生成助手 ✨\n\n告诉我商品和场景，或上传产品图，帮你生成专业图片。',
+        },
+        ...session.messages,
+      ]);
+    }
+  }, []);
+
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    if (!isMounted.current) return;
+    
+    const currentSessions = sessionsRef.current;
+    if (currentSessions.length <= 1) {
+      alert('至少需要保留一个会话');
+      return;
+    }
+    
+    // 立即取消正在进行的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    const updatedSessions = currentSessions.filter(s => s.id !== sessionId);
+    const needSwitchMessages = currentSessionIdRef.current === sessionId && updatedSessions.length > 0;
+    const newSession = needSwitchMessages ? updatedSessions[updatedSessions.length - 1] : null;
+    
+    dispatchChat({ type: 'DELETE_SESSION', sessionId });
+    
+    if (newSession) {
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: '你好！我是 AI 商品图生成助手 ✨\n\n告诉我商品和场景，或上传产品图，帮你生成专业图片。',
+        },
+        ...newSession.messages,
+      ]);
+    }
+    
+    setTimeout(() => {
+      deleteSession(sessionId);
+    }, 0);
+  }, []);
+
+  const updateCurrentSession = () => {
+    if (currentSessionId) {
+      const session = sessions.find(s => s.id === currentSessionId);
+      if (session) {
+        const userMessages = messages.filter(m => m.id !== 'welcome');
+        const updatedSession = {
+          ...session,
+          messages: userMessages,
+          title: userMessages.length > 0 
+            ? userMessages[0].content.substring(0, 30) + (userMessages[0].content.length > 30 ? '...' : '')
+            : '新会话',
+        };
+        saveSession(updatedSession);
+        dispatchChat({ type: 'UPDATE_SESSION', sessionId: currentSessionId, updatedSession });
+      }
+    }
+  };
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      saveChatMessages(messages);
+      if (currentSessionId && sessions.some(s => s.id === currentSessionId)) {
+        updateCurrentSession();
+      }
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [messages]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (currentSessionId && sessions.some(s => s.id === currentSessionId)) {
+        saveChatMessages(messages);
+      }
     }, 1000);
     return () => clearTimeout(timeoutId);
   }, [messages]);
@@ -201,7 +425,275 @@ export default function Home() {
     return false;
   };
 
-  const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Promise<void> => {
+  const isAmazonVisualPlan = (content: string): boolean => {
+  const normalized = content.replace(/[-–—]/g, '-');
+  return normalized.includes('6图亚马逊视觉方案') || 
+         normalized.includes('Image 1 -') ||
+         normalized.includes('亚马逊定制商品视觉方案');
+};
+
+const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
+  const plans: GeneratedImagePlan[] = [];
+  const normalized = content.replace(/[-–—]/g, '-');
+  
+  for (let i = 1; i <= 6; i++) {
+    const regex = new RegExp(`Image ${i} - ([\\s\\S]*?)(?=Image ${i + 1} -|$)`);
+    const match = normalized.match(regex);
+    if (match) {
+      const planContent = match[1].trim();
+      const titleMatch = planContent.match(/^([^\n]+)/);
+      const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
+      
+      const title = titleMatch ? titleMatch[1].trim() : `图${i}`;
+      let prompt = compositionMatch ? compositionMatch[1].trim().replace(/\n/g, ' ') : '';
+      
+      if (!prompt) {
+        prompt = `专业亚马逊产品摄影，${title}，cinematic commercial photography风格`;
+      } else {
+        prompt = `专业亚马逊产品摄影，${title}，${prompt}，cinematic commercial photography风格`;
+      }
+      
+      plans.push({
+        index: i,
+        title,
+        prompt,
+        status: 'pending',
+      });
+    }
+  }
+  
+  return plans;
+};
+
+const isSelectiveGenerationRequest = (content: string): { match: boolean; indices: number[] } => {
+  const patterns = [
+    /生成第(\d+)张图/,
+    /生成第(\d+)张/,
+    /生成图(\d+)/,
+    /只生成第(\d+)张/,
+    /只要第(\d+)张/,
+    /请生成第(\d+)张/,
+    /生成第(\d+)张图片/,
+  ];
+  
+  const indices: number[] = [];
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    if (match) {
+      const idx = parseInt(match[1]);
+      if (idx >= 1 && idx <= 6) {
+        indices.push(idx);
+      }
+    }
+  }
+  
+  return {
+    match: indices.length > 0,
+    indices: [...new Set(indices)],
+  };
+};
+
+const parseAmazonPlan = (content: string): GeneratedImagePlan[] => {
+  const plans: GeneratedImagePlan[] = [];
+  const normalized = content.replace(/[-–—]/g, '-');
+  const imagePattern = /Image (\d+) - ([^\n]+)\n用途[：:]([^\n]+)\n构图[：:]\n((?:- [^\n]+\n?)+)(?:风格[：:]([^\n]+))?/g;
+  
+  let match;
+  while ((match = imagePattern.exec(normalized)) !== null) {
+    const index = parseInt(match[1]);
+    const title = match[2].trim();
+    const purpose = match[3].trim();
+    const composition = match[4].trim();
+    const style = match[5]?.trim() || '';
+    
+    const prompt = `Professional product photography for Amazon listing, ${title}, ${purpose}, ${composition.replace(/\n-/g, ', ')}, ${style}, cinematic lighting, premium quality, high-end commercial photography`;
+    
+    plans.push({
+      index,
+      title,
+      prompt,
+      status: 'pending' as const,
+    });
+  }
+  
+  return plans;
+};
+
+const isAmazonPlanResponse = (content: string, persona: string): boolean => {
+  if (persona !== 'amazon-expert') return false;
+  const normalized = content.replace(/[-–—]/g, '-');
+  return normalized.includes('6图亚马逊视觉方案') || 
+         normalized.includes('Image 1 -') || 
+         normalized.includes('亚马逊定制商品视觉方案');
+};
+
+const getLastAmazonPlan = (): { planImages: GeneratedImagePlan[], userImage: string } | undefined => {
+  const reversedMessages = [...messagesRef.current].reverse();
+  
+  console.log('[getLastAmazonPlan] Searching for Amazon plan in', reversedMessages.length, 'messages');
+  
+  let lastUserImage: string | undefined;
+  for (const msg of reversedMessages) {
+    if (msg.role === 'user' && msg.userImages && msg.userImages.length > 0) {
+      lastUserImage = msg.userImages[0];
+      console.log('[getLastAmazonPlan] Found user image, length:', lastUserImage.length);
+      break;
+    }
+  }
+  
+  for (const msg of reversedMessages) {
+    console.log('[getLastAmazonPlan] Checking message:', msg.id, 'isAmazonPlan:', msg.isAmazonPlan, 'planImages length:', msg.planImages?.length);
+    if (msg.planImages && msg.planImages.length > 0) {
+      console.log('[getLastAmazonPlan] Found Amazon plan with', msg.planImages.length, 'images, hasUserImage:', !!lastUserImage);
+      return {
+        planImages: msg.planImages,
+        userImage: lastUserImage || '',
+      };
+    }
+    if (msg.role === 'assistant' && isAmazonVisualPlan(msg.content)) {
+      const planImages = parseAmazonVisualPlan(msg.content);
+      if (planImages.length > 0) {
+        console.log('[getLastAmazonPlan] Re-parsed Amazon plan from content with', planImages.length, 'images, hasUserImage:', !!lastUserImage);
+        return {
+          planImages,
+          userImage: lastUserImage || '',
+        };
+      }
+    }
+  }
+  console.log('[getLastAmazonPlan] No Amazon plan found');
+  return undefined;
+};
+
+const generateImagesFromPlan = async (messageId: string, referenceImage: string) => {
+  const messageIndex = messages.findIndex(m => m.id === messageId);
+  if (messageIndex === -1) return;
+  
+  const message = messages[messageIndex];
+  if (!message.planImages || message.planImages.length === 0) return;
+  
+  if (isMounted.current) {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId) return m;
+      return {
+        ...m,
+        planImages: m.planImages?.map(img => ({ ...img, status: 'pending' as const })),
+      };
+    }));
+  }
+  
+  const planAbortController = new AbortController();
+  
+  for (let i = 0; i < message.planImages.length; i++) {
+    if (!isMounted.current) break;
+    
+    const plan = message.planImages[i];
+    
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          planImages: m.planImages?.map((img, idx) => 
+            idx === i ? { ...img, status: 'generating' as const } : img
+          ),
+        };
+      }));
+    }
+    
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: plan.prompt }],
+          referenceImages: [referenceImage],
+          model: 'gpt-image-2-edit',
+          size: selectedSize,
+          quality: selectedQuality,
+          n: 1,
+        }),
+        signal: planAbortController.signal,
+      });
+      
+      if (!isMounted.current) break;
+      if (!response.ok) throw new Error('生成失败');
+      
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无法读取响应');
+      
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let generatedUrl: string | null = null;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            let jsonString = line;
+            if (jsonString.startsWith('data: ')) {
+              jsonString = jsonString.slice(6);
+            }
+            
+            const data = JSON.parse(jsonString);
+            if (data.type === 'image' && data.url) {
+              generatedUrl = data.url;
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+      
+      if (!isMounted.current) break;
+      
+      if (generatedUrl) {
+        await handleSaveChatImage(generatedUrl, plan.prompt, messageId);
+      }
+      
+      if (isMounted.current) {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            planImages: m.planImages?.map((img, idx) => 
+              idx === i ? { ...img, status: generatedUrl ? 'completed' as const : 'failed' as const, imageUrl: generatedUrl } : img
+            ),
+            imageUrls: generatedUrl ? [...(m.imageUrls || []), generatedUrl] : m.imageUrls,
+          };
+        }));
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        break;
+      }
+      console.error(`[Plan Generation] Image ${i + 1} failed:`, error);
+      if (isMounted.current) {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            planImages: m.planImages?.map((img, idx) => 
+              idx === i ? { ...img, status: 'failed' as const } : img
+            ),
+          };
+        }));
+      }
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+};
+
+const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Promise<void> => {
     console.log(`[Retry] 尝试重新生成图片...`);
     try {
       const response = await fetch('/api/chat', {
@@ -244,14 +736,15 @@ export default function Home() {
             }
             
             if (jsonString.trim() === '[DONE]') {
-              // SSE 完成，关闭 isGenerating 状态
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, isGenerating: false }
-                    : msg
-                )
-              );
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, isGenerating: false }
+                      : msg
+                  )
+                );
+              }
               continue;
             }
             
@@ -259,12 +752,7 @@ export default function Home() {
 
             if (data.type === 'image' && data.url) {
               const isAccessible = await checkImageUrl(data.url);
-              if (isAccessible) {
-                setCurrentImage({
-                  url: data.url,
-                  product: data.product || '生成图片',
-                  scene: data.scene || '',
-                });
+              if (isAccessible && isMounted.current) {
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === aiMessageId
@@ -274,13 +762,25 @@ export default function Home() {
                 );
               }
             } else if (data.type === 'text') {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, content: data.content || msg.content, isGenerating: data.done === false }
-                    : msg
-                )
-              );
+              const content = data.content || '';
+              const isPlan = isAmazonVisualPlan(content);
+              const planImages = isPlan && data.done === true ? parseAmazonVisualPlan(content) : undefined;
+              
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { 
+                          ...msg, 
+                          content, 
+                          isGenerating: data.done === false,
+                          isAmazonPlan: isPlan,
+                          planImages: data.done === true ? planImages : msg.planImages,
+                        }
+                      : msg
+                  )
+                );
+              }
             }
           } catch (e) {
             console.error('[Parse Error]', e);
@@ -289,15 +789,19 @@ export default function Home() {
       }
     } catch (error) {
       console.error('[Retry Error]', error);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? { ...msg, content: '❌ 图片生成失败，请稍后重试', isGenerating: false }
-            : msg
-        )
-      );
+      if (isMounted.current) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? { ...msg, content: '❌ 图片生成失败，请稍后重试', isGenerating: false }
+              : msg
+          )
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -305,11 +809,188 @@ export default function Home() {
     if ((!input.trim() && userImages.length === 0) || isLoading) return;
 
     const effectiveContent = input.trim();
-    const currentImages = [...userImages];
+    const currentImages = [...userImagesRef.current];
+    
+    // 添加详细的日志输出
+    console.log('[SendMessage] Starting sendMessage');
+    console.log('[SendMessage] Content:', effectiveContent);
+    console.log('[SendMessage] Images:', currentImages.length);
+    console.log('[SendMessage] Selected persona:', selectedPersona);
+    
+    // 检测是否是选择性生图请求（仅在亚马逊专家模式下，且没有上传新图片，且输入包含"生成"关键词时）
+    const selectiveRequest = (selectedPersona === 'amazon-expert' && currentImages.length === 0 && effectiveContent.includes('生成')) 
+      ? isSelectiveGenerationRequest(effectiveContent) 
+      : { match: false, indices: [] };
+    if (selectiveRequest.match) {
+      console.log('[SendMessage] Detected selective generation request');
+      const lastPlan = getLastAmazonPlan();
+      if (lastPlan && lastPlan.planImages.length > 0) {
+        console.log('[SendMessage] Found existing plan, generating selected images:', selectiveRequest.indices);
+        
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: effectiveContent || '',
+          userImages: currentImages.length > 0 ? currentImages : undefined,
+        };
+        
+        setMessages((prev) => [...prev, userMessage]);
+        setInput('');
+        
+        const aiMessageId = (Date.now() + 1).toString();
+        setMessages((prev) => [
+          ...prev,
+          { 
+            id: aiMessageId, 
+            role: 'assistant', 
+            content: '', 
+            isGenerating: true,
+            planImages: lastPlan.planImages.map((plan, idx) => ({
+              ...plan,
+              status: selectiveRequest.indices.includes(idx + 1) ? 'pending' : 'completed'
+            })),
+          },
+        ]);
+        
+        // 生成选中的图片
+        if (lastPlan.planImages.length > 0) {
+          // 过滤出用户选择的图片索引
+          const filteredPlans = lastPlan.planImages.filter((_, idx) => 
+            selectiveRequest.indices.includes(idx + 1)
+          );
+          
+          // 更新消息状态
+          if (isMounted.current) {
+            setMessages(prev => prev.map(m => {
+              if (m.id !== aiMessageId) return m;
+              return {
+                ...m,
+                planImages: m.planImages?.map((plan, idx) => ({
+                  ...plan,
+                  status: selectiveRequest.indices.includes(idx + 1) ? 'generating' : 'completed'
+                }))
+              };
+            }));
+          }
+          
+          abortControllerRef.current = new AbortController();
+          
+          // 逐个生成选中的图片
+          for (const idx of selectiveRequest.indices) {
+            if (!isMounted.current) break;
+            
+            const plan = lastPlan.planImages[idx - 1];
+            if (plan) {
+              try {
+                console.log(`[SendMessage] Generating image ${idx}:`, {
+                  title: plan.title,
+                  prompt: plan.prompt.substring(0, 100),
+                  hasUserImage: !!lastPlan.userImage,
+                });
+                const requestBody: Record<string, unknown> = {
+                  prompt: plan.prompt,
+                  size: selectedSize,
+                  quality: selectedQuality,
+                  n: 1,
+                };
+                const isValidImageUrl = lastPlan.userImage && (
+                  lastPlan.userImage.startsWith('data:') || 
+                  lastPlan.userImage.startsWith('http://') || 
+                  lastPlan.userImage.startsWith('https://')
+                );
+                if (isValidImageUrl) {
+                  requestBody.referenceImage = lastPlan.userImage;
+                  requestBody.model = 'gpt-image-2-edit';
+                } else {
+                  requestBody.model = 'gpt-image-2-all';
+                }
+                const response = await fetch('/api/generate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(requestBody),
+                  signal: abortControllerRef.current?.signal,
+                });
+                
+                if (!isMounted.current) return;
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  const imageUrl = data.url || data.urls?.[0] || (data.images && data.images[0]);
+                  if (imageUrl) {
+                    console.log(`[SendMessage] Generated image ${idx}:`, imageUrl);
+                    
+                    if (isMounted.current) {
+                      setMessages(prev => prev.map(m => {
+                        if (m.id !== aiMessageId) return m;
+                        return {
+                          ...m,
+                          planImages: m.planImages?.map((p, i) => 
+                            i === idx - 1 ? { ...p, status: 'completed' as const, imageUrl: imageUrl } : p
+                          ),
+                          imageUrls: [...(m.imageUrls || []), imageUrl],
+                        };
+                      }));
+                    }
+                  }
+                } else {
+                  const status = response.status;
+                  const statusText = response.statusText;
+                  let errorData;
+                  try {
+                    errorData = await response.json();
+                  } catch {
+                    const text = await response.text().catch(() => '');
+                    errorData = { status, statusText, rawText: text };
+                  }
+                  console.error(`[SendMessage] Failed to generate image ${idx}: HTTP ${status} ${statusText}`, errorData);
+                  if (isMounted.current) {
+                    setMessages(prev => prev.map(m => {
+                      if (m.id !== aiMessageId) return m;
+                      return {
+                        ...m,
+                        planImages: m.planImages?.map((p, i) => 
+                          i === idx - 1 ? { ...p, status: 'error' as const, error: errorData.error || `HTTP ${status}` } : p
+                        ),
+                      };
+                    }));
+                  }
+                }
+              } catch (error) {
+                if (error instanceof Error && error.name === 'AbortError') {
+                  console.log(`[SendMessage] Image generation ${idx} aborted`);
+                  continue;
+                }
+                console.error(`[SendMessage] Failed to generate image ${idx}:`, error);
+                if (isMounted.current) {
+                  setMessages(prev => prev.map(m => {
+                    if (m.id !== aiMessageId) return m;
+                    return {
+                      ...m,
+                      planImages: m.planImages?.map((p, i) => 
+                        i === idx - 1 ? { ...p, status: 'error' as const } : p
+                      ),
+                    };
+                  }));
+                }
+              }
+            }
+          }
+          
+          if (isMounted.current) {
+            setMessages(prev => prev.map(m => {
+              if (m.id !== aiMessageId) return m;
+              return { ...m, isGenerating: false };
+            }));
+          }
+        }
+        return;
+      }
+    }
     
     // 使用用户选择的模型（文本模型也能识别图片）
     // 图片识别模式下强制使用 gpt-image-2 模型
     const effectiveModel = (imageMode === 'analyze' && currentImages.length > 0) ? 'gpt-image-2' : selectedModel;
+    console.log('[SendMessage] Using model:', effectiveModel);
 
     let currentUserMessage: { role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
     
@@ -369,16 +1050,20 @@ export default function Home() {
     ]);
 
     abortControllerRef.current = new AbortController();
-    const timeoutMs = 120000; // 120秒超时（流式响应可能需要更长时间）
+    const timeoutMs = 300000; // 300秒超时（图片生成可能需要较长时间）
     const timeoutId = setTimeout(() => {
       abortControllerRef.current?.abort();
     }, timeoutMs);
 
     const imageModels: ImageModelId[] = ['gpt-image-2', 'gpt-image-2-gen', 'gpt-image-2-edit'];
-    const isImageGeneration = imageModels.includes(effectiveModel as ImageModelId);
+    // 当选择"亚马逊专家"人设时，即使使用gpt-image-2，也不算图片生成，因为只是分析图片
+    const isAmazonExpert = selectedPersona === 'amazon-expert';
+    const isImageGeneration = !isAmazonExpert && imageModels.includes(effectiveModel as ImageModelId);
     console.log('[Analytics] Check isImageGeneration:', {
       effectiveModel,
       imageModels,
+      selectedPersona,
+      isAmazonExpert,
       isImageGeneration
     });
     
@@ -425,6 +1110,7 @@ export default function Home() {
     }
 
     try {
+      console.log('[SendMessage] Making API request to /api/chat');
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -443,8 +1129,10 @@ export default function Home() {
 
       clearTimeout(timeoutId);
 
+      console.log('[SendMessage] API response status:', response.status);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[SendMessage] API error:', errorData);
         throw new Error(errorData.error || errorData.message || `请求失败 (${response.status})`);
       }
 
@@ -454,9 +1142,13 @@ export default function Home() {
       const decoder = new TextDecoder();
       let sseBuffer = '';
 
+      console.log('[SendMessage] Starting to read SSE stream');
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('[SendMessage] SSE stream done');
+          break;
+        }
 
         sseBuffer += decoder.decode(value, { stream: true });
         const lines = sseBuffer.split('\n');
@@ -472,27 +1164,26 @@ export default function Home() {
             }
             
             if (jsonString.trim() === '[DONE]') {
+              console.log('[SendMessage] Received [DONE] signal');
               // SSE 完成，关闭 isGenerating 状态
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, isGenerating: false }
-                    : msg
-                )
-              );
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, isGenerating: false }
+                      : msg
+                  )
+                );
+              }
               continue;
             }
             
             const data = JSON.parse(jsonString);
+            console.log('[SendMessage] Received SSE data:', data.type);
 
             if (data.type === 'image' && data.url) {
               console.log('[Chat] 收到图片 URL:', data.url);
               handleSaveChatImage(data.url, effectiveContent || '生成图片', aiMessageId);
-              setCurrentImage({
-                url: data.url,
-                product: data.product || '生成图片',
-                scene: data.scene || '',
-              });
               if (generationIdRef.current) {
                 const duration = Date.now() - requestStartTimeRef.current;
                 updateGeneration(generationIdRef.current, {
@@ -501,30 +1192,49 @@ export default function Home() {
                   imageUrl: data.url,
                 });
               }
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, content: '', imageUrls: [...(msg.imageUrls || []), data.url], isGenerating: data.index !== undefined && data.total !== undefined ? data.index < data.total - 1 : false }
-                    : msg
-                )
-              );
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, content: '', imageUrls: [...(msg.imageUrls || []), data.url], isGenerating: data.index !== undefined && data.total !== undefined ? data.index < data.total - 1 : false }
+                      : msg
+                  )
+                );
+              }
             } else if (data.type === 'text') {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, content: data.content || msg.content, isGenerating: data.done === false }
-                    : msg
-                )
-              );
+              const content = data.content || '';
+              const isPlan = isAmazonVisualPlan(content);
+              console.log('[SendMessage] Is Amazon plan:', isPlan);
+              const planImages = isPlan && data.done === true ? parseAmazonVisualPlan(content) : undefined;
+              
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { 
+                          ...msg, 
+                          content, 
+                          isGenerating: data.done === false,
+                          isAmazonPlan: isPlan,
+                          planImages: data.done === true ? planImages : msg.planImages,
+                        }
+                      : msg
+                  )
+                );
+              }
             } else if (data.type === 'generating') {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, content: data.message || '生成中...', isGenerating: true }
-                    : msg
-                )
-              );
+              console.log('[SendMessage] Generating message');
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, content: data.message || '生成中...', isGenerating: true }
+                      : msg
+                  )
+                );
+              }
             } else if (data.type === 'error') {
+              console.error('[SendMessage] Error message:', data.message);
               if (generationIdRef.current) {
                 const duration = Date.now() - requestStartTimeRef.current;
                 updateGeneration(generationIdRef.current, {
@@ -533,13 +1243,15 @@ export default function Home() {
                   error: data.message || '生成失败',
                 });
               }
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, content: `❌ ${data.message || '生成失败'}`, isGenerating: false }
-                    : msg
-                )
-              );
+              if (isMounted.current) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, content: `❌ ${data.message || '生成失败'}`, isGenerating: false }
+                      : msg
+                  )
+                );
+              }
             }
           } catch (e) {
             console.error('[Parse Error]', e);
@@ -557,16 +1269,20 @@ export default function Home() {
             error: error instanceof Error ? error.message : '网络错误',
           });
         }
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId
-              ? { ...msg, content: `❌ 请求失败: ${error instanceof Error ? error.message : '网络错误'}`, isGenerating: false }
-              : msg
-          )
-        );
+        if (isMounted.current) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? { ...msg, content: `❌ 请求失败: ${error instanceof Error ? error.message : '网络错误'}`, isGenerating: false }
+                : msg
+            )
+          );
+        }
       }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
       abortControllerRef.current = null;
       generationIdRef.current = null;
     }
@@ -721,6 +1437,7 @@ export default function Home() {
             {[
               { id: 'chat', name: '对话助手', icon: Bot },
               { id: 'image-generator', name: '图片生成', icon: Sparkles },
+              { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
               { id: 'ecommerce', name: '电商套图', icon: LayoutGrid },
               { id: 'amazon-creative', name: '亚马逊创意总监', icon: Gift },
             ].map((workflow) => {
@@ -790,18 +1507,9 @@ export default function Home() {
 
           <div>
             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 block">人设</label>
-            <Select value={selectedPersona} onValueChange={setSelectedPersona}>
-              <SelectTrigger className="w-full h-8 text-xs">
-                <SelectValue placeholder="人设" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERSONAS.map((persona) => (
-                  <SelectItem key={persona.id} value={persona.id}>
-                    <span className="text-xs">{persona.name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="w-full h-8 text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-md flex items-center">
+              <span className="text-gray-700">亚马逊专家</span>
+            </div>
           </div>
 
           {['gpt-image-2', 'gpt-image-2-gen', 'gpt-image-2-edit'].includes(selectedModel) && (
@@ -863,19 +1571,32 @@ export default function Home() {
         <div style={{ display: currentWorkflow === 'image-generator' ? 'flex' : 'none' }} className="h-full">
           <ImageGeneratorWorkflow />
         </div>
+        <div style={{ display: currentWorkflow === 'prompt-analyzer' ? 'flex' : 'none' }} className="h-full">
+          <PromptAnalyzerWorkflow />
+        </div>
         <div style={{ display: currentWorkflow === 'ecommerce' ? 'flex' : 'none' }} className="h-full">
           <EcommerceWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'amazon-creative' ? 'flex' : 'none' }} className="h-full">
           <AmazonCreativeDirectorWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'chat' ? 'flex' : 'none' }} className="h-full overflow-hidden flex flex-row-reverse">
-          <div className="w-[480px] flex-shrink-0 flex flex-col border-l border-gray-200 h-full">
+        <div style={{ display: currentWorkflow === 'chat' ? 'flex' : 'none' }} className="h-full overflow-hidden">
+          {/* 会话列表侧边栏 */}
+          <ChatSessionList
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSwitch={switchSession}
+            onDelete={handleDeleteSession}
+            onCreate={createNewSession}
+          />
+          
+          {/* 聊天区域 */}
+          <div className="flex-1 flex flex-col border-l border-gray-200 h-full">
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => {
                   if (scrollRef.current) {
-                    setScrollPosition(scrollRef.current.scrollTop);
+                    scrollPositionRef.current = scrollRef.current.scrollTop;
                   }
                   setShowImageHistory(false);
                 }}
@@ -888,7 +1609,7 @@ export default function Home() {
             <button
               onClick={() => {
                 if (scrollRef.current) {
-                  setScrollPosition(scrollRef.current.scrollTop);
+                  scrollPositionRef.current = scrollRef.current.scrollTop;
                 }
                 setShowImageHistory(true);
               }}
@@ -971,118 +1692,14 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <>
-              <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-6 pb-4">
-                <div className="space-y-6">
-                    {messages.filter(m => m.id !== 'welcome').map((message) => (
-                      <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`max-w-[85%] p-4 rounded-2xl ${
-                            message.role === 'user'
-                              ? 'bg-gray-100 text-gray-900 rounded-tr-sm'
-                              : 'bg-white border border-gray-100 text-gray-800 shadow-sm rounded-tl-sm'
-                          }`}
-                        >
-                          {message.userImages && message.userImages.length > 0 && (
-                            <div className="mb-3">
-                              {message.userImages.length === 1 ? (
-                                <img
-                                  src={message.userImages[0]}
-                                  alt="Uploaded"
-                                  className="max-w-full max-h-48 rounded-lg object-contain cursor-grab active:cursor-grabbing"
-                                  draggable
-                                  onDragStart={(e) => {
-                                    e.dataTransfer.setData('text/uri-list', message.userImages![0]);
-                                    e.dataTransfer.setData('text/plain', message.userImages![0]);
-                                    e.dataTransfer.effectAllowed = 'copy';
-                                  }}
-                                />
-                              ) : (
-                                <div className="grid grid-cols-2 gap-2">
-                                  {message.userImages.map((img, imgIdx) => (
-                                    <div key={imgIdx} className="relative">
-                                      <img
-                                        src={img}
-                                        alt={`图${imgIdx + 1}`}
-                                        className="w-full max-h-32 rounded-lg object-contain cursor-grab active:cursor-grabbing"
-                                        draggable
-                                        onDragStart={(e) => {
-                                          e.dataTransfer.setData('text/uri-list', img);
-                                          e.dataTransfer.setData('text/plain', img);
-                                          e.dataTransfer.effectAllowed = 'copy';
-                                        }}
-                                      />
-                                      <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 text-white rounded text-[10px] font-medium">
-                                        图{imgIdx + 1}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {message.content && (
-                            <div className="flex items-start gap-2 group">
-                              <p className="flex-1 whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
-                              <button
-                                onClick={() => {
-                                  copyToClipboard(message.content);
-                                }}
-                                className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                              >
-                                <Copy className="w-4 h-4 text-gray-400" />
-                              </button>
-                            </div>
-                          )}
-                          {message.imageUrls && message.imageUrls.length > 0 && (
-                            <div className="mt-3 pt-3 border-t border-gray-100">
-                              {message.imageUrls.length === 1 ? (
-                                <img
-                                  src={message.imageUrls[0]}
-                                  alt="Generated"
-                                  className="max-w-full max-h-64 rounded-lg object-contain cursor-grab active:cursor-grabbing"
-                                  draggable
-                                  onDragStart={(e) => {
-                                    e.dataTransfer.setData('text/uri-list', message.imageUrls![0]);
-                                    e.dataTransfer.setData('text/plain', message.imageUrls![0]);
-                                    e.dataTransfer.effectAllowed = 'copy';
-                                  }}
-                                />
-                              ) : (
-                                <div className={`grid gap-2 ${message.imageUrls.length === 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
-                                  {message.imageUrls.map((url, idx) => (
-                                    <div key={idx} className="relative">
-                                      <img
-                                        src={url}
-                                        alt={`Generated ${idx + 1}`}
-                                        className="w-full aspect-square rounded-lg object-contain cursor-grab active:cursor-grabbing bg-gray-50"
-                                        draggable
-                                        onDragStart={(e) => {
-                                          e.dataTransfer.setData('text/uri-list', url);
-                                          e.dataTransfer.setData('text/plain', url);
-                                          e.dataTransfer.effectAllowed = 'copy';
-                                        }}
-                                      />
-                                      <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 text-white rounded text-[10px] font-medium">
-                                        {idx + 1}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {message.isGenerating && (
-                            <div className="flex gap-1">
-                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}</div>
-              </div>
+            <React.Fragment>
+			<ChatMessages
+              messages={messages}
+              onCopyContent={copyToClipboard}
+              onGenerateFromPlan={generateImagesFromPlan}
+              scrollRef={scrollRef as React.RefObject<HTMLDivElement | null>}
+              onScroll={handleScroll}
+            />
 
           <div className="p-4 pt-2">
             <div
@@ -1133,28 +1750,30 @@ export default function Home() {
                   <div className="flex items-center justify-between mt-2">
                     <p className="text-xs text-gray-500">已附加 {userImages.length} 张图片</p>
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg">
-                        <button
-                          onClick={() => setImageMode('generate')}
-                          className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
-                            imageMode === 'generate'
-                              ? 'bg-black text-white'
-                              : 'text-gray-600 hover:text-gray-900'
-                          }`}
-                        >
-                          生成图片
-                        </button>
-                        <button
-                          onClick={() => setImageMode('analyze')}
-                          className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
-                            imageMode === 'analyze'
-                              ? 'bg-black text-white'
-                              : 'text-gray-600 hover:text-gray-900'
-                          }`}
-                        >
-                          图片识别
-                        </button>
-                      </div>
+                      {selectedPersona !== 'amazon-expert' && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg">
+                          <button
+                            onClick={() => setImageMode('generate')}
+                            className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                              imageMode === 'generate'
+                                ? 'bg-black text-white'
+                                : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            生成图片
+                          </button>
+                          <button
+                            onClick={() => setImageMode('analyze')}
+                            className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                              imageMode === 'analyze'
+                                ? 'bg-black text-white'
+                                : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            图片识别
+                          </button>
+                        </div>
+                      )}
                       <button
                         onClick={clearAllImages}
                         className="p-1 text-gray-400 hover:text-red-500 transition-colors"
@@ -1214,22 +1833,8 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </>
-          )}
-        </div>
-
-        <div className="flex-1 flex flex-col min-h-0 relative">
-          <div className="flex-shrink-0 p-4 border-b border-gray-200 relative z-10">
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium text-gray-900">画布</h3>
-              {currentImage && (
-                <span className="text-xs text-gray-500">{currentImage.product}</span>
-              )}
-            </div>
-          </div>
-          <div className="flex-1 min-h-0 relative overflow-hidden">
-            <InfiniteCanvas generatedImageUrl={currentImage?.url} generatedProductName={currentImage?.product} />
-          </div>
+        </React.Fragment>
+        )}
         </div>
       </div>
       </main>

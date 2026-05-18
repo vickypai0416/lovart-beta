@@ -24,7 +24,7 @@ export default function ImageGeneratorWorkflow() {
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'generator' | 'history'>('generator');
   const [imageHistory, setImageHistory] = useState<ImgGenHistoryItem[]>([]);
-  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [englishPrompt, setEnglishPrompt] = useState<string>('');
   const [showTemplates, setShowTemplates] = useState(false);
@@ -60,15 +60,25 @@ export default function ImageGeneratorWorkflow() {
   ];
 
   const generateImage = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() && referenceImages.length === 0) {
+      console.log('[Generate] Abort: No prompt and no reference images');
+      return;
+    }
 
-    console.log('[Analytics] ImageGeneratorWorkflow: generateImage called');
+    console.log('[Generate] generateImage called');
+    console.log('[Generate] prompt:', prompt.trim());
+    console.log('[Generate] referenceImages:', referenceImages.length, 'images');
+    console.log('[Generate] selectedSize:', selectedSize);
+    console.log('[Generate] selectedQuality:', selectedQuality);
+    console.log('[Generate] selectedCount:', selectedCount);
+    console.log('[Generate] selectedModel:', selectedModel);
+    
     setIsGenerating(true);
     const startTime = Date.now();
 
     // 确保 analytics 初始化完成
     if (!isInitialized) {
-      console.log('[Analytics] ImageGeneratorWorkflow: Waiting for initialization...');
+      console.log('[Generate] Waiting for analytics initialization...');
       await new Promise((resolve) => {
         const interval = setInterval(() => {
           const id = localStorage.getItem('analytics_session_id');
@@ -80,7 +90,7 @@ export default function ImageGeneratorWorkflow() {
       });
     }
 
-    console.log('[Analytics] ImageGeneratorWorkflow: Calling trackGeneration...');
+    console.log('[Generate] Calling trackGeneration...');
     const generationId = await trackGeneration({
       prompt: englishPrompt || prompt.trim(),
       size: selectedSize,
@@ -89,15 +99,33 @@ export default function ImageGeneratorWorkflow() {
       count: selectedCount,
     });
     generationIdRef.current = generationId;
-    console.log('[Analytics] ImageGeneratorWorkflow: Tracked generation:', generationId);
+    console.log('[Generate] Tracked generation:', generationId);
 
     const maxRetries = 2;
-    const timeoutMs = 60000; // 60秒超时
+    const timeoutMs = 300000; // 300秒超时（图片生成可能需要较长时间）
 
     for (let retry = 0; retry <= maxRetries; retry++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        
+        const timeoutId = setTimeout(() => {
+          console.log(`[Generate] Timeout after ${timeoutMs}ms, aborting request`);
+          controller.abort();
+        }, timeoutMs);
+
+        controller.signal.addEventListener('abort', (ev) => {
+          console.log(`[Generate] AbortController signal aborted, reason:`, ev);
+        });
+
+        console.log(`[Generate] Attempt ${retry + 1}: Sending request to /api/generate`);
+        console.log(`[Generate] Request body:`, {
+          prompt: englishPrompt || prompt.trim(),
+          size: selectedSize,
+          quality: selectedQuality,
+          n: selectedCount,
+          model: selectedModel,
+          referenceImageCount: referenceImages.length,
+        });
 
         const response = await fetch('/api/generate', {
           method: 'POST',
@@ -108,12 +136,13 @@ export default function ImageGeneratorWorkflow() {
             quality: selectedQuality,
             n: selectedCount,
             model: selectedModel,
-            ...(referenceImage ? { referenceImage } : {}),
+            ...(referenceImages.length > 0 ? { referenceImages } : {}),
           }),
           signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
+        console.log(`[Generate] Response received, status: ${response.status}`);
 
         const result = await response.json();
 
@@ -165,6 +194,13 @@ export default function ImageGeneratorWorkflow() {
         break;
       } catch (error) {
         console.error(`[Generate] 第 ${retry + 1} 次请求失败:`, error);
+        console.error(`[Generate] Error type:`, error instanceof Error ? error.name : typeof error);
+        console.error(`[Generate] Error stack:`, error instanceof Error ? error.stack : null);
+        
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log(`[Generate] 请求被中止，可能是超时或手动取消`);
+        }
+        
         if (retry < maxRetries) {
           console.log(`[Generate] 等待 2 秒后重试...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -186,14 +222,14 @@ export default function ImageGeneratorWorkflow() {
   };
 
   const enhancePrompt = async () => {
-    if (!referenceImage) return;
+    if (referenceImages.length === 0) return;
     setIsEnhancing(true);
     try {
       const response = await fetch('/api/enhance-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageUrl: referenceImage,
+          imageUrl: referenceImages[0],
           userDescription: prompt.trim() || undefined,
         }),
       });
@@ -512,31 +548,72 @@ export default function ImageGeneratorWorkflow() {
               type="file"
               ref={fileInputRef}
               accept="image/*"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  setReferenceImage(event.target?.result as string);
-                };
-                reader.readAsDataURL(file);
+                const files = e.target.files;
+                if (!files || files.length === 0) return;
+                
+                const maxImages = 16;
+                const maxTotalSize = 50 * 1024 * 1024;
+                
+                let totalSize = referenceImages.reduce((acc, img) => {
+                  if (img.startsWith('data:')) {
+                    const base64Data = img.split(',')[1];
+                    return acc + Math.floor((base64Data.length * 3) / 4);
+                  }
+                  return acc;
+                }, 0);
+                
+                const newImages: string[] = [];
+                
+                for (let i = 0; i < files.length; i++) {
+                  const file = files[i];
+                  
+                  if (referenceImages.length + newImages.length >= maxImages) {
+                    alert(`最多上传 ${maxImages} 张图片`);
+                    break;
+                  }
+                  
+                  if (totalSize + file.size > maxTotalSize) {
+                    alert('总文件大小不能超过 50MB');
+                    break;
+                  }
+                  
+                  totalSize += file.size;
+                  
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const imageDataUrl = event.target?.result as string;
+                    setReferenceImages((prev) => [...prev, imageDataUrl]);
+                  };
+                  reader.readAsDataURL(file);
+                }
+                
                 e.target.value = '';
               }}
             />
-            {referenceImage && (
+            {referenceImages.length > 0 && (
               <div className="px-4 py-2 border-t border-gray-50">
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-2 px-2 py-1 bg-gray-100 rounded-lg">
-                    <img src={referenceImage} alt="参考图" className="w-10 h-10 object-cover rounded" />
-                    <span className="text-xs text-gray-500">参考图</span>
-                    <button
-                      onClick={() => { setReferenceImage(null); setEnglishPrompt(''); }}
-                      className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {referenceImages.map((img, index) => (
+                    <div key={index} className="inline-flex items-center gap-2 px-2 py-1 bg-gray-100 rounded-lg">
+                      <img src={img} alt={`参考图 ${index + 1}`} className="w-10 h-10 object-cover rounded" />
+                      <span className="text-xs text-gray-500">{index + 1}</span>
+                      <button
+                        onClick={() => setReferenceImages((prev) => prev.filter((_, i) => i !== index))}
+                        className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setReferenceImages([])}
+                    className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1"
+                  >
+                    清空全部
+                  </button>
                   <button
                     onClick={enhancePrompt}
                     disabled={isEnhancing}
@@ -595,9 +672,9 @@ export default function ImageGeneratorWorkflow() {
                 ) : (
                   <button
                     onClick={generateImage}
-                    disabled={!prompt.trim()}
+                    disabled={!prompt.trim() && referenceImages.length === 0}
                     className={`p-2 rounded-full transition-all ${
-                      prompt.trim()
+                      prompt.trim() || referenceImages.length > 0
                         ? 'bg-black text-white hover:bg-gray-800 shadow-md'
                         : 'bg-gray-200 text-white cursor-not-allowed'
                     }`}

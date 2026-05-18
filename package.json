@@ -9,7 +9,10 @@
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "start": "bash ./scripts/start.sh",
-    "ts-check": "tsc -p tsconfig.json"
+    "ts-check": "tsc -p tsconfig.json",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",
@@ -78,9 +81,11 @@
     "zod": "^4.3.5"
   },
   "devDependencies": {
+    "@jest/globals": "^30.4.1",
     "@react-dev-inspector/babel-plugin": "^2.0.1",
     "@react-dev-inspector/middleware": "^2.0.1",
     "@tailwindcss/postcss": "^4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/node-fetch": "^2.6.13",
     "@types/pg": "^8.16.0",
@@ -88,10 +93,12 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "jest": "^30.4.2",
     "only-allow": "^1.2.2",
     "react-dev-inspector": "^2.0.1",
     "shadcn": "latest",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.9",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5"
