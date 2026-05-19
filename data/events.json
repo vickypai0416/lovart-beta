@@ -2339,5 +2339,15 @@
       "referrer": "http://localhost:5000/"
     },
     "createdAt": "2026-05-19T01:36:40.756Z"
+  },
+  {
+    "id": "1779155728732-j2l82gi6w",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:5000/"
+    },
+    "createdAt": "2026-05-19T01:55:28.732Z"
   }
 ]

@@ -1289,15 +1289,57 @@ const sendMessage = async () => {
     }
   };
 
+  const compressImageToDataUrl = async (
+    file: File,
+    maxBytes = 1 * 1024 * 1024,
+    maxDimension = 1600
+  ): Promise<string> => {
+    const bitmap = await createImageBitmap(file);
+    let { width, height } = bitmap;
+
+    const scale = Math.min(1, maxDimension / Math.max(width, height));
+    width = Math.max(1, Math.round(width * scale));
+    height = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('无法创建画布');
+
+    ctx.drawImage(bitmap, 0, 0, width, height);
+
+    const tryEncode = (quality: number) =>
+      canvas.toDataURL('image/jpeg', quality);
+
+    let q = 0.9;
+    let dataUrl = tryEncode(q);
+
+    const getBytes = (url: string) => {
+      const b64 = url.split(',')[1] || '';
+      return Math.floor((b64.length * 3) / 4);
+    };
+
+    while (getBytes(dataUrl) > maxBytes && q > 0.4) {
+      q -= 0.1;
+      dataUrl = tryEncode(q);
+    }
+
+    if (getBytes(dataUrl) > maxBytes) {
+      throw new Error('图片压缩后仍过大');
+    }
+
+    return dataUrl;
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const maxImages = 16;
-    const maxTotalSize = 50 * 1024 * 1024; // 50MB
+    const maxTotalSize = 50 * 1024 * 1024;
     
     let totalSize = userImages.reduce((acc, img) => {
-      // 估算 Base64 大小：原始大小 * 1.33
       if (img.startsWith('data:')) {
         const base64Data = img.split(',')[1];
         return acc + Math.floor((base64Data.length * 3) / 4);
@@ -1310,7 +1352,6 @@ const sendMessage = async () => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       
-      // 检查数量限制
       if (userImages.length + newImages.length >= maxImages) {
         setMessages((prev) => [
           ...prev,
@@ -1323,27 +1364,40 @@ const sendMessage = async () => {
         break;
       }
       
-      // 检查总大小限制
-      if (totalSize + file.size > maxTotalSize) {
+      try {
+        const compressedDataUrl = await compressImageToDataUrl(file, 1 * 1024 * 1024, 1600);
+        
+        const compressedSize = Math.floor(((compressedDataUrl.split(',')[1] || '').length * 3) / 4);
+        
+        if (totalSize + compressedSize > maxTotalSize) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              role: 'assistant',
+              content: `❌ 总文件大小不能超过 50MB`,
+            },
+          ]);
+          break;
+        }
+        
+        totalSize += compressedSize;
+        newImages.push(compressedDataUrl);
+      } catch (error) {
+        console.error('[ImageUpload] 压缩失败:', error);
         setMessages((prev) => [
           ...prev,
           {
             id: Date.now().toString(),
             role: 'assistant',
-            content: `❌ 总文件大小不能超过 50MB`,
+            content: `❌ 图片处理失败，请尝试上传更小的图片`,
           },
         ]);
-        break;
       }
-      
-      totalSize += file.size;
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const imageDataUrl = event.target?.result as string;
-        setUserImages((prev) => [...prev, imageDataUrl]);
-      };
-      reader.readAsDataURL(file);
+    }
+
+    if (newImages.length > 0) {
+      setUserImages((prev) => [...prev, ...newImages]);
     }
 
     if (fileInputRef.current) {
