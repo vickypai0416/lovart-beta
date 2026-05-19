@@ -76,7 +76,6 @@ export default function ImageGeneratorWorkflow() {
     setIsGenerating(true);
     const startTime = Date.now();
 
-    // 确保 analytics 初始化完成
     if (!isInitialized) {
       console.log('[Generate] Waiting for analytics initialization...');
       await new Promise((resolve) => {
@@ -102,7 +101,7 @@ export default function ImageGeneratorWorkflow() {
     console.log('[Generate] Tracked generation:', generationId);
 
     const maxRetries = 2;
-    const timeoutMs = 300000; // 300秒超时（图片生成可能需要较长时间）
+    const timeoutMs = 300000;
 
     for (let retry = 0; retry <= maxRetries; retry++) {
       try {
@@ -144,9 +143,35 @@ export default function ImageGeneratorWorkflow() {
         clearTimeout(timeoutId);
         console.log(`[Generate] Response received, status: ${response.status}`);
 
-        const result = await response.json();
+        const rawText = await response.text();
+        let result: any = null;
 
-        if (result.success) {
+        try {
+          result = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          if (retry < maxRetries) {
+            console.log(`[Generate] 第 ${retry + 1} 次响应非 JSON，正在重试...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+          const safeText = (rawText || '').trim();
+          const errorMessage = safeText
+            ? `生成失败: ${safeText.slice(0, 220)}`
+            : `生成失败: 请求返回非 JSON (${response.status})`;
+          throw new Error(errorMessage);
+        }
+
+        if (!response.ok) {
+          if (retry < maxRetries) {
+            console.log(`[Generate] 第 ${retry + 1} 次请求失败，正在重试...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+          const message = result?.error || result?.message || `请求失败 (${response.status})`;
+          throw new Error(message);
+        }
+
+        if (result?.success) {
           const urls = result.urls || (result.url ? [result.url] : []);
           if (urls.length > 0) {
             for (const url of urls) {
@@ -181,12 +206,12 @@ export default function ImageGeneratorWorkflow() {
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
-          const errorMsg = '生成失败: ' + (result.error || '未知错误');
+          const errorMsg = '生成失败: ' + (result?.error || result?.message || '未知错误');
           alert(errorMsg);
           if (generationId) {
             await updateGeneration(generationId, {
               status: 'failed',
-              error: result.error || '未知错误',
+              error: result?.error || result?.message || '未知错误',
               duration: Date.now() - startTime,
             });
           }

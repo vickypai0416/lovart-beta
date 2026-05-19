@@ -54,5 +54,31 @@
     "updatedAt": "2026-05-18T02:05:02.368Z",
     "imageUrl": "https://oss.filenest.top/uploads/2b3f985b-f8e0-4e2a-83aa-e2898a0efc58.png",
     "duration": 30937
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "prompt": "将这张亚马逊商品白底主图增加高级感，让买家更有购买意图，但依然是白底图",
+    "size": "1024x1024",
+    "quality": "high",
+    "model": "gpt-image-2-all",
+    "count": 1,
+    "status": "success",
+    "id": "1779097430559-ijzh233q8",
+    "createdAt": "2026-05-18T09:43:50.559Z",
+    "imageUrl": "https://oss.filenest.top/uploads/8d794539-193c-473c-a5a7-57c96931effa.png",
+    "duration": 45384
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "prompt": "将帽子颜色换成红色",
+    "size": "1024x1024",
+    "quality": "high",
+    "model": "gpt-image-2-all",
+    "count": 1,
+    "status": "success",
+    "id": "1779098377241-t5qo7hutl",
+    "createdAt": "2026-05-18T09:59:37.241Z",
+    "imageUrl": "https://oss.filenest.top/uploads/cedf3ad2-6fae-424b-81f0-431b827b1801.png",
+    "duration": 48599
   }
 ]

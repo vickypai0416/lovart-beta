@@ -47,5 +47,14 @@
     "imageCount": 0,
     "id": "1778839001234-gg96gnt1g",
     "createdAt": "2026-05-15T09:56:41.234Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "生成第5张图",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1779153959375-0326og7py",
+    "createdAt": "2026-05-19T01:25:59.375Z"
   }
 ]

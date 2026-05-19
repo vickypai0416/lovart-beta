@@ -156,6 +156,9 @@ export default function Home() {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
   const { trackGeneration, updateGeneration, trackMessage, isInitialized } = useAnalytics();
+  useEffect(() => {
+  userImagesRef.current = userImages;
+}, [userImages]);
   const generationIdRef = useRef<string | null>(null);
   const requestStartTimeRef = useRef<number>(0);
 
@@ -805,11 +808,9 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
     }
   };
 
-  const sendMessage = async () => {
-    if ((!input.trim() && userImages.length === 0) || isLoading) return;
-
+const sendMessage = async () => {
+    const currentImages = [...userImages];
     const effectiveContent = input.trim();
-    const currentImages = [...userImagesRef.current];
     
     // 添加详细的日志输出
     console.log('[SendMessage] Starting sendMessage');
