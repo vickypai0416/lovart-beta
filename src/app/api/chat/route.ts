@@ -6,6 +6,7 @@ import {
 import { getPersonaById } from '@/lib/persona';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
@@ -32,7 +33,6 @@ export async function POST(request: NextRequest) {
 
     const personaConfig = getPersonaById(persona);
 
-    // 从消息中提取参考图片（优先使用最新消息中的图片，如果请求中有则使用请求中的）
     let extractedReferenceImages: string[] = referenceImages.length > 0 ? referenceImages : [];
     if (extractedReferenceImages.length === 0 && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
@@ -42,11 +42,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 获取模型配置，默认使用 GPT-5 nano
     const modelId: ImageModel = selectedModel || 'gpt-5-nano';
     const modelConfig = getModelConfig(modelId);
     
-    // 记录实际使用的模型
     console.log(`[API] 使用模型: ${modelId} (${modelConfig.name})`);
     console.log(`[API] 模型类型: ${modelConfig.type}, 模型名: ${modelConfig.modelName}`);
     console.log(`[API] available: ${modelConfig.available}, apiKey: ${modelConfig.apiKey ? modelConfig.apiKey.substring(0, 10) + '...' : '未配置'}`);
@@ -57,7 +55,6 @@ export async function POST(request: NextRequest) {
       console.log(`[API] 不包含参考图片`);
     }
 
-    // 验证模型是否可用
     if (!modelConfig.available) {
       return new Response(
         JSON.stringify({ 
@@ -67,7 +64,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 创建流式响应
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -86,9 +82,7 @@ export async function POST(request: NextRequest) {
           
           console.log(`[API] 用户提示词: ${userPrompt.substring(0, 100)}`);
           
-          // 判断模型类型
           if (modelConfig.type === 'text') {
-            // 文本模型（GPT-5 nano）- 直接处理对话
             console.log(`[API] 使用 ${modelConfig.name} 处理用户消息`);
             console.log(`[API] 使用人设: ${personaConfig.name}`);
             await generateWithYunwuAPIStream(
@@ -96,11 +90,10 @@ export async function POST(request: NextRequest) {
               messages, 
               controller, 
               encoder,
-              autoGenerate, // 传递自动生成参数
-              personaConfig.systemPrompt // 传递人设系统提示词
+              autoGenerate,
+              personaConfig.systemPrompt
             );
           } else {
-            // 图片生成模型 - 直接生成图片
             console.log(`[API] 使用 ${modelConfig.name} 生成图片`);
             await generateImageDirectly(modelId, userPrompt, extractedReferenceImages, controller, encoder, n, size, quality);
           }
@@ -113,13 +106,11 @@ export async function POST(request: NextRequest) {
               )
             );
           } catch {
-            // 控制器已关闭
           }
         } finally {
           try {
             controller.close();
           } catch {
-            // 控制器已关闭
           }
         }
       },
@@ -147,7 +138,6 @@ async function checkImageUrlAccessibility(url: string, maxRetries: number = 3, d
       const response = await fetch(url, { method: 'HEAD' });
       if (response.ok) return true;
     } catch {
-      // 忽略错误，继续重试
     }
     if (i < maxRetries - 1) {
       console.log(`[Image Check] 图片 URL 不可访问，等待 ${delayMs}ms 后重试 ${i + 1}/${maxRetries}`);
@@ -184,9 +174,6 @@ async function generateWithRetry(
   return [];
 }
 
-/**
- * 直接生成图片
- */
 async function generateImageDirectly(
   modelId: ImageModel,
   prompt: string,
@@ -303,9 +290,6 @@ async function generateImageDirectly(
   controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
 }
 
-/**
- * 使用 DALL-E 3 生成图片
- */
 async function generateWithDALL3(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
   const modelConfig = getModelConfig('openai-dalle');
   
@@ -345,9 +329,6 @@ async function generateWithDALL3(prompt: string, referenceImages: string[] = [],
   return [];
 }
 
-/**
- * 增强商品图提示词
- */
 function enhanceProductPrompt(basePrompt: string, hasReferenceImage: boolean, modelId: ImageModel): string {
   if (!basePrompt || basePrompt.trim() === '') {
     if (hasReferenceImage) {
@@ -378,9 +359,6 @@ function enhanceProductPrompt(basePrompt: string, hasReferenceImage: boolean, mo
   return `${basePrompt}, professional product photography, studio lighting, sharp focus, high resolution, commercial product photo, detailed product showcase`;
 }
 
-/**
- * 使用 Yunwu API 生成图片（支持 GPT-4o Image）
- */
 async function generateWithYunwuAPI(
   modelId: 'gpt-4o-image', 
   prompt: string, 
@@ -439,11 +417,9 @@ async function generateWithYunwuAPI(
 
   const data = await response.json();
   
-  // 检查响应中是否包含图片 URL
   if (data.choices && data.choices.length > 0) {
     const message = data.choices[0].message;
     
-    // 方式1：图片 URL 在 content 中
     if (message?.content && typeof message.content === 'string') {
       const urlMatch = message.content.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/i);
       if (urlMatch) {
@@ -455,18 +431,15 @@ async function generateWithYunwuAPI(
       }
     }
     
-    // 方式2：图片 URL 在特定字段中
     if (message?.image_url) {
       return message.image_url;
     }
     
-    // 方式3：检查是否有 data 数组
     if (data.data && data.data.length > 0 && data.data[0].url) {
       return data.data[0].url;
     }
   }
   
-  // 如果没有图片，返回文本内容
   console.log(`${modelConfig.name} response:`, JSON.stringify(data, null, 2));
   
   if (data.choices && data.choices.length > 0) {
@@ -479,18 +452,13 @@ async function generateWithYunwuAPI(
   throw new Error('未能从响应中获取有效内容');
 }
 
-/**
- * 流式生成文本（真正的流式效果）
- * 用于 GPT-5 nano 等文本模型
- * 支持 ChatGPT 识图 API 规范
- */
 async function generateWithYunwuAPIStream(
   modelId: ImageModel,
   messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
-  autoGenerate?: boolean, // 是否自动生成图片
-  customSystemPrompt?: string // 自定义系统提示词（人设）
+  autoGenerate?: boolean,
+  customSystemPrompt?: string
 ): Promise<void> {
   const modelConfig = getModelConfig(modelId);
 
@@ -520,15 +488,12 @@ async function generateWithYunwuAPIStream(
   const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/chat/completions';
   const modelName = modelConfig.modelName || 'gpt-5.4-nano';
 
-  // 检查消息中是否包含图片
   const hasImage = messages.some(m => 
     Array.isArray(m.content) && m.content.some(c => c.type === 'image_url' && c.image_url?.url)
   );
 
-  // 使用自定义人设提示词，否则使用默认逻辑
   let systemPrompt = customSystemPrompt || 'You are a helpful assistant. 请始终使用中文回复用户。';
   
-  // 如果启用自动生成图片且有图片，覆盖为人设+亚马逊提示词专家模式
   if (autoGenerate && hasImage) {
     systemPrompt = `你是一个专业的亚马逊商品图提示词专家。
 
@@ -537,644 +502,235 @@ async function generateWithYunwuAPIStream(
 - 图片生成提示词也使用中文
 
 当用户提供产品图片和需求时，请按以下步骤操作：
+1. 仔细分析产品特征（材质、颜色、形状、用途等）
+2. 理解用户的场景需求
+3. 生成专业的亚马逊商品图提示词
+4. 提示词要包含：构图、光线、背景、风格、质量要求
+5. 确保提示词适合电商平台展示
 
-1. **产品分析**（用中文）：
-   - 识别产品类型、材质、颜色、设计亮点
-   - 分析适合的拍摄角度和光线
-   - 理解用户的具体生成需求
-
-2. **生成提示词**（用中文，放在标记内）：
-   在回复末尾，必须用以下格式输出中文提示词：
-   [GENERATE_IMAGE]
-   专业产品摄影，白色背景，柔和光线...
-   [/GENERATE_IMAGE]
-
-【示例回复】
-根据您的产品图片，我分析如下：
-
-**产品特点**：
-- 材质：黑色真皮，带棕色边缘细节
-- 配件：银色方形金属扣
-- 风格：专业、优雅、商务
-
-**建议拍摄方案**：
-- 角度：45度角展示金属扣细节
-- 光线：柔和的影棚三点布光
-- 背景：纯白背景，符合亚马逊主图标准
-
-以下是为您生成的中文提示词：
-
-[GENERATE_IMAGE]
-专业亚马逊产品摄影，黑色真皮皮带配棕色边缘细节和方形银色金属扣，纯白色背景（#FFFFFF），影棚灯光，45度角度，清晰对焦，高分辨率4K，产品占画面85%，干净专业氛围。
-[/GENERATE_IMAGE]
-
-这个提示词将用于生成您的商品图。`;
+请直接输出优化后的提示词，不需要额外解释。`;
   }
-  
-  // 构建请求体（符合 ChatGPT 识图 API 规范）
-  const requestBody: Record<string, unknown> = {
-    model: modelName,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        'Authorization': `Bearer ${modelConfig.apiKey}`,
       },
-      ...messages.map(m => ({
-        role: m.role,
-        content: Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }]
-      }))
-    ],
-    stream: true,
-  };
+      body: JSON.stringify({
+        model: modelName,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          ...messages,
+        ],
+        stream: true,
+        temperature: 0.7,
+      }),
+    });
 
-  // 发送流式请求
-  console.log(`[API] 正在请求 Yunwu API: ${endpoint}`);
-  console.log(`[API] 模型: ${modelName}, API Key: ${modelConfig.apiKey?.substring(0, 10)}...`);
-  
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${modelConfig.apiKey}`,
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  console.log(`[API] 收到响应: ${response.status} ${response.ok}`);
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    controller.enqueue(
-      encoder.encode(
-        `data: ${JSON.stringify({
-          type: 'error',
-          message: errorData.error?.message || `API 错误: ${response.status}`,
-        })}\n\n`
-      )
-    );
-    return;
-  }
-
-  // 处理流式响应
-  const reader = response.body?.getReader();
-  if (!reader) {
-    controller.enqueue(
-      encoder.encode(
-        `data: ${JSON.stringify({
-          type: 'error',
-          message: '无法读取响应流',
-        })}\n\n`
-      )
-    );
-    return;
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let fullContent = '';
-  let reasoningContent = '';
-
-  console.log('[API] 开始读取流...');
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      console.log('[API] 流读取完成');
-      break;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API 请求失败: ${response.status} - ${errorText}`);
     }
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('无法读取响应流');
+    }
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6);
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim() || !line.startsWith('data: ')) continue;
+
+        const data = line.slice(6).trim();
         if (data === '[DONE]') {
-          try {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: 'text',
-                  content: fullContent,
-                  reasoning: reasoningContent || undefined,
-                  done: true,
-                })}\n\n`
-              )
-            );
-          } catch {
-            // 控制器已关闭，忽略错误
-          }
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
           return;
         }
 
         try {
           const parsed = JSON.parse(data);
-          const delta = parsed.choices?.[0]?.delta;
-          
-          // 处理思考内容（reasoning_content）
-          const reasoningDelta = delta?.reasoning_content;
-          if (reasoningDelta) {
-            reasoningContent += reasoningDelta;
-            try {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: 'reasoning',
-                    content: reasoningContent,
-                    delta: reasoningDelta,
-                    done: false,
-                  })}\n\n`
-                )
-              );
-            } catch {
-              // 控制器已关闭
-            }
-          }
-          
-          // 处理最终内容（content）
-          const contentDelta = delta?.content;
-          if (contentDelta) {
-            fullContent += contentDelta;
-            try {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: 'text',
-                    content: fullContent,
-                    delta: contentDelta,
-                    reasoning: reasoningContent || undefined,
-                    done: false,
-                  })}\n\n`
-                )
-              );
-            } catch {
-              // 控制器已关闭
-            }
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    }
-  }
-
-  // 确保发送最终内容
-  try {
-    if (fullContent || reasoningContent) {
-      controller.enqueue(
-        encoder.encode(
-          `data: ${JSON.stringify({
-            type: 'text',
-            content: fullContent,
-            reasoning: reasoningContent || undefined,
-            done: true,
-          })}\n\n`
-        )
-      );
-    }
-
-    // 检测是否需要自动生成图片
-    console.log(`[API] 检查自动生成条件: autoGenerate=${autoGenerate}, referenceImages=${extractedReferenceImages.length}, fullContent长度=${fullContent.length}`);
-    
-    if (autoGenerate && extractedReferenceImages.length > 0 && fullContent) {
-      // 检测提示词标记 [GENERATE_IMAGE]...[/GENERATE_IMAGE]
-      const promptMatch = fullContent.match(/\[GENERATE_IMAGE\]([\s\S]*?)\[\/GENERATE_IMAGE\]/);
-      
-      console.log(`[API] 正则匹配结果: ${promptMatch ? '找到提示词标记' : '未找到提示词标记'}`);
-      if (!promptMatch && fullContent.includes('GENERATE_IMAGE')) {
-        console.log(`[API] 内容中包含 GENERATE_IMAGE 但正则未匹配，内容片段: ${fullContent.substring(0, 200)}`);
-      }
-      
-      if (promptMatch) {
-        const imagePrompt = promptMatch[1].trim();
-        console.log(`[API] 检测到自动生成指令，提示词: ${imagePrompt.substring(0, 100)}...`);
-        
-        // 发送生成中状态
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              type: 'generating',
-              message: '正在自动生成图片...',
-            })}\n\n`
-          )
-        );
-        
-        try {
-          const imageUrls = await generateWithGPTImage2Edit(imagePrompt, extractedReferenceImages, 1, '1024x1024', 'high');
-          
-          if (imageUrls && imageUrls.length > 0) {
-            for (let i = 0; i < imageUrls.length; i++) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: 'image',
-                    url: imageUrls[i],
-                    product: '自动生成',
-                    scene: 'listing',
-                    index: i,
-                    total: imageUrls.length,
-                  })}\n\n`
-                )
-              );
-            }
-          } else {
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullContent += delta;
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({
-                  type: 'error',
-                  message: '自动生成图片失败',
+                  type: 'text',
+                  content: fullContent,
+                  done: false,
                 })}\n\n`
               )
             );
           }
-        } catch (genError) {
-          console.error('[API] 自动生成图片失败:', genError);
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: 'error',
-                message: `自动生成失败: ${genError instanceof Error ? genError.message : '未知错误'}`,
-              })}\n\n`
-            )
-          );
+        } catch (e) {
+          console.error('解析 SSE 数据失败:', e);
         }
       }
     }
 
+    controller.enqueue(
+      encoder.encode(
+        `data: ${JSON.stringify({
+          type: 'text',
+          content: fullContent,
+          done: true,
+        })}\n\n`
+      )
+    );
     controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-  } catch {
-    // 控制器已关闭，忽略
+  } catch (error) {
+    console.error('流式生成失败:', error);
+    controller.enqueue(
+      encoder.encode(
+        `data: ${JSON.stringify({
+          type: 'error',
+          message: error instanceof Error ? error.message : '生成失败',
+        })}\n\n`
+      )
+    );
+    controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
   }
 }
 
-/**
- * 使用 GPT-4o Image 生成图片
- */
 async function generateWithGPT4oImage(prompt: string, referenceImages: string[] = [], size: string = '1024x1024'): Promise<string | null> {
   return generateWithYunwuAPI('gpt-4o-image', prompt, referenceImages, size);
 }
 
-/**
- * 使用 GPT Image 2 生成图片 (Chat Completions API 格式)
- * 支持：美化图片、添加文字、调整尺寸等
- */
 async function generateWithGPTImage2(prompt: string, referenceImages: string[] = [], size: string = '1024x1024'): Promise<string | null> {
-  const modelConfig = getModelConfig('gpt-image-2');
-  
+  const results = await generateWithGPTImage2Edit(prompt, referenceImages, 1, size, 'high');
+  return results[0] || null;
+}
+
+async function generateWithGPTImage2Gen(prompt: string, n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
+  const modelConfig = getModelConfig('gpt-image-2-gen');
   if (!modelConfig.apiKey) {
-    throw new Error('GPT Image 2 API Key 未配置');
+    throw new Error('GPT Image 2 Gen API Key 未配置');
   }
 
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/chat/completions';
-  const modelName = modelConfig.modelName || 'gpt-image-2';
-
-  let content: Array<{ type: string; text?: string; image_url?: { url: string } }>;
-  
-  if (referenceImages.length > 0) {
-    content = [
-      { type: 'text', text: prompt },
-      ...referenceImages.map(img => ({ type: 'image_url' as const, image_url: { url: img } }))
-    ];
-  } else {
-    content = [
-      { type: 'text', text: prompt }
-    ];
-  }
-
-  const response = await fetch(endpoint, {
+  const response = await fetch('https://yunwu.ai/v1/images/generations', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
       'Authorization': `Bearer ${modelConfig.apiKey}`,
+      'Accept': 'application/json',
     },
     body: JSON.stringify({
-      model: modelName,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant.'
-        },
-        {
-          role: 'user',
-          content: content
-        }
-      ],
-      size: size,
+      model: modelConfig.modelName || 'gpt-image-2-all',
+      prompt,
+      n: Math.min(n, 4),
+      size,
+      quality,
     }),
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `API 错误: ${response.status}`);
+    const text = await response.text();
+    throw new Error(`GPT Image 2 Gen API 错误: ${response.status} - ${text.substring(0, 200)}`);
   }
 
   const data = await response.json();
-  console.log(`[GPT Image 2] response:`, JSON.stringify(data, null, 2));
-  
-  // 检查响应中是否包含图片 URL
-  if (data.choices && data.choices.length > 0) {
-    const message = data.choices[0].message;
-    
-    // 方式1：图片 URL 在 content 中
-    if (message?.content && typeof message.content === 'string') {
-      const urlMatch = message.content.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/i);
-      if (urlMatch) {
-        return urlMatch[0];
-      }
-      
-      // 如果 content 本身就是 URL
-      if (message.content.startsWith('http')) {
-        return message.content;
-      }
-    }
-    
-    // 方式2：图片 URL 在特定字段中
-    if (message?.image_url) {
-      return message.image_url;
-    }
-    
-    // 方式3：检查是否有 data 数组
-    if (data.data && data.data.length > 0 && data.data[0].url) {
-      return data.data[0].url;
-    }
-    
-    // 如果没有图片，返回文本内容
-    if (message?.content && typeof message.content === 'string') {
-      return `TEXT_RESPONSE:${message.content}`;
+  const urls: string[] = [];
+  if (Array.isArray(data?.data)) {
+    for (const item of data.data) {
+      if (item?.url) urls.push(item.url);
+      if (item?.b64_json) urls.push(item.b64_json.startsWith('data:') ? item.b64_json : `data:image/png;base64,${item.b64_json}`);
     }
   }
-  
-  throw new Error('未能从响应中获取有效内容');
+  if (urls.length === 0 && data?.url) urls.push(data.url);
+  return urls;
 }
 
-/**
- * 使用 GPT Image 2 生成图片 (Images Generations API 格式)
- * 支持：纯文本生图，多种尺寸和画质
- */
-async function generateWithGPTImage2Gen(prompt: string, n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
-  const modelConfig = getModelConfig('gpt-image-2-gen');
-  
-  if (!modelConfig.apiKey) {
-    throw new Error('GPT Image 2 (生成) API Key 未配置');
-  }
-
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/generations';
-  const modelName = modelConfig.modelName || 'gpt-image-2';
-
-  const requestBody = {
-    model: modelName,
-    prompt: prompt,
-    n: n,
-    size: size,
-    quality: quality,
-    format: 'png',
-  };
-
-  console.log(`[GPT Image 2 Gen] 请求: ${endpoint}, n: ${n}, size: ${size}, quality: ${quality}`);
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${modelConfig.apiKey}`,
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    console.error(`[GPT Image 2 Gen] 错误:`, errorData);
-    throw new Error(errorData.error?.message || `API 错误: ${response.status}`);
-  }
-
-  const data = await response.json();
-  console.log(`[GPT Image 2 Gen] data.data 长度: ${data.data?.length}, data.choices 长度: ${data.choices?.length}`);
-  
-  if (data.choices && data.choices.length > 0) {
-    const urls: string[] = [];
-    for (const choice of data.choices) {
-      if (choice.message?.content) {
-        const content = choice.message.content;
-        const urlMatch = content.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/i);
-        if (urlMatch) { urls.push(urlMatch[0]); continue; }
-        if (content.startsWith('http')) { urls.push(content); continue; }
-      }
-    }
-    if (urls.length > 0) return urls;
-  }
-  
-  if (data.data && data.data.length > 0) {
-    return data.data.map((item: { url?: string; b64_json?: string }) => {
-      if (item.b64_json) return `data:image/png;base64,${item.b64_json}`;
-      return item.url;
-    }).filter(Boolean) as string[];
-  }
-  
-  throw new Error('未能从响应中获取图片 URL');
-}
-
-/**
- * 使用 GPT Image 2 编辑图片 (Images Edits API 格式 - multipart/form-data)
- * 支持：图片编辑、美化、合并、修改
- */
-async function generateSingleImageWithGPTImage2EditFormData(formData: FormData, modelConfig: ReturnType<typeof getModelConfig>): Promise<string> {
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/edits';
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${modelConfig.apiKey}`,
-      'Accept': 'application/json',
-    },
-    body: formData,
-  });
-
-  console.log(`[GPT Image 2 Edit] HTTP状态码: ${response.status}`);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[GPT Image 2 Edit] 错误: ${response.status}`, errorText.substring(0, 500));
-    throw new Error(`API 错误: ${response.status} - ${errorText.substring(0, 200)}`);
-  }
-
-  const responseText = await response.text();
-  console.log(`[GPT Image 2 Edit] 响应: ${responseText.substring(0, 500)}`);
-
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    console.error(`[GPT Image 2 Edit] 响应不是有效 JSON`);
-    throw new Error('API 返回格式错误');
-  }
-
-  if (data.data && data.data.length > 0) {
-    const item = data.data[0];
-    if (item.b64_json) return `data:image/png;base64,${item.b64_json}`;
-    if (item.url) return item.url;
-  }
-
-  if (data.choices && data.choices.length > 0) {
-    const choice = data.choices[0];
-    if (choice.message?.content) {
-      const content = choice.message.content;
-      const urlMatch = content.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/i);
-      if (urlMatch) return urlMatch[0];
-      if (content.startsWith('http')) return content;
-      if (content.startsWith('data:image')) return content;
-    }
-  }
-
-  if (data.url) {
-    return data.url;
-  }
-
-  throw new Error('未能从响应中获取图片 URL');
-}
-
-async function generateSingleImageWithGPTImage2Edit(prompt: string, imageBlob: Blob, modelConfig: ReturnType<typeof getModelConfig>, size: string = '1024x1024'): Promise<string> {
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/edits';
-  const modelName = modelConfig.modelName || 'gpt-image-2-all';
-
-  const formData = new FormData();
-  formData.append('image', imageBlob, 'product.png');
-  formData.append('prompt', prompt);
-  formData.append('model', modelName);
-  formData.append('n', '1');
-  formData.append('size', size);
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${modelConfig.apiKey}`,
-      'Accept': 'application/json',
-    },
-    body: formData,
-  });
-
-  console.log(`[GPT Image 2 Edit] HTTP状态码: ${response.status}`);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[GPT Image 2 Edit] 错误: ${response.status}`, errorText.substring(0, 500));
-    throw new Error(`API 错误: ${response.status} - ${errorText.substring(0, 200)}`);
-  }
-
-  const responseText = await response.text();
-  console.log(`[GPT Image 2 Edit] 响应: ${responseText.substring(0, 500)}`);
-
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    console.error(`[GPT Image 2 Edit] 响应不是有效 JSON`);
-    throw new Error('API 返回格式错误');
-  }
-
-  if (data.data && data.data.length > 0) {
-    const item = data.data[0];
-    if (item.b64_json) return `data:image/png;base64,${item.b64_json}`;
-    if (item.url) return item.url;
-  }
-
-  if (data.choices && data.choices.length > 0) {
-    const choice = data.choices[0];
-    if (choice.message?.content) {
-      const content = choice.message.content;
-      const urlMatch = content.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/i);
-      if (urlMatch) return urlMatch[0];
-      if (content.startsWith('http')) return content;
-      if (content.startsWith('data:image')) return content;
-    }
-  }
-
-  if (data.url) {
-    return data.url;
-  }
-
-  throw new Error('未能从响应中获取图片 URL');
-}
-
-export async function generateWithGPTImage2Edit(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
+async function generateWithGPTImage2Edit(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
   const modelConfig = getModelConfig('gpt-image-2-edit');
-  
   if (!modelConfig.apiKey) {
-    throw new Error('GPT Image 2 (编辑) API Key 未配置');
+    throw new Error('GPT Image 2 Edit API Key 未配置');
   }
 
   if (referenceImages.length === 0) {
-    throw new Error('图片编辑需要提供参考图片');
+    return generateWithGPTImage2Gen(prompt, n, size, quality);
   }
 
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/edits';
-  const modelName = modelConfig.modelName || 'gpt-image-2-all';
-
-  console.log(`[GPT Image 2 Edit] 请求: ${endpoint}`);
-  console.log(`[GPT Image 2 Edit] prompt: ${prompt}`);
-  console.log(`[GPT Image 2 Edit] model: ${modelName}`);
-  console.log(`[GPT Image 2 Edit] n: ${n}, size: ${size}, quality: ${quality}`);
-  console.log(`[GPT Image 2 Edit] 参考图片数量: ${referenceImages.length}`);
-
-  const imageBlobs: Blob[] = [];
-  for (const referenceImage of referenceImages) {
-    let imageBlob: Blob;
-    if (referenceImage.startsWith('data:')) {
-      const base64Data = referenceImage.split(',')[1];
-      const mimeType = referenceImage.split(';')[0].split(':')[1] || 'image/png';
+  const formData = new FormData();
+  for (let i = 0; i < referenceImages.length; i++) {
+    const img = referenceImages[i];
+    let blob: Blob;
+    if (img.startsWith('data:')) {
+      const base64Data = img.split(',')[1];
+      const mimeType = img.split(';')[0].split(':')[1];
       const byteCharacters = atob(base64Data);
       const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      for (let j = 0; j < byteCharacters.length; j++) {
+        byteNumbers[j] = byteCharacters.charCodeAt(j);
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      imageBlob = new Blob([byteArray], { type: mimeType });
-    } else if (referenceImage.startsWith('http')) {
-      const imageResponse = await fetch(referenceImage);
-      imageBlob = await imageResponse.blob();
+      blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
     } else {
-      const byteCharacters = atob(referenceImage);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      imageBlob = new Blob([byteArray], { type: 'image/png' });
+      const imageResponse = await fetch(img);
+      blob = await imageResponse.blob();
     }
-    imageBlobs.push(imageBlob);
-    console.log(`[GPT Image 2 Edit] 图片 ${imageBlobs.length} 大小: ${imageBlob.size} bytes`);
+    formData.append('image', blob, `product_${i + 1}.png`);
   }
 
-  const results: string[] = [];
-  
-  for (let i = 0; i < n; i++) {
-    console.log(`[GPT Image 2 Edit] 正在生成第 ${i + 1}/${n} 张图片`);
-    try {
-      const formData = new FormData();
-      imageBlobs.forEach((blob, idx) => {
-        formData.append('image', blob, `product_${idx + 1}.png`);
-      });
-      formData.append('prompt', prompt);
-      formData.append('model', modelName);
-      formData.append('n', '1');
-      formData.append('size', size);
-      formData.append('quality', quality);
+  formData.append('prompt', prompt);
+  formData.append('model', modelConfig.modelName || 'gpt-image-2-all');
+  formData.append('n', String(Math.min(n, 4)));
+  formData.append('size', size);
+  formData.append('quality', quality);
 
-      const url = await generateSingleImageWithGPTImage2EditFormData(formData, modelConfig);
-      results.push(url);
-    } catch (error) {
-      console.error(`[GPT Image 2 Edit] 生成第 ${i + 1} 张图片失败:`, error);
-      if (i === n - 1) {
-        throw error;
-      }
-    }
-    if (i < n - 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+  const response = await fetch(modelConfig.endpoint || 'https://yunwu.ai/v1/images/edits', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${modelConfig.apiKey}`,
+      'Accept': 'application/json',
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GPT Image 2 Edit API 错误: ${response.status} - ${text.substring(0, 200)}`);
   }
 
-  console.log(`[GPT Image 2 Edit] 成功生成 ${results.length} 张图片`);
-  return results;
+  const data = await response.json();
+  const urls: string[] = [];
+
+  if (Array.isArray(data?.data)) {
+    for (const item of data.data) {
+      if (item?.url) urls.push(item.url);
+      if (item?.b64_json) urls.push(item.b64_json.startsWith('data:') ? item.b64_json : `data:image/png;base64,${item.b64_json}`);
+    }
+  }
+  if (urls.length === 0 && data?.url) urls.push(data.url);
+  if (urls.length === 0 && typeof data === 'string') {
+    const match = data.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/i);
+    if (match) urls.push(match[0]);
+  }
+
+  return urls;
 }
+
+export { 
+  generateWithGPTImage2Edit, 
+  generateWithGPTImage2Gen, 
+  generateWithGPTImage2, 
+  generateWithGPT4oImage,
+  generateWithYunwuAPIStream,
+  generateImageDirectly,
+  enhanceProductPrompt
+};

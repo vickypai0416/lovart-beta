@@ -13,6 +13,49 @@ import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearIm
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
+const compressImageToDataUrl = async (
+    file: File,
+    maxBytes = 1 * 1024 * 1024,
+    maxDimension = 1600
+  ): Promise<string> => {
+    const bitmap = await createImageBitmap(file);
+    let { width, height } = bitmap;
+
+    const scale = Math.min(1, maxDimension / Math.max(width, height));
+    width = Math.max(1, Math.round(width * scale));
+    height = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('无法创建画布');
+
+    ctx.drawImage(bitmap, 0, 0, width, height);
+
+    const tryEncode = (quality: number) =>
+      canvas.toDataURL('image/jpeg', quality);
+
+    let q = 0.9;
+    let dataUrl = tryEncode(q);
+
+    const getBytes = (url: string) => {
+      const base64 = url.split(',')[1] || '';
+      return Math.floor((base64.length * 3) / 4);
+    };
+
+    while (getBytes(dataUrl) > maxBytes && q > 0.4) {
+      q -= 0.1;
+      dataUrl = tryEncode(q);
+    }
+
+    if (getBytes(dataUrl) > maxBytes) {
+      throw new Error('图片压缩后仍过大');
+    }
+
+    return dataUrl;
+  };
+
 export default function ImageGeneratorWorkflow() {
   const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
   const [prompt, setPrompt] = useState('');
@@ -575,7 +618,7 @@ export default function ImageGeneratorWorkflow() {
               accept="image/*"
               multiple
               className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const files = e.target.files;
                 if (!files || files.length === 0) return;
                 
@@ -590,29 +633,35 @@ export default function ImageGeneratorWorkflow() {
                   return acc;
                 }, 0);
                 
-                const newImages: string[] = [];
+                const processedImages: string[] = [];
                 
                 for (let i = 0; i < files.length; i++) {
                   const file = files[i];
                   
-                  if (referenceImages.length + newImages.length >= maxImages) {
+                  if (referenceImages.length + processedImages.length >= maxImages) {
                     alert(`最多上传 ${maxImages} 张图片`);
                     break;
                   }
                   
-                  if (totalSize + file.size > maxTotalSize) {
-                    alert('总文件大小不能超过 50MB');
-                    break;
+                  try {
+                    const compressedDataUrl = await compressImageToDataUrl(file);
+                    const compressedSize = Math.floor((compressedDataUrl.split(',')[1].length * 3) / 4);
+                    
+                    if (totalSize + compressedSize > maxTotalSize) {
+                      alert('总文件大小不能超过 50MB');
+                      break;
+                    }
+                    
+                    totalSize += compressedSize;
+                    processedImages.push(compressedDataUrl);
+                  } catch (error) {
+                    console.error('图片压缩失败:', error);
+                    alert(`图片压缩失败: ${error instanceof Error ? error.message : '未知错误'}`);
                   }
-                  
-                  totalSize += file.size;
-                  
-                  const reader = new FileReader();
-                  reader.onload = (event) => {
-                    const imageDataUrl = event.target?.result as string;
-                    setReferenceImages((prev) => [...prev, imageDataUrl]);
-                  };
-                  reader.readAsDataURL(file);
+                }
+                
+                if (processedImages.length > 0) {
+                  setReferenceImages((prev) => [...prev, ...processedImages]);
                 }
                 
                 e.target.value = '';

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
 import { getModelConfig } from '@/lib/image-models';
 
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
 function containsChinese(text: string): boolean {
   return /[\u4e00-\u9fff]/.test(text);
 }
@@ -391,7 +394,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 默认使用 GPT Image 2 All 文生图模式
     console.log('[Generate API] 使用 GPT Image 2 All 文生图模式（默认）');
     console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
     
