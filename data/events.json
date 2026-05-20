@@ -2879,5 +2879,25 @@
       "referrer": ""
     },
     "createdAt": "2026-05-20T03:46:44.447Z"
+  },
+  {
+    "id": "1779249056751-36q4k4pk3",
+    "sessionId": "1779243342776-yprk3u7vw",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-20T03:50:56.751Z"
+  },
+  {
+    "id": "1779249090379-yezg6gwv6",
+    "sessionId": "1779243342776-yprk3u7vw",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-20T03:51:30.379Z"
   }
 ]

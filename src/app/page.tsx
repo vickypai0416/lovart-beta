@@ -445,16 +445,36 @@ const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
     if (match) {
       const planContent = match[1].trim();
       const titleMatch = planContent.match(/^([^\n]+)/);
+      const titleTextMatch = planContent.match(/标题文案[：:]([^\n]+)/);
+      const subTitleMatch = planContent.match(/副标题[：:]([^\n]+)/);
       const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
       
       const title = titleMatch ? titleMatch[1].trim() : `图${i}`;
+      const titleText = titleTextMatch ? titleTextMatch[1].trim() : '';
+      const subTitle = subTitleMatch ? subTitleMatch[1].trim() : '';
+      
       let prompt = compositionMatch ? compositionMatch[1].trim().replace(/\n/g, ' ') : '';
       
-      if (!prompt) {
-        prompt = `专业亚马逊产品摄影，${title}，cinematic commercial photography风格`;
-      } else {
-        prompt = `专业亚马逊产品摄影，${title}，${prompt}，cinematic commercial photography风格`;
+      let textOverlay = '';
+      if (titleText) {
+        textOverlay = `text overlay "${titleText}"`;
+        if (subTitle) {
+          textOverlay += `, subtitle "${subTitle}"`;
+        }
+        textOverlay += ', professional typography, clean font, centered text, readable text overlay on product image';
       }
+      
+      if (!prompt) {
+        prompt = `专业亚马逊产品摄影，${title}`;
+      } else {
+        prompt = `专业亚马逊产品摄影，${title}，${prompt}`;
+      }
+      
+      if (textOverlay) {
+        prompt = `${prompt}，${textOverlay}`;
+      }
+      
+      prompt += '，cinematic commercial photography风格';
       
       plans.push({
         index: i,
@@ -499,24 +519,53 @@ const isSelectiveGenerationRequest = (content: string): { match: boolean; indice
 const parseAmazonPlan = (content: string): GeneratedImagePlan[] => {
   const plans: GeneratedImagePlan[] = [];
   const normalized = content.replace(/[-–—]/g, '-');
-  const imagePattern = /Image (\d+) - ([^\n]+)\n用途[：:]([^\n]+)\n构图[：:]\n((?:- [^\n]+\n?)+)(?:风格[：:]([^\n]+))?/g;
   
-  let match;
-  while ((match = imagePattern.exec(normalized)) !== null) {
-    const index = parseInt(match[1]);
-    const title = match[2].trim();
-    const purpose = match[3].trim();
-    const composition = match[4].trim();
-    const style = match[5]?.trim() || '';
-    
-    const prompt = `Professional product photography for Amazon listing, ${title}, ${purpose}, ${composition.replace(/\n-/g, ', ')}, ${style}, cinematic lighting, premium quality, high-end commercial photography`;
-    
-    plans.push({
-      index,
-      title,
-      prompt,
-      status: 'pending' as const,
-    });
+  for (let i = 1; i <= 9; i++) {
+    const regex = new RegExp(`Image ${i} - ([\\s\\S]*?)(?=Image ${i + 1} -|$)`);
+    const match = normalized.match(regex);
+    if (match) {
+      const planContent = match[1].trim();
+      const titleMatch = planContent.match(/^([^\n]+)/);
+      const titleTextMatch = planContent.match(/标题文案[：:]([^\n]+)/);
+      const subTitleMatch = planContent.match(/副标题[：:]([^\n]+)/);
+      const purposeMatch = planContent.match(/用途[：:]([^\n]+)/);
+      const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
+      const styleMatch = planContent.match(/风格[：:]([^\n]+)/);
+      
+      const title = titleMatch ? titleMatch[1].trim() : `图${i}`;
+      const titleText = titleTextMatch ? titleTextMatch[1].trim() : '';
+      const subTitle = subTitleMatch ? subTitleMatch[1].trim() : '';
+      const purpose = purposeMatch ? purposeMatch[1].trim() : '';
+      const composition = compositionMatch ? compositionMatch[1].trim().replace(/\n/g, ', ') : '';
+      const style = styleMatch ? styleMatch[1].trim() : '';
+      
+      let promptParts: string[] = [];
+      promptParts.push(`Professional product photography for Amazon listing`);
+      promptParts.push(title);
+      if (purpose) promptParts.push(purpose);
+      if (composition) promptParts.push(composition);
+      if (style) promptParts.push(style);
+      
+      if (titleText) {
+        let textOverlay = `text overlay "${titleText}"`;
+        if (subTitle) {
+          textOverlay += `, subtitle "${subTitle}"`;
+        }
+        textOverlay += ', professional typography, clean font, centered text, readable text overlay on product image';
+        promptParts.push(textOverlay);
+      }
+      
+      promptParts.push('cinematic lighting, premium quality, high-end commercial photography');
+      
+      const prompt = promptParts.join(', ');
+      
+      plans.push({
+        index,
+        title,
+        prompt,
+        status: 'pending' as const,
+      });
+    }
   }
   
   return plans;
