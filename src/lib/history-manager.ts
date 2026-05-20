@@ -1,4 +1,5 @@
-import { idbPut, idbGetAll, idbDelete, idbClear, STORES, saveImageBlobFromUrl, getImageUrl, idbDeleteImageBlob } from './idb-storage';
+import { saveImageBlobFromUrl, getImageUrl, idbDeleteImageBlob } from './idb-storage';
+import { ImageHistory } from './storage-keys';
 
 export interface ImageHistoryItem {
   id: string;
@@ -20,7 +21,6 @@ export interface GenerationSession {
   createdAt: number;
 }
 
-const STORAGE_KEY = 'ecommerce_image_history';
 const MAX_SESSIONS = 20;
 const MAX_IMAGES_PER_SESSION = 12;
 
@@ -65,7 +65,7 @@ export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'ti
     history.sessions = history.sessions.slice(0, MAX_SESSIONS);
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
 
   if (item.url && !item.url.startsWith('data:')) {
     saveImageBlobFromUrl(newItem.id, item.url).catch((e) => {
@@ -77,7 +77,7 @@ export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'ti
 }
 
 export function getHistory(): { sessions: GenerationSession[] } {
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = localStorage.getItem(ImageHistory.ECOMMERCE);
   if (!stored) {
     return { sessions: [] };
   }
@@ -115,7 +115,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
     }
   }
   history.sessions = history.sessions.filter(s => s.id !== sessionId);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
 }
 
 export async function deleteImage(imageId: string): Promise<void> {
@@ -126,7 +126,7 @@ export async function deleteImage(imageId: string): Promise<void> {
   });
   
   history.sessions = history.sessions.filter(s => s.images.length > 0);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
   await idbDeleteImageBlob(imageId).catch(() => {});
 }
 
@@ -137,15 +137,13 @@ export async function clearHistory(): Promise<void> {
       await idbDeleteImageBlob(img.id).catch(() => {});
     }
   }
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(ImageHistory.ECOMMERCE);
 }
 
 export function getSessionById(sessionId: string): GenerationSession | undefined {
   const history = getHistory();
   return history.sessions.find(s => s.id === sessionId);
 }
-
-// ==================== 对话助手图片历史记录 ====================
 
 export interface ChatImageHistoryItem {
   id: string;
@@ -154,14 +152,38 @@ export interface ChatImageHistoryItem {
   timestamp: number;
 }
 
-const CHAT_STORAGE_KEY = 'chat_image_history';
 const CHAT_MAX_IMAGES = 50;
+
+function toStorageSafeUrl(url: string): string {
+  if (url.startsWith('data:')) {
+    return '';
+  }
+  return url;
+}
+
+function safeSetChatHistory(history: ChatImageHistoryItem[]): void {
+  try {
+    localStorage.setItem(ImageHistory.CHAT, JSON.stringify(history));
+    return;
+  } catch {}
+
+  const trimmed = [...history];
+  while (trimmed.length > 0) {
+    trimmed.pop();
+    try {
+      localStorage.setItem(ImageHistory.CHAT, JSON.stringify(trimmed));
+      return;
+    } catch {}
+  }
+
+  localStorage.removeItem(ImageHistory.CHAT);
+}
 
 export async function saveChatImageToHistory(url: string, prompt: string): Promise<ChatImageHistoryItem> {
   const history = getChatHistory();
   const newItem: ChatImageHistoryItem = {
     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    url,
+    url: toStorageSafeUrl(url),
     prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
     timestamp: Date.now(),
   };
@@ -176,7 +198,7 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
     history.length = CHAT_MAX_IMAGES;
   }
 
-  localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history));
+  safeSetChatHistory(history);
 
   if (url && !url.startsWith('data:')) {
     saveImageBlobFromUrl(newItem.id, url).catch((e) => {
@@ -188,7 +210,7 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
 }
 
 export function getChatHistory(): ChatImageHistoryItem[] {
-  const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+  const stored = localStorage.getItem(ImageHistory.CHAT);
   if (!stored) {
     return [];
   }
@@ -210,7 +232,7 @@ export async function getChatHistoryWithUrls(): Promise<ChatImageHistoryItem[]> 
 export async function deleteChatImage(imageId: string): Promise<void> {
   const history = getChatHistory();
   const filtered = history.filter(img => img.id !== imageId);
-  localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(filtered));
+  safeSetChatHistory(filtered);
   await idbDeleteImageBlob(imageId).catch(() => {});
 }
 
@@ -219,10 +241,8 @@ export async function clearChatHistory(): Promise<void> {
   for (const img of history) {
     await idbDeleteImageBlob(img.id).catch(() => {});
   }
-  localStorage.removeItem(CHAT_STORAGE_KEY);
+  localStorage.removeItem(ImageHistory.CHAT);
 }
-
-// ==================== 聊天消息持久化 ====================
 
 export interface PersistedMessage {
   id: string;
@@ -244,8 +264,43 @@ export interface PersistedMessage {
   timestamp: number;
 }
 
-const CHAT_MESSAGES_KEY = 'chat_messages_history';
 const MAX_PERSISTED_MESSAGES = 100;
+
+function stripLargeDataUrls(messages: PersistedMessage[]): PersistedMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    userImages: m.userImages?.map((img) => (img.startsWith('data:') ? '' : img)).filter(Boolean),
+    imageUrls: m.imageUrls?.map((img) => (img.startsWith('data:') ? '' : img)).filter(Boolean),
+    planImages: m.planImages?.map((p) => ({
+      ...p,
+      imageUrl: p.imageUrl && p.imageUrl.startsWith('data:') ? undefined : p.imageUrl,
+    })),
+  }));
+}
+
+function safeSetChatMessages(messages: PersistedMessage[]): void {
+  try {
+    localStorage.setItem(ImageHistory.MESSAGES, JSON.stringify(messages));
+    return;
+  } catch {}
+
+  const sanitized = stripLargeDataUrls(messages);
+  try {
+    localStorage.setItem(ImageHistory.MESSAGES, JSON.stringify(sanitized));
+    return;
+  } catch {}
+
+  const trimmed = [...sanitized];
+  while (trimmed.length > 0) {
+    trimmed.pop();
+    try {
+      localStorage.setItem(ImageHistory.MESSAGES, JSON.stringify(trimmed));
+      return;
+    } catch {}
+  }
+
+  localStorage.removeItem(ImageHistory.MESSAGES);
+}
 
 export async function saveChatMessages(messages: Omit<PersistedMessage, 'timestamp'>[]): Promise<void> {
   const persistedMessages: PersistedMessage[] = messages
@@ -259,29 +314,12 @@ export async function saveChatMessages(messages: Omit<PersistedMessage, 'timesta
     persistedMessages.length = MAX_PERSISTED_MESSAGES;
   }
 
-  try {
-    localStorage.setItem(CHAT_MESSAGES_KEY, JSON.stringify(persistedMessages));
-  } catch (e) {
-    console.warn('[ChatMessages] 保存聊天记录失败:', e);
-    try {
-      const oldData = localStorage.getItem(CHAT_MESSAGES_KEY);
-      if (oldData) {
-        const oldMessages: PersistedMessage[] = JSON.parse(oldData);
-        const merged = [...persistedMessages, ...oldMessages];
-        const uniqueMap = new Map<string, PersistedMessage>();
-        merged.forEach(m => uniqueMap.set(m.id, m));
-        const uniqueMessages = Array.from(uniqueMap.values()).slice(0, MAX_PERSISTED_MESSAGES);
-        localStorage.setItem(CHAT_MESSAGES_KEY, JSON.stringify(uniqueMessages));
-      }
-    } catch {
-      console.warn('[ChatMessages] 合并聊天记录也失败');
-    }
-  }
+  safeSetChatMessages(persistedMessages);
 }
 
 export function getChatMessages(): PersistedMessage[] {
   try {
-    const stored = localStorage.getItem(CHAT_MESSAGES_KEY);
+    const stored = localStorage.getItem(ImageHistory.MESSAGES);
     if (!stored) {
       return [];
     }
@@ -291,87 +329,10 @@ export function getChatMessages(): PersistedMessage[] {
   }
 }
 
-export function clearChatMessages(): void {
-  localStorage.removeItem(CHAT_MESSAGES_KEY);
-}
-
-// ==================== 图片生成器历史记录 ====================
-
-export interface ImgGenHistoryItem {
-  id: string;
-  url: string;
-  prompt: string;
-  size: string;
-  model: string;
-  timestamp: number;
-}
-
-const IMGGEN_STORAGE_KEY = 'imggen_image_history';
-const IMGGEN_MAX_IMAGES = 50;
-
-export async function saveImgGenHistory(url: string, prompt: string, size: string, model: string): Promise<ImgGenHistoryItem> {
-  const history = getImgGenHistory();
-  const newItem: ImgGenHistoryItem = {
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    url,
-    prompt: prompt.substring(0, 200) + (prompt.length > 200 ? '...' : ''),
-    size,
-    model,
-    timestamp: Date.now(),
-  };
-
-  history.unshift(newItem);
-
-  if (history.length > IMGGEN_MAX_IMAGES) {
-    const removed = history.slice(IMGGEN_MAX_IMAGES);
-    for (const img of removed) {
-      idbDeleteImageBlob(img.id).catch(() => {});
-    }
-    history.length = IMGGEN_MAX_IMAGES;
-  }
-
-  localStorage.setItem(IMGGEN_STORAGE_KEY, JSON.stringify(history));
-
-  if (url && !url.startsWith('data:')) {
-    saveImageBlobFromUrl(newItem.id, url).catch((e) => {
-      console.warn('[ImgGenHistory] 保存图片 Blob 失败:', e);
-    });
-  }
-
-  return newItem;
-}
-
-export function getImgGenHistory(): ImgGenHistoryItem[] {
-  const stored = localStorage.getItem(IMGGEN_STORAGE_KEY);
-  if (!stored) {
-    return [];
-  }
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return [];
-  }
-}
-
-export async function getImgGenHistoryWithUrls(): Promise<ImgGenHistoryItem[]> {
-  const history = getImgGenHistory();
-  return Promise.all(history.map(async (img) => {
-    const url = await getImageUrl(img.id, img.url);
-    return { ...img, url };
-  }));
-}
-
-export async function deleteImgGenImage(imageId: string): Promise<void> {
-  const history = getImgGenHistory();
-  const filtered = history.filter(img => img.id !== imageId);
-  localStorage.setItem(IMGGEN_STORAGE_KEY, JSON.stringify(filtered));
-  await idbDeleteImageBlob(imageId).catch(() => {});
-}
-
-export async function clearImgGenHistory(): Promise<void> {
-  const history = getImgGenHistory();
-  for (const img of history) {
-    await idbDeleteImageBlob(img.id).catch(() => {});
-  }
-  localStorage.removeItem(IMGGEN_STORAGE_KEY);
-}
+export {
+  saveImageToHistory as saveImgGenHistory,
+  getRecentImages as getImgGenHistoryWithUrls,
+  deleteImage as deleteImgGenImage,
+  clearHistory as clearImgGenHistory,
+  ImageHistoryItem as ImgGenHistoryItem,
+};

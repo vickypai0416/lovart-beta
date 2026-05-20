@@ -1,6 +1,7 @@
 import { PromptGenerationResult, VariantOption } from './prompt-generator';
 import { ProductAnalysis } from './product-analyzer';
 import { SceneType } from './visual-strategy';
+import { Amazon } from '../storage-keys';
 
 export interface HistoryEntry {
   id: string;
@@ -19,7 +20,6 @@ export interface HistoryState {
   currentIndex: number | null;
 }
 
-const STORAGE_KEY = 'amazon_prompt_history';
 const MAX_ENTRIES = 50;
 
 export class HistoryManager {
@@ -33,7 +33,7 @@ export class HistoryManager {
   private loadFromStorage(): void {
     try {
       if (typeof window === 'undefined') return;
-      const data = localStorage.getItem(STORAGE_KEY);
+      const data = localStorage.getItem(Amazon.PROMPT_HISTORY);
       if (data) {
         const parsed: HistoryState = JSON.parse(data);
         this.entries = parsed.entries || [];
@@ -52,7 +52,7 @@ export class HistoryManager {
         entries: this.entries,
         currentIndex: this.currentIndex,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(Amazon.PROMPT_HISTORY, JSON.stringify(state));
     } catch (error) {
       console.warn('保存历史记录失败:', error);
     }

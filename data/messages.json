@@ -56,5 +56,77 @@
     "imageCount": 0,
     "id": "1779153959375-0326og7py",
     "createdAt": "2026-05-19T01:25:59.375Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "完整的亚马逊定制商品视觉方案和6图设计",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779155785548-6dnps63s4",
+    "createdAt": "2026-05-19T01:56:25.549Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "这把折叠刀的用途主要还是野营",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1779161146432-ypwykqvq4",
+    "createdAt": "2026-05-19T03:25:46.432Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "这是一个野营用的定制折叠刀",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779161584621-op6tr7aif",
+    "createdAt": "2026-05-19T03:33:04.621Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "这是一个野营用的定制折叠刀",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779162033689-grd63k9iw",
+    "createdAt": "2026-05-19T03:40:33.689Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "用于父亲节",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779169496236-jxhmnftdh",
+    "createdAt": "2026-05-19T05:44:56.236Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "用于父亲节",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779169620375-s5e5ddny6",
+    "createdAt": "2026-05-19T05:47:00.375Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "用于父亲节",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779171440786-igqts7ekj",
+    "createdAt": "2026-05-19T06:17:20.786Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "用于父亲节",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779171488082-noflyfl66",
+    "createdAt": "2026-05-19T06:18:08.082Z"
   }
 ]

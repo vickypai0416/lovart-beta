@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useCallback, useState } from 'react';
+import { Analytics } from '@/lib/storage-keys';
 
 // 获取或创建会话ID（仅在客户端调用）
 function getSessionIdClient(): string {
-  let sessionId = localStorage.getItem('analytics_session_id');
+  let sessionId = localStorage.getItem(Analytics.SESSION_ID);
   if (!sessionId) {
     sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem('analytics_session_id', sessionId);
+    localStorage.setItem(Analytics.SESSION_ID, sessionId);
     console.log('[Analytics] Created new session:', sessionId);
   }
   console.log('[Analytics] Got sessionId:', sessionId);
@@ -86,7 +87,7 @@ export function useAnalytics() {
       console.log('[Analytics] trackMessage: sessionId not available, waiting...');
       await new Promise((resolve) => {
         const interval = setInterval(() => {
-          const id = localStorage.getItem('analytics_session_id');
+          const id = localStorage.getItem(Analytics.SESSION_ID);
           if (id) {
             console.log('[Analytics] trackMessage: got sessionId from localStorage:', id);
             clearInterval(interval);
@@ -146,7 +147,7 @@ export function useAnalytics() {
       console.log('[Analytics] trackGeneration: sessionId not available, waiting...');
       await new Promise((resolve) => {
         const interval = setInterval(() => {
-          const id = localStorage.getItem('analytics_session_id');
+          const id = localStorage.getItem(Analytics.SESSION_ID);
           if (id) {
             console.log('[Analytics] trackGeneration: got sessionId from localStorage:', id);
             clearInterval(interval);

@@ -1,4 +1,6 @@
 
+import { ChatSession } from './storage-keys';
+
 export interface Session {
   id: string;
   title: string;
@@ -24,9 +26,6 @@ export interface UserPreferences {
   persona: string;
 }
 
-const SESSIONS_KEY = 'chat_sessions';
-const PREFERENCES_KEY = 'chat_preferences';
-
 const MAX_SESSIONS = 10;
 const MAX_MESSAGES_PER_SESSION = 50;
 const MAX_LOCALSTORAGE_SIZE = 4 * 1024 * 1024; // 4MB
@@ -44,7 +43,7 @@ export function createSession(title: string = '新会话'): Session {
 
 export function getSessions(): Session[] {
   try {
-    const data = localStorage.getItem(SESSIONS_KEY);
+    const data = localStorage.getItem(ChatSession.SESSIONS);
     return data ? JSON.parse(data) : [];
   } catch {
     return [];
@@ -77,7 +76,7 @@ function cleanupOldSessions(): void {
     messages: session.messages.slice(-MAX_MESSAGES_PER_SESSION)
   }));
   
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  localStorage.setItem(ChatSession.SESSIONS, JSON.stringify(sessions));
 }
 
 function trySaveToStorage(key: string, value: string): boolean {
@@ -109,7 +108,7 @@ export function saveSession(session: Session): void {
   
   const data = JSON.stringify(sessions);
   
-  if (!trySaveToStorage(SESSIONS_KEY, data)) {
+  if (!trySaveToStorage(ChatSession.SESSIONS, data)) {
     console.warn('Failed to save session: localStorage quota exceeded');
   }
 }
@@ -117,11 +116,11 @@ export function saveSession(session: Session): void {
 export function deleteSession(sessionId: string): void {
   const sessions = getSessions();
   const filtered = sessions.filter(s => s.id !== sessionId);
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(filtered));
+  localStorage.setItem(ChatSession.SESSIONS, JSON.stringify(filtered));
 }
 
 export function clearAllSessions(): void {
-  localStorage.removeItem(SESSIONS_KEY);
+  localStorage.removeItem(ChatSession.SESSIONS);
 }
 
 export function getDefaultPreferences(): UserPreferences {
@@ -136,7 +135,7 @@ export function getDefaultPreferences(): UserPreferences {
 
 export function getPreferences(): UserPreferences {
   try {
-    const data = localStorage.getItem(PREFERENCES_KEY);
+    const data = localStorage.getItem(ChatSession.PREFERENCES);
     return data ? { ...getDefaultPreferences(), ...JSON.parse(data) } : getDefaultPreferences();
   } catch {
     return getDefaultPreferences();
@@ -146,5 +145,5 @@ export function getPreferences(): UserPreferences {
 export function savePreferences(preferences: Partial<UserPreferences>): void {
   const current = getPreferences();
   const updated = { ...current, ...preferences };
-  localStorage.setItem(PREFERENCES_KEY, JSON.stringify(updated));
+  localStorage.setItem(ChatSession.PREFERENCES, JSON.stringify(updated));
 }

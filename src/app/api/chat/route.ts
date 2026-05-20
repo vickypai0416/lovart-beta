@@ -42,7 +42,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const modelId: ImageModel = selectedModel || 'gpt-5-nano';
+    const requestedModelId: ImageModel = selectedModel || 'gpt-5-nano';
+    const imageModelIds: ImageModel[] = ['gpt-image-2', 'gpt-image-2-gen', 'gpt-image-2-edit', 'gpt-image-2-all', 'gpt-4o-image', 'openai-dalle'];
+    const forceTextForAmazonExpert = persona === 'amazon-expert' && imageModelIds.includes(requestedModelId);
+    const modelId: ImageModel = forceTextForAmazonExpert ? 'gpt-5.4' : requestedModelId;
     const modelConfig = getModelConfig(modelId);
     
     console.log(`[API] 使用模型: ${modelId} (${modelConfig.name})`);

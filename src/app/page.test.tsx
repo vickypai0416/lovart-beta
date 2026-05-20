@@ -33,6 +33,7 @@ const isSelectiveGenerationRequest = (content: string): { match: boolean; indice
 const isAmazonVisualPlan = (content: string): boolean => {
   const normalized = content.replace(/[-–—]/g, '-');
   return normalized.includes('6图亚马逊视觉方案') || 
+         normalized.includes('9图亚马逊视觉方案') || 
          normalized.includes('Image 1 -') ||
          normalized.includes('亚马逊定制商品视觉方案');
 };

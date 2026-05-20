@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { Workflow } from '@/lib/storage-keys';
 import {
   Upload,
   Image as ImageIcon,
@@ -70,11 +71,9 @@ export default function PromptAnalyzerWorkflow() {
   const productDragCounterRef = useRef(0);
   const [isProductDragging, setIsProductDragging] = useState(false);
 
-  const STORAGE_KEY = 'prompt_analyzer_workflow_state';
-
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(Workflow.PROMPT_ANALYZER_STATE);
       if (saved) {
         const state = JSON.parse(saved);
         if (state.timestamp && Date.now() - state.timestamp < 24 * 60 * 60 * 1000) {
@@ -108,14 +107,14 @@ export default function PromptAnalyzerWorkflow() {
         selectedStyle,
         selectedSizes,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(Workflow.PROMPT_ANALYZER_STATE, JSON.stringify(state));
     } catch (e) {
       console.warn('Failed to save state:', e);
     }
   }, [uploadedImage, analysisResult, productName, refinedPrompt, productImage, selectedStyle, selectedSizes]);
 
   const clearSavedState = useCallback(() => {
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(Workflow.PROMPT_ANALYZER_STATE); } catch {}
   }, []);
 
   const compressImage = useCallback((base64: string, maxWidth: number = 1024): Promise<string> => {

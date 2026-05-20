@@ -439,7 +439,7 @@ const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
   const plans: GeneratedImagePlan[] = [];
   const normalized = content.replace(/[-–—]/g, '-');
   
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 1; i <= 9; i++) {
     const regex = new RegExp(`Image ${i} - ([\\s\\S]*?)(?=Image ${i + 1} -|$)`);
     const match = normalized.match(regex);
     if (match) {
@@ -573,24 +573,28 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
   if (messageIndex === -1) return;
   
   const message = messages[messageIndex];
-  if (!message.planImages || message.planImages.length === 0) return;
+  let planImages = message.planImages;
+  if (!planImages || planImages.length === 0) {
+    planImages = parseAmazonVisualPlan(message.content);
+  }
+  if (!planImages || planImages.length === 0) return;
   
   if (isMounted.current) {
     setMessages(prev => prev.map(m => {
       if (m.id !== messageId) return m;
       return {
         ...m,
-        planImages: m.planImages?.map(img => ({ ...img, status: 'pending' as const })),
+        planImages: planImages?.map(img => ({ ...img, status: 'pending' as const })),
       };
     }));
   }
   
   const planAbortController = new AbortController();
   
-  for (let i = 0; i < message.planImages.length; i++) {
+  for (let i = 0; i < planImages.length; i++) {
     if (!isMounted.current) break;
     
-    const plan = message.planImages[i];
+    const plan = planImages[i];
     
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
@@ -693,6 +697,117 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     }
     
     await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+};
+
+const generateSingleImage = async (messageId: string, planIndex: number, referenceImage: string) => {
+  const messageIndex = messages.findIndex(m => m.id === messageId);
+  if (messageIndex === -1) return;
+  
+  const message = messages[messageIndex];
+  let planImages = message.planImages;
+  if (!planImages || planImages.length === 0) {
+    planImages = parseAmazonVisualPlan(message.content);
+  }
+  if (!planImages || planImages.length === 0 || planIndex < 0 || planIndex >= planImages.length) return;
+  
+  const plan = planImages[planIndex];
+  
+  if (isMounted.current) {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId) return m;
+      const currentPlans = m.planImages || planImages;
+      return {
+        ...m,
+        planImages: currentPlans.map((img, idx) => 
+          idx === planIndex ? { ...img, status: 'generating' as const } : img
+        ),
+      };
+    }));
+  }
+  
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: plan.prompt }],
+        referenceImages: [referenceImage],
+        model: 'gpt-image-2-edit',
+        size: selectedSize,
+        quality: selectedQuality,
+        n: 1,
+      }),
+    });
+    
+    if (!isMounted.current) return;
+    if (!response.ok) throw new Error('生成失败');
+    
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('无法读取响应');
+    
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+    let generatedUrl: string | null = null;
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split('\n');
+      sseBuffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        
+        try {
+          let jsonString = line;
+          if (jsonString.startsWith('data: ')) {
+            jsonString = jsonString.slice(6);
+          }
+          
+          const data = JSON.parse(jsonString);
+          if (data.type === 'image' && data.url) {
+            generatedUrl = data.url;
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+    }
+    
+    if (!isMounted.current) return;
+    
+    if (generatedUrl) {
+      await handleSaveChatImage(generatedUrl, plan.prompt, messageId);
+    }
+    
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          planImages: m.planImages?.map((img, idx) => 
+            idx === planIndex ? { ...img, status: generatedUrl ? 'completed' as const : 'failed' as const, imageUrl: generatedUrl } : img
+          ),
+          imageUrls: generatedUrl ? [...(m.imageUrls || []), generatedUrl] : m.imageUrls,
+        };
+      }));
+    }
+  } catch (error) {
+    console.error(`[Single Image Generation] Failed:`, error);
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          planImages: m.planImages?.map((img, idx) => 
+            idx === planIndex ? { ...img, status: 'failed' as const } : img
+          ),
+        };
+      }));
+    }
   }
 };
 
@@ -809,8 +924,8 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
   };
 
 const sendMessage = async () => {
-    const currentImages = [...userImages];
     const effectiveContent = input.trim();
+    const currentImages = [...userImagesRef.current];
     
     // 添加详细的日志输出
     console.log('[SendMessage] Starting sendMessage');
@@ -1289,57 +1404,15 @@ const sendMessage = async () => {
     }
   };
 
-  const compressImageToDataUrl = async (
-    file: File,
-    maxBytes = 1 * 1024 * 1024,
-    maxDimension = 1600
-  ): Promise<string> => {
-    const bitmap = await createImageBitmap(file);
-    let { width, height } = bitmap;
-
-    const scale = Math.min(1, maxDimension / Math.max(width, height));
-    width = Math.max(1, Math.round(width * scale));
-    height = Math.max(1, Math.round(height * scale));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('无法创建画布');
-
-    ctx.drawImage(bitmap, 0, 0, width, height);
-
-    const tryEncode = (quality: number) =>
-      canvas.toDataURL('image/jpeg', quality);
-
-    let q = 0.9;
-    let dataUrl = tryEncode(q);
-
-    const getBytes = (url: string) => {
-      const b64 = url.split(',')[1] || '';
-      return Math.floor((b64.length * 3) / 4);
-    };
-
-    while (getBytes(dataUrl) > maxBytes && q > 0.4) {
-      q -= 0.1;
-      dataUrl = tryEncode(q);
-    }
-
-    if (getBytes(dataUrl) > maxBytes) {
-      throw new Error('图片压缩后仍过大');
-    }
-
-    return dataUrl;
-  };
-
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const maxImages = 16;
-    const maxTotalSize = 50 * 1024 * 1024;
+    const maxTotalSize = 50 * 1024 * 1024; // 50MB
     
     let totalSize = userImages.reduce((acc, img) => {
+      // 估算 Base64 大小：原始大小 * 1.33
       if (img.startsWith('data:')) {
         const base64Data = img.split(',')[1];
         return acc + Math.floor((base64Data.length * 3) / 4);
@@ -1352,6 +1425,7 @@ const sendMessage = async () => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       
+      // 检查数量限制
       if (userImages.length + newImages.length >= maxImages) {
         setMessages((prev) => [
           ...prev,
@@ -1364,40 +1438,27 @@ const sendMessage = async () => {
         break;
       }
       
-      try {
-        const compressedDataUrl = await compressImageToDataUrl(file, 1 * 1024 * 1024, 1600);
-        
-        const compressedSize = Math.floor(((compressedDataUrl.split(',')[1] || '').length * 3) / 4);
-        
-        if (totalSize + compressedSize > maxTotalSize) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: `❌ 总文件大小不能超过 50MB`,
-            },
-          ]);
-          break;
-        }
-        
-        totalSize += compressedSize;
-        newImages.push(compressedDataUrl);
-      } catch (error) {
-        console.error('[ImageUpload] 压缩失败:', error);
+      // 检查总大小限制
+      if (totalSize + file.size > maxTotalSize) {
         setMessages((prev) => [
           ...prev,
           {
             id: Date.now().toString(),
             role: 'assistant',
-            content: `❌ 图片处理失败，请尝试上传更小的图片`,
+            content: `❌ 总文件大小不能超过 50MB`,
           },
         ]);
+        break;
       }
-    }
-
-    if (newImages.length > 0) {
-      setUserImages((prev) => [...prev, ...newImages]);
+      
+      totalSize += file.size;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const imageDataUrl = event.target?.result as string;
+        setUserImages((prev) => [...prev, imageDataUrl]);
+      };
+      reader.readAsDataURL(file);
     }
 
     if (fileInputRef.current) {
@@ -1752,6 +1813,7 @@ const sendMessage = async () => {
               messages={messages}
               onCopyContent={copyToClipboard}
               onGenerateFromPlan={generateImagesFromPlan}
+              onGenerateSingleImage={generateSingleImage}
               scrollRef={scrollRef as React.RefObject<HTMLDivElement | null>}
               onScroll={handleScroll}
             />

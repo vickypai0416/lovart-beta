@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { Workflow } from '@/lib/storage-keys';
 import { Button } from '@/components/ui/button';
 import { saveImageToHistory, getRecentImages, deleteImage, clearHistory, ImageHistoryItem } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
@@ -81,15 +82,11 @@ interface HistoryEntry {
   hasImages: boolean;
 }
 
-const STORAGE_KEY = 'workflow_logs';
-const IMAGES_STORAGE_KEY = 'generated_images';
-const HISTORY_STORAGE_KEY = 'ecommerce_workflow_history';
-
 const saveLog = (log: WorkflowLog) => {
   try {
-    const logs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const logs = JSON.parse(localStorage.getItem(Workflow.ECOMMERCE_LOGS) || '[]');
     logs.unshift(log);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(0, 100)));
+    localStorage.setItem(Workflow.ECOMMERCE_LOGS, JSON.stringify(logs.slice(0, 100)));
   } catch (error) {
     console.warn('保存日志失败:', error);
   }
@@ -97,7 +94,7 @@ const saveLog = (log: WorkflowLog) => {
 
 const saveGeneratedImages = (images: Array<{ index: number; type: string; url: string }>) => {
   try {
-    localStorage.setItem(IMAGES_STORAGE_KEY, JSON.stringify(images));
+    localStorage.setItem(Workflow.ECOMMERCE_IMAGES, JSON.stringify(images));
   } catch (error) {
     console.warn('保存图片失败:', error);
   }
@@ -105,7 +102,7 @@ const saveGeneratedImages = (images: Array<{ index: number; type: string; url: s
 
 const loadGeneratedImages = (): Array<{ index: number; type: string; url: string }> => {
   try {
-    const data = localStorage.getItem(IMAGES_STORAGE_KEY);
+    const data = localStorage.getItem(Workflow.ECOMMERCE_IMAGES);
     return data ? JSON.parse(data) : [];
   } catch (error) {
     console.warn('加载图片失败:', error);
@@ -115,9 +112,9 @@ const loadGeneratedImages = (): Array<{ index: number; type: string; url: string
 
 const saveHistoryEntry = (entry: Omit<HistoryEntry, 'id'>) => {
   try {
-    const history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || '[]');
+    const history = JSON.parse(localStorage.getItem(Workflow.ECOMMERCE_HISTORY) || '[]');
     history.unshift({ ...entry, id: Date.now().toString() });
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, 20)));
+    localStorage.setItem(Workflow.ECOMMERCE_HISTORY, JSON.stringify(history.slice(0, 20)));
   } catch (error) {
     console.warn('保存历史失败:', error);
   }
@@ -125,7 +122,7 @@ const saveHistoryEntry = (entry: Omit<HistoryEntry, 'id'>) => {
 
 const loadHistory = (): HistoryEntry[] => {
   try {
-    const data = localStorage.getItem(HISTORY_STORAGE_KEY);
+    const data = localStorage.getItem(Workflow.ECOMMERCE_HISTORY);
     return data ? JSON.parse(data) : [];
   } catch (error) {
     console.warn('加载历史失败:', error);

@@ -1,4 +1,6 @@
 
+import { UserMemory } from './storage-keys';
+
 export interface MemoryEntry {
   id: string;
   type: 'preference' | 'product' | 'scene' | 'summary' | 'context';
@@ -22,13 +24,9 @@ export interface MessageReference {
   content: string;
 }
 
-const MEMORY_KEY = 'chat_memory';
-const PREFERENCES_KEY = 'user_preferences';
-const SUMMARY_KEY = 'conversation_summary';
-
 export function getMemory(): MemoryEntry[] {
   try {
-    const data = localStorage.getItem(MEMORY_KEY);
+    const data = localStorage.getItem(UserMemory.MEMORY);
     return data ? JSON.parse(data) : [];
   } catch {
     return [];
@@ -74,9 +72,9 @@ export function deleteMemory(type: MemoryEntry['type'], key: string): void {
 
 export function clearMemory(): void {
   try {
-    localStorage.removeItem(MEMORY_KEY);
-    localStorage.removeItem(PREFERENCES_KEY);
-    localStorage.removeItem(SUMMARY_KEY);
+    localStorage.removeItem(UserMemory.MEMORY);
+    localStorage.removeItem(UserMemory.PREFERENCES);
+    localStorage.removeItem(UserMemory.SUMMARY);
   } catch (e) {
     console.error('[Memory] Failed to clear:', e);
   }
@@ -94,7 +92,7 @@ export interface UserPreferences {
 
 export function getPreferences(): UserPreferences {
   try {
-    const data = localStorage.getItem(PREFERENCES_KEY);
+    const data = localStorage.getItem(UserMemory.PREFERENCES);
     if (data) {
       return JSON.parse(data);
     }
@@ -114,7 +112,7 @@ export function getPreferences(): UserPreferences {
 
 export function savePreferences(preferences: UserPreferences): void {
   try {
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+    localStorage.setItem(UserMemory.PREFERENCES, JSON.stringify(preferences));
   } catch (e) {
     console.error('[Preferences] Failed to save:', e);
   }
@@ -128,7 +126,7 @@ export function updatePreferences(updates: Partial<UserPreferences>): void {
 
 export function getConversationSummary(): ConversationSummary | null {
   try {
-    const data = localStorage.getItem(SUMMARY_KEY);
+    const data = localStorage.getItem(UserMemory.SUMMARY);
     return data ? JSON.parse(data) : null;
   } catch (e) {
     console.error('[Summary] Failed to load:', e);
@@ -138,7 +136,7 @@ export function getConversationSummary(): ConversationSummary | null {
 
 export function saveConversationSummary(summary: ConversationSummary): void {
   try {
-    localStorage.setItem(SUMMARY_KEY, JSON.stringify(summary));
+    localStorage.setItem(UserMemory.SUMMARY, JSON.stringify(summary));
   } catch (e) {
     console.error('[Summary] Failed to save:', e);
   }
@@ -146,7 +144,7 @@ export function saveConversationSummary(summary: ConversationSummary): void {
 
 export function clearConversationSummary(): void {
   try {
-    localStorage.removeItem(SUMMARY_KEY);
+    localStorage.removeItem(UserMemory.SUMMARY);
   } catch (e) {
     console.error('[Summary] Failed to clear:', e);
   }
