@@ -51,6 +51,14 @@ export interface Message {
   createdAt: Date;
 }
 
+export interface PromptTemplate {
+  id: string;
+  content: string;
+  author?: string;
+  likes: number;
+  createdAt: Date;
+}
+
 interface StorageAdapter {
   createSession(userId?: string): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
@@ -68,6 +76,10 @@ interface StorageAdapter {
   createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message>;
   getMessagesBySession(sessionId: string): Promise<Message[]>;
   getAllMessages(): Promise<Message[]>;
+  createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate>;
+  getAllPromptTemplates(): Promise<PromptTemplate[]>;
+  likePromptTemplate(id: string): Promise<void>;
+  deletePromptTemplate(id: string): Promise<void>;
 }
 
 function generateId(): string {
@@ -203,6 +215,32 @@ class FileStorageAdapter implements StorageAdapter {
 
   async getAllMessages(): Promise<Message[]> {
     return this.readData<Message>('messages');
+  }
+
+  async createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> {
+    const template: PromptTemplate = { ...data, id: generateId(), likes: 0, createdAt: new Date() };
+    const list = this.readData<PromptTemplate>('prompt-templates');
+    list.push(template);
+    this.writeData('prompt-templates', list);
+    return template;
+  }
+
+  async getAllPromptTemplates(): Promise<PromptTemplate[]> {
+    return this.readData<PromptTemplate>('prompt-templates').sort((a, b) => b.likes - a.likes);
+  }
+
+  async likePromptTemplate(id: string): Promise<void> {
+    const list = this.readData<PromptTemplate>('prompt-templates');
+    const idx = list.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      list[idx].likes += 1;
+      this.writeData('prompt-templates', list);
+    }
+  }
+
+  async deletePromptTemplate(id: string): Promise<void> {
+    const list = this.readData<PromptTemplate>('prompt-templates').filter(t => t.id !== id);
+    this.writeData('prompt-templates', list);
   }
 }
 
@@ -355,6 +393,36 @@ class KVStorageAdapter implements StorageAdapter {
     const ids: string[] = await this.kv.smembers('analytics:messages:ids');
     return this.getByIds<Message>('messages', ids || []);
   }
+
+  async createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> {
+    await this.init();
+    const template: PromptTemplate = { ...data, id: generateId(), likes: 0, createdAt: new Date() };
+    await this.kv.hset(this.key('prompt-templates', template.id), template as any);
+    await this.kv.sadd('analytics:prompt-templates:ids', template.id);
+    return template;
+  }
+
+  async getAllPromptTemplates(): Promise<PromptTemplate[]> {
+    await this.init();
+    const ids: string[] = await this.kv.smembers('analytics:prompt-templates:ids');
+    const templates = await this.getByIds<PromptTemplate>('prompt-templates', ids || []);
+    return templates.sort((a, b) => b.likes - a.likes);
+  }
+
+  async likePromptTemplate(id: string): Promise<void> {
+    await this.init();
+    const data = await this.kv.hgetall(this.key('prompt-templates', id));
+    if (data && Object.keys(data).length > 0) {
+      const currentLikes = Number(data.likes) || 0;
+      await this.kv.hset(this.key('prompt-templates', id), { likes: currentLikes + 1 });
+    }
+  }
+
+  async deletePromptTemplate(id: string): Promise<void> {
+    await this.init();
+    await this.kv.del(this.key('prompt-templates', id));
+    await this.kv.srem('analytics:prompt-templates:ids', id);
+  }
 }
 
 let storageInstance: StorageAdapter | null = null;
@@ -390,6 +458,10 @@ export async function getFeedbacksBySession(sessionId: string): Promise<Feedback
 export async function createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> { return getStorage().createMessage(data); }
 export async function getMessagesBySession(sessionId: string): Promise<Message[]> { return getStorage().getMessagesBySession(sessionId); }
 export async function getAllMessages(): Promise<Message[]> { return getStorage().getAllMessages(); }
+export async function createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> { return getStorage().createPromptTemplate(data); }
+export async function getAllPromptTemplates(): Promise<PromptTemplate[]> { return getStorage().getAllPromptTemplates(); }
+export async function likePromptTemplate(id: string): Promise<void> { return getStorage().likePromptTemplate(id); }
+export async function deletePromptTemplate(id: string): Promise<void> { return getStorage().deletePromptTemplate(id); }
 
 function inRange<T extends { createdAt: Date }>(items: T[], startDate?: Date, endDate?: Date): T[] {
   return items.filter((i) => {

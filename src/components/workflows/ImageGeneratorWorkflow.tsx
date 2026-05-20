@@ -65,12 +65,15 @@ export default function ImageGeneratorWorkflow() {
   const [selectedModel, setSelectedModel] = useState('gpt-image-2-all');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'generator' | 'history'>('generator');
+  const [activeTab, setActiveTab] = useState<'generator' | 'history' | 'prompts'>('generator');
   const [imageHistory, setImageHistory] = useState<ImgGenHistoryItem[]>([]);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [englishPrompt, setEnglishPrompt] = useState<string>('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [promptTemplates, setPromptTemplates] = useState<Array<{id: string; content: string; author?: string; likes: number}>>([]);
+  const [newPromptContent, setNewPromptContent] = useState('');
+  const [newPromptAuthor, setNewPromptAuthor] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generationIdRef = useRef<string | null>(null);
 
@@ -79,6 +82,56 @@ export default function ImageGeneratorWorkflow() {
       getImgGenHistoryWithUrls().then(setImageHistory);
     }
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'prompts') {
+      fetchPromptTemplates();
+    }
+  }, [activeTab]);
+
+  const fetchPromptTemplates = async () => {
+    try {
+      const response = await fetch('/api/prompt-templates');
+      const data = await response.json();
+      setPromptTemplates(data.templates || []);
+    } catch (error) {
+      console.error('[Prompt Templates] Failed to fetch:', error);
+    }
+  };
+
+  const savePromptToLibrary = async () => {
+    if (!newPromptContent.trim()) return;
+    try {
+      await fetch('/api/prompt-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newPromptContent, author: newPromptAuthor || undefined }),
+      });
+      setNewPromptContent('');
+      setNewPromptAuthor('');
+      fetchPromptTemplates();
+    } catch (error) {
+      console.error('[Prompt Templates] Failed to save:', error);
+    }
+  };
+
+  const likePrompt = async (id: string) => {
+    try {
+      await fetch('/api/prompt-templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'like' }),
+      });
+      fetchPromptTemplates();
+    } catch (error) {
+      console.error('[Prompt Templates] Failed to like:', error);
+    }
+  };
+
+  const usePrompt = (content: string) => {
+    setPrompt(content);
+    setActiveTab('generator');
+  };
 
   const sizes = [
     { value: '1024x1024', label: '1024×1024 (1:1)' },
@@ -357,6 +410,15 @@ export default function ImageGeneratorWorkflow() {
               图片生成
             </button>
             <button
+              onClick={() => setActiveTab('prompts')}
+              className={`px-3 py-1 text-xs font-medium transition-colors flex items-center gap-1 ${
+                activeTab === 'prompts' ? 'bg-black text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Sparkles size={12} />
+              提示词库
+            </button>
+            <button
               onClick={() => setActiveTab('history')}
               className={`px-3 py-1 text-xs font-medium rounded-r-lg transition-colors flex items-center gap-1 ${
                 activeTab === 'history' ? 'bg-black text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
@@ -513,6 +575,83 @@ export default function ImageGeneratorWorkflow() {
               )}
             </div>
           ) : null}
+        </div>
+      )}
+
+      {activeTab === 'prompts' && (
+        <div className="flex-1 overflow-y-auto px-8 pb-4">
+          <div className="space-y-6">
+            <div className="py-4">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2 text-center">提示词库</h3>
+              <p className="text-gray-400 text-center font-light">所有用户共享的优质提示词</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <h4 className="text-sm font-medium text-gray-700">保存你的优质提示词</h4>
+              <textarea
+                value={newPromptContent}
+                onChange={(e) => setNewPromptContent(e.target.value)}
+                placeholder="输入你的提示词..."
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-black/20"
+                rows={3}
+              />
+              <div className="flex items-center justify-between">
+                <input
+                  type="text"
+                  value={newPromptAuthor}
+                  onChange={(e) => setNewPromptAuthor(e.target.value)}
+                  placeholder="你的名字（可选）"
+                  className="flex-1 mr-3 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/20"
+                />
+                <button
+                  onClick={savePromptToLibrary}
+                  disabled={!newPromptContent.trim()}
+                  className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+
+            {promptTemplates.length === 0 ? (
+              <div className="text-center py-12">
+                <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">暂无提示词</p>
+                <p className="text-gray-400 text-sm mt-1">成为第一个贡献者吧！</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {promptTemplates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="bg-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer group"
+                  >
+                    <p className="text-sm text-gray-700 line-clamp-4 mb-3">{template.content}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">
+                        {template.author || '匿名用户'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); likePrompt(template.id); }}
+                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-500 transition-colors"
+                        >
+                          <span>❤️</span>
+                          <span>{template.likes}</span>
+                        </button>
+                        <button
+                          onClick={() => usePrompt(template.content)}
+                          className="px-2 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-800 transition-colors"
+                        >
+                          使用
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
