@@ -435,6 +435,10 @@ export default function Home() {
          normalized.includes('亚马逊定制商品视觉方案');
 };
 
+const containsChinese = (text: string): boolean => {
+  return /[\u4e00-\u9fa5]/.test(text);
+};
+
 const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
   const plans: GeneratedImagePlan[] = [];
   const normalized = content.replace(/[-–—]/g, '-');
@@ -449,32 +453,32 @@ const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
       const subTitleMatch = planContent.match(/副标题[：:]([^\n]+)/);
       const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
       
-      const title = titleMatch ? titleMatch[1].trim() : `图${i}`;
+      const title = titleMatch ? titleMatch[1].trim() : `Image ${i}`;
       const titleText = titleTextMatch ? titleTextMatch[1].trim() : '';
       const subTitle = subTitleMatch ? subTitleMatch[1].trim() : '';
       
       let prompt = compositionMatch ? compositionMatch[1].trim().replace(/\n/g, ' ') : '';
       
       let textOverlay = '';
-      if (titleText) {
+      if (titleText && !containsChinese(titleText)) {
         textOverlay = `text overlay "${titleText}"`;
-        if (subTitle) {
+        if (subTitle && !containsChinese(subTitle)) {
           textOverlay += `, subtitle "${subTitle}"`;
         }
         textOverlay += ', professional typography, clean font, centered text, readable text overlay on product image';
       }
       
       if (!prompt) {
-        prompt = `专业亚马逊产品摄影，${title}`;
+        prompt = `Professional Amazon product photography, ${title}`;
       } else {
-        prompt = `专业亚马逊产品摄影，${title}，${prompt}`;
+        prompt = `Professional Amazon product photography, ${title}, ${prompt}`;
       }
       
       if (textOverlay) {
-        prompt = `${prompt}，${textOverlay}`;
+        prompt = `${prompt}, ${textOverlay}`;
       }
       
-      prompt += '，cinematic commercial photography风格';
+      prompt += ', cinematic commercial photography style';
       
       plans.push({
         index: i,
@@ -532,7 +536,7 @@ const parseAmazonPlan = (content: string): GeneratedImagePlan[] => {
       const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
       const styleMatch = planContent.match(/风格[：:]([^\n]+)/);
       
-      const title = titleMatch ? titleMatch[1].trim() : `图${i}`;
+      const title = titleMatch ? titleMatch[1].trim() : `Image ${i}`;
       const titleText = titleTextMatch ? titleTextMatch[1].trim() : '';
       const subTitle = subTitleMatch ? subTitleMatch[1].trim() : '';
       const purpose = purposeMatch ? purposeMatch[1].trim() : '';
@@ -541,14 +545,14 @@ const parseAmazonPlan = (content: string): GeneratedImagePlan[] => {
       
       let promptParts: string[] = [];
       promptParts.push(`Professional product photography for Amazon listing`);
-      promptParts.push(title);
-      if (purpose) promptParts.push(purpose);
-      if (composition) promptParts.push(composition);
-      if (style) promptParts.push(style);
+      if (!containsChinese(title)) promptParts.push(title);
+      if (purpose && !containsChinese(purpose)) promptParts.push(purpose);
+      if (composition && !containsChinese(composition)) promptParts.push(composition);
+      if (style && !containsChinese(style)) promptParts.push(style);
       
-      if (titleText) {
+      if (titleText && !containsChinese(titleText)) {
         let textOverlay = `text overlay "${titleText}"`;
-        if (subTitle) {
+        if (subTitle && !containsChinese(subTitle)) {
           textOverlay += `, subtitle "${subTitle}"`;
         }
         textOverlay += ', professional typography, clean font, centered text, readable text overlay on product image';
