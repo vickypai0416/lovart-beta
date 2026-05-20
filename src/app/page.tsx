@@ -648,6 +648,8 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     if (!isMounted.current) break;
     
     const plan = planImages[i];
+    const startTime = Date.now();
+    let generationId: string | null = null;
     
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
@@ -662,6 +664,17 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     }
     
     try {
+      // 追踪生成开始
+      if (isInitialized) {
+        generationId = await trackGeneration({
+          prompt: plan.prompt,
+          size: selectedSize,
+          quality: selectedQuality,
+          model: 'gpt-image-2-edit',
+          count: 1,
+        });
+      }
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -717,6 +730,23 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
       
       if (generatedUrl) {
         await handleSaveChatImage(generatedUrl, plan.prompt, messageId);
+        // 更新生成成功
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'success',
+            imageUrl: generatedUrl,
+            duration: Date.now() - startTime,
+          });
+        }
+      } else {
+        // 更新生成失败
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: '未获取到图片',
+            duration: Date.now() - startTime,
+          });
+        }
       }
       
       if (isMounted.current) {
@@ -736,6 +766,14 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
         break;
       }
       console.error(`[Plan Generation] Image ${i + 1} failed:`, error);
+      // 更新生成失败
+      if (generationId) {
+        await updateGeneration(generationId, {
+          status: 'failed',
+          error: error instanceof Error ? error.message : '未知错误',
+          duration: Date.now() - startTime,
+        });
+      }
       if (isMounted.current) {
         setMessages(prev => prev.map(m => {
           if (m.id !== messageId) return m;
@@ -765,6 +803,8 @@ const generateSingleImage = async (messageId: string, planIndex: number, referen
   if (!planImages || planImages.length === 0 || planIndex < 0 || planIndex >= planImages.length) return;
   
   const plan = planImages[planIndex];
+  const startTime = Date.now();
+  let generationId: string | null = null;
   
   if (isMounted.current) {
     setMessages(prev => prev.map(m => {
@@ -780,6 +820,17 @@ const generateSingleImage = async (messageId: string, planIndex: number, referen
   }
   
   try {
+    // 追踪生成开始
+    if (isInitialized) {
+      generationId = await trackGeneration({
+        prompt: plan.prompt,
+        size: selectedSize,
+        quality: selectedQuality,
+        model: 'gpt-image-2-edit',
+        count: 1,
+      });
+    }
+    
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -834,6 +885,23 @@ const generateSingleImage = async (messageId: string, planIndex: number, referen
     
     if (generatedUrl) {
       await handleSaveChatImage(generatedUrl, plan.prompt, messageId);
+      // 更新生成成功
+      if (generationId) {
+        await updateGeneration(generationId, {
+          status: 'success',
+          imageUrl: generatedUrl,
+          duration: Date.now() - startTime,
+        });
+      }
+    } else {
+      // 更新生成失败
+      if (generationId) {
+        await updateGeneration(generationId, {
+          status: 'failed',
+          error: '未获取到图片',
+          duration: Date.now() - startTime,
+        });
+      }
     }
     
     if (isMounted.current) {
@@ -850,6 +918,14 @@ const generateSingleImage = async (messageId: string, planIndex: number, referen
     }
   } catch (error) {
     console.error(`[Single Image Generation] Failed:`, error);
+    // 更新生成失败
+    if (generationId) {
+      await updateGeneration(generationId, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : '未知错误',
+        duration: Date.now() - startTime,
+      });
+    }
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
         if (m.id !== messageId) return m;

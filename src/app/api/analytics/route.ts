@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSummary, getGenerations, getFeedbacks, getEventStats, getAllMessages } from '@/lib/analytics';
 
+function serializeDates(obj: any): any {
+  if (obj instanceof Date) {
+    return obj.toISOString();
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => serializeDates(item));
+  }
+  if (obj && typeof obj === 'object') {
+    const serialized: any = {};
+    for (const key in obj) {
+      serialized[key] = serializeDates(obj[key]);
+    }
+    return serialized;
+  }
+  return obj;
+}
+
 export async function GET(request: NextRequest) {
   console.log('[Analytics API] GET request received');
   const { searchParams } = new URL(request.url);
@@ -20,7 +37,7 @@ export async function GET(request: NextRequest) {
         console.log('[Analytics API] summary params:', { startDate, endDate });
         const summary = await getSummary(startDate, endDate);
         console.log('[Analytics API] summary returned:', summary);
-        return NextResponse.json({ success: true, data: summary });
+        return NextResponse.json({ success: true, data: serializeDates(summary) });
       }
 
       case 'generations': {
@@ -32,7 +49,7 @@ export async function GET(request: NextRequest) {
         console.log('[Analytics API] generations params:', { page, pageSize, status });
         const result = await getGenerations(page, pageSize, status);
         console.log('[Analytics API] generations returned:', result);
-        return NextResponse.json({ success: true, data: result });
+        return NextResponse.json({ success: true, data: serializeDates(result) });
       }
 
       case 'feedbacks': {
@@ -43,7 +60,7 @@ export async function GET(request: NextRequest) {
         console.log('[Analytics API] feedbacks params:', { page, pageSize });
         const result = await getFeedbacks(page, pageSize);
         console.log('[Analytics API] feedbacks returned:', result);
-        return NextResponse.json({ success: true, data: result });
+        return NextResponse.json({ success: true, data: serializeDates(result) });
       }
 
       case 'events': {
@@ -57,14 +74,14 @@ export async function GET(request: NextRequest) {
         console.log('[Analytics API] events params:', { startDate, endDate });
         const stats = await getEventStats(startDate, endDate);
         console.log('[Analytics API] events returned:', stats);
-        return NextResponse.json({ success: true, data: stats });
+        return NextResponse.json({ success: true, data: serializeDates(stats) });
       }
 
       case 'messages': {
         console.log('[Analytics API] messages endpoint called');
         const messages = await getAllMessages();
         console.log('[Analytics API] messages returned:', messages);
-        return NextResponse.json({ success: true, data: messages });
+        return NextResponse.json({ success: true, data: serializeDates(messages) });
       }
 
       default:

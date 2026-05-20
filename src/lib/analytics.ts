@@ -457,7 +457,9 @@ export async function createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): 
 export async function getFeedbacksBySession(sessionId: string): Promise<Feedback[]> { return getStorage().getFeedbacksBySession(sessionId); }
 export async function createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> { return getStorage().createMessage(data); }
 export async function getMessagesBySession(sessionId: string): Promise<Message[]> { return getStorage().getMessagesBySession(sessionId); }
-export async function getAllMessages(): Promise<Message[]> { return getStorage().getAllMessages(); }
+export async function getAllMessages(): Promise<Message[]> { 
+  return getStorage().getAllMessages();
+}
 export async function createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> { return getStorage().createPromptTemplate(data); }
 export async function getAllPromptTemplates(): Promise<PromptTemplate[]> { return getStorage().getAllPromptTemplates(); }
 export async function likePromptTemplate(id: string): Promise<void> { return getStorage().likePromptTemplate(id); }
@@ -523,7 +525,10 @@ export async function getGenerations(page = 1, pageSize = 20, status?: string) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const start = (Math.max(1, page) - 1) * pageSize;
   return {
-    data: list.slice(start, start + pageSize),
+    data: list.slice(start, start + pageSize).map(item => ({
+      ...item,
+      createdAt: item.createdAt.toISOString()
+    })),
     total,
     totalPages,
   };
@@ -536,7 +541,10 @@ export async function getFeedbacks(page = 1, pageSize = 20) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const start = (Math.max(1, page) - 1) * pageSize;
   return {
-    data: list.slice(start, start + pageSize),
+    data: list.slice(start, start + pageSize).map(item => ({
+      ...item,
+      createdAt: item.createdAt.toISOString()
+    })),
     total,
     totalPages,
   };
