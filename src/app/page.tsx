@@ -2085,15 +2085,7 @@ const sendMessage = async () => {
       </div>
       </main>
 
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-2 text-center text-xs text-gray-500 z-40">
-        <p>
-          我们会收集您的使用数据（包括生成请求、工作流选择等）以优化服务。
-          <a href="#" className="text-blue-500 hover:underline ml-1">隐私政策</a>
-          <span className="mx-2">|</span>
-          <a href="/analytics" className="text-blue-500 hover:underline">数据分析</a>
-        </p>
-      </footer>
+
 
       {previewImage && (
         <div

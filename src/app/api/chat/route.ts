@@ -4,12 +4,17 @@ import {
   getModelConfig
 } from '@/lib/image-models';
 import { getPersonaById } from '@/lib/persona';
+import { createGeneration, updateGeneration } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let generationId: string | null = null;
+  const sessionId = request.headers.get('X-Session-ID') || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  
   try {
     console.log('[API] Received request');
     const body = await request.json();
@@ -47,6 +52,30 @@ export async function POST(request: NextRequest) {
     const forceTextForAmazonExpert = persona === 'amazon-expert' && imageModelIds.includes(requestedModelId);
     const modelId: ImageModel = forceTextForAmazonExpert ? 'gpt-5.4' : requestedModelId;
     const modelConfig = getModelConfig(modelId);
+    
+    // 如果是图片模型，创建生成记录
+    if (imageModelIds.includes(modelId)) {
+      const lastMessage = messages[messages.length - 1];
+      let userPrompt = '';
+      if (lastMessage) {
+        if (typeof lastMessage.content === 'string') {
+          userPrompt = lastMessage.content;
+        } else if (Array.isArray(lastMessage.content)) {
+          const textContent = lastMessage.content.find((c: { type: string; text?: string }) => c.type === 'text');
+          userPrompt = textContent?.text || '';
+        }
+      }
+      
+      generationId = (await createGeneration({
+        sessionId,
+        prompt: userPrompt,
+        size,
+        quality,
+        model: modelId,
+        count: n,
+        status: 'pending',
+      })).id;
+    }
     
     console.log(`[API] 使用模型: ${modelId} (${modelConfig.name})`);
     console.log(`[API] 模型类型: ${modelConfig.type}, 模型名: ${modelConfig.modelName}`);
@@ -98,7 +127,7 @@ export async function POST(request: NextRequest) {
             );
           } else {
             console.log(`[API] 使用 ${modelConfig.name} 生成图片`);
-            await generateImageDirectly(modelId, userPrompt, extractedReferenceImages, controller, encoder, n, size, quality);
+            await generateImageDirectly(modelId, userPrompt, extractedReferenceImages, controller, encoder, n, size, quality, generationId, startTime);
           }
         } catch (error) {
           console.error('Stream error:', error);
@@ -185,7 +214,9 @@ async function generateImageDirectly(
   encoder: TextEncoder,
   n: number = 1,
   size: string = '1024x1024',
-  quality: string = 'high'
+  quality: string = 'high',
+  generationId: string | null = null,
+  startTime: number = Date.now()
 ): Promise<void> {
   controller.enqueue(
     encoder.encode(
@@ -249,6 +280,14 @@ async function generateImageDirectly(
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
       } else {
+        // 更新生成记录为成功
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'success',
+            imageUrl: imageUrls[0],
+            duration: Date.now() - startTime,
+          });
+        }
         for (let i = 0; i < imageUrls.length; i++) {
           controller.enqueue(
             encoder.encode(
@@ -264,6 +303,14 @@ async function generateImageDirectly(
         }
       }
     } else {
+      // 更新生成记录为失败
+      if (generationId) {
+        await updateGeneration(generationId, {
+          status: 'failed',
+          error: '图片生成失败，请重试',
+          duration: Date.now() - startTime,
+        });
+      }
       controller.enqueue(
         encoder.encode(
           `data: ${JSON.stringify({
@@ -276,6 +323,14 @@ async function generateImageDirectly(
   } catch (imageError: unknown) {
     console.error('Image generation error:', imageError);
     const errorMessage = imageError instanceof Error ? imageError.message : '图片生成服务暂时不可用，请稍后重试';
+    // 更新生成记录为失败
+    if (generationId) {
+      await updateGeneration(generationId, {
+        status: 'failed',
+        error: errorMessage,
+        duration: Date.now() - startTime,
+      });
+    }
     try {
       controller.enqueue(
         encoder.encode(

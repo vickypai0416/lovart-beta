@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
 import { getModelConfig } from '@/lib/image-models';
+import { createGeneration, updateGeneration } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -53,6 +54,10 @@ async function translateToEnglish(text: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let generationId: string | null = null;
+  const sessionId = request.headers.get('X-Session-ID') || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  
   try {
     const body = await request.json();
     const { 
@@ -97,6 +102,18 @@ export async function POST(request: NextRequest) {
 
     const spec = AMAZON_IMAGE_SPECS[specType as ImageSpecType];
     const [width, height] = size.split('x').map(Number);
+    
+    // 创建生成记录
+    const modelName = model || 'gpt-image-2-all';
+    generationId = (await createGeneration({
+      sessionId,
+      prompt: finalPrompt,
+      size,
+      quality,
+      model: modelName,
+      count: imageCount,
+      status: 'pending',
+    })).id;
     
     if (spec) {
       if (spec.minWidth && width < spec.minWidth) {
@@ -200,6 +217,14 @@ export async function POST(request: NextRequest) {
         
         if (imageUrls.length > 0) {
           console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
+          // 更新生成记录为成功
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'success',
+              imageUrl: imageUrls[0],
+              duration: Date.now() - startTime,
+            });
+          }
           return NextResponse.json({
             success: true,
             url: imageUrls[0],
@@ -210,6 +235,14 @@ export async function POST(request: NextRequest) {
           });
         } else {
           console.error('[Generate API] 无法从响应中提取图片 URL');
+          // 更新生成记录为失败
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'failed',
+              error: '无法获取图片 URL',
+              duration: Date.now() - startTime,
+            });
+          }
           return NextResponse.json(
             { success: false, error: '图片生成失败：无法获取图片 URL' },
             { status: 500 }
@@ -217,6 +250,14 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('[Generate API] 调用失败:', error);
+        // 更新生成记录为失败
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : '未知错误',
+            duration: Date.now() - startTime,
+          });
+        }
         return NextResponse.json(
           { success: false, error: `图片生成失败：${error instanceof Error ? error.message : '未知错误'}` },
           { status: 500 }
@@ -370,6 +411,14 @@ export async function POST(request: NextRequest) {
         
         if (imageUrls.length > 0) {
           console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
+          // 更新生成记录为成功
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'success',
+              imageUrl: imageUrls[0],
+              duration: Date.now() - startTime,
+            });
+          }
           return NextResponse.json({
             success: true,
             url: imageUrls[0],
@@ -380,6 +429,14 @@ export async function POST(request: NextRequest) {
           });
         } else {
           console.error('[Generate API] 无法从响应中提取图片 URL');
+          // 更新生成记录为失败
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'failed',
+              error: '无法获取图片 URL',
+              duration: Date.now() - startTime,
+            });
+          }
           return NextResponse.json(
             { success: false, error: '图片生成失败：无法获取图片 URL' },
             { status: 500 }
@@ -387,6 +444,14 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('[Generate API] 调用失败:', error);
+        // 更新生成记录为失败
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : '未知错误',
+            duration: Date.now() - startTime,
+          });
+        }
         return NextResponse.json(
           { success: false, error: `图片生成失败：${error instanceof Error ? error.message : '未知错误'}` },
           { status: 500 }
@@ -479,6 +544,14 @@ export async function POST(request: NextRequest) {
       
       if (imageUrls.length > 0) {
         console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
+        // 更新生成记录为成功
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'success',
+            imageUrl: imageUrls[0],
+            duration: Date.now() - startTime,
+          });
+        }
         return NextResponse.json({
           success: true,
           url: imageUrls[0],
@@ -489,6 +562,14 @@ export async function POST(request: NextRequest) {
         });
       } else {
         console.error('[Generate API] 无法从响应中提取图片 URL');
+        // 更新生成记录为失败
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: '无法获取图片 URL',
+            duration: Date.now() - startTime,
+          });
+        }
         return NextResponse.json(
           { success: false, error: '图片生成失败：无法获取图片 URL' },
           { status: 500 }
@@ -496,6 +577,14 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       console.error('[Generate API] 调用失败:', error);
+      // 更新生成记录为失败
+      if (generationId) {
+        await updateGeneration(generationId, {
+          status: 'failed',
+          error: error instanceof Error ? error.message : '未知错误',
+          duration: Date.now() - startTime,
+        });
+      }
       return NextResponse.json(
         { success: false, error: `图片生成失败：${error instanceof Error ? error.message : '未知错误'}` },
         { status: 500 }
@@ -503,6 +592,14 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Image generation error:', error);
+    // 更新生成记录为失败
+    if (generationId) {
+      await updateGeneration(generationId, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : '服务器内部错误',
+        duration: Date.now() - startTime,
+      });
+    }
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : '服务器内部错误' },
       { status: 500 }
