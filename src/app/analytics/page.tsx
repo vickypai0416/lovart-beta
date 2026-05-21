@@ -401,11 +401,29 @@ export default function AnalyticsDashboard() {
                   {generations.map((gen) => (
                     <div key={gen.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
                       {gen.imageUrl ? (
-                        <img 
-                          src={gen.imageUrl} 
-                          alt="Generated" 
-                          className="w-16 h-16 object-cover rounded-lg"
-                        />
+                        <div className="relative group">
+                          <img 
+                            src={gen.imageUrl} 
+                            alt="Generated" 
+                            className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => window.open(gen.imageUrl, '_blank')}
+                          />
+                          <button
+                            onClick={() => {
+                              const a = document.createElement('a');
+                              a.href = gen.imageUrl!;
+                              a.download = `image-${gen.id}.png`;
+                              a.target = '_blank';
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                            }}
+                            className="absolute -top-1 -right-1 p-1 bg-black/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
+                            title="下载图片"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                        </div>
                       ) : (
                         <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
                           <Image className="w-6 h-6 text-gray-400" />

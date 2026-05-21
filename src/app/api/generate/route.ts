@@ -104,13 +104,13 @@ export async function POST(request: NextRequest) {
     const [width, height] = size.split('x').map(Number);
     
     // 创建生成记录
-    const modelName = model || 'gpt-image-2-all';
+    const selectedModelName = model || 'gpt-image-2-all';
     generationId = (await createGeneration({
       sessionId,
       prompt: finalPrompt,
       size,
       quality,
-      model: modelName,
+      model: selectedModelName,
       count: imageCount,
       status: 'pending',
     })).id;
