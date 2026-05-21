@@ -289,7 +289,7 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                                         }
                                       }
                                       if (refImage) {
-                                        onGenerateSingleImage(message.id, idx, refImage);
+                                        onGenerateSingleImage(message.id, plan.index, refImage);
                                       }
                                     }}
                                     className="text-xs text-blue-500 hover:text-blue-600 underline"
@@ -315,7 +315,7 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                                         }
                                       }
                                       if (refImage) {
-                                        onGenerateSingleImage(message.id, idx, refImage);
+                                        onGenerateSingleImage(message.id, plan.index, refImage);
                                       } else {
                                         alert('请先上传产品图片');
                                       }

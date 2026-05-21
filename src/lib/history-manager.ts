@@ -23,14 +23,39 @@ export interface GenerationSession {
 
 const MAX_SESSIONS = 20;
 const MAX_IMAGES_PER_SESSION = 12;
+const CHAT_MAX_IMAGES = 50;
+const MAX_PERSISTED_MESSAGES = 100;
+
+function createImageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function writeEcommerceHistory(history: { sessions: GenerationSession[] }): void {
+  try {
+    localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
+  } catch (error) {
+    console.warn('[History] 写入图片历史失败:', error);
+  }
+}
+
+function toStorageSafeUrl(url: string): string {
+  if (!url) return '';
+  if (url.length > 300000) return '';
+  return url;
+}
 
 export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'timestamp'>): Promise<ImageHistoryItem> {
   const history = getHistory();
   const newItem: ImageHistoryItem = {
     ...item,
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: createImageId(),
+    url: toStorageSafeUrl(item.url),
     timestamp: Date.now(),
   };
+
+  if (item.url) {
+    await saveImageBlobFromUrl(newItem.id, item.url);
+  }
 
   let currentSession = history.sessions.find(
     s => s.productName === item.productName && 
@@ -65,13 +90,7 @@ export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'ti
     history.sessions = history.sessions.slice(0, MAX_SESSIONS);
   }
 
-  localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
-
-  if (item.url && !item.url.startsWith('data:')) {
-    saveImageBlobFromUrl(newItem.id, item.url).catch((e) => {
-      console.warn('[History] 保存图片 Blob 失败:', e);
-    });
-  }
+  writeEcommerceHistory(history);
 
   return newItem;
 }
@@ -101,7 +120,7 @@ export async function getRecentImages(limit: number = 20): Promise<ImageHistoryI
   const sorted = allImages.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
 
   return Promise.all(sorted.map(async (img) => {
-    const url = await getImageUrl(img.id, img.url);
+    const url = await getImageUrl(img.id, img.url || '');
     return { ...img, url };
   }));
 }
@@ -115,7 +134,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
     }
   }
   history.sessions = history.sessions.filter(s => s.id !== sessionId);
-  localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
+  writeEcommerceHistory(history);
 }
 
 export async function deleteImage(imageId: string): Promise<void> {
@@ -126,7 +145,7 @@ export async function deleteImage(imageId: string): Promise<void> {
   });
   
   history.sessions = history.sessions.filter(s => s.images.length > 0);
-  localStorage.setItem(ImageHistory.ECOMMERCE, JSON.stringify(history));
+  writeEcommerceHistory(history);
   await idbDeleteImageBlob(imageId).catch(() => {});
 }
 
@@ -152,15 +171,6 @@ export interface ChatImageHistoryItem {
   timestamp: number;
 }
 
-const CHAT_MAX_IMAGES = 50;
-
-function toStorageSafeUrl(url: string): string {
-  if (url.startsWith('data:')) {
-    return '';
-  }
-  return url;
-}
-
 function safeSetChatHistory(history: ChatImageHistoryItem[]): void {
   try {
     localStorage.setItem(ImageHistory.CHAT, JSON.stringify(history));
@@ -182,11 +192,15 @@ function safeSetChatHistory(history: ChatImageHistoryItem[]): void {
 export async function saveChatImageToHistory(url: string, prompt: string): Promise<ChatImageHistoryItem> {
   const history = getChatHistory();
   const newItem: ChatImageHistoryItem = {
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: createImageId(),
     url: toStorageSafeUrl(url),
     prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
     timestamp: Date.now(),
   };
+
+  if (url) {
+    await saveImageBlobFromUrl(newItem.id, url);
+  }
 
   history.unshift(newItem);
   
@@ -199,12 +213,6 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
   }
 
   safeSetChatHistory(history);
-
-  if (url && !url.startsWith('data:')) {
-    saveImageBlobFromUrl(newItem.id, url).catch((e) => {
-      console.warn('[ChatHistory] 保存图片 Blob 失败:', e);
-    });
-  }
 
   return newItem;
 }
@@ -224,7 +232,7 @@ export function getChatHistory(): ChatImageHistoryItem[] {
 export async function getChatHistoryWithUrls(): Promise<ChatImageHistoryItem[]> {
   const history = getChatHistory();
   return Promise.all(history.map(async (img) => {
-    const url = await getImageUrl(img.id, img.url);
+    const url = await getImageUrl(img.id, img.url || '');
     return { ...img, url };
   }));
 }
@@ -263,8 +271,6 @@ export interface PersistedMessage {
   }>;
   timestamp: number;
 }
-
-const MAX_PERSISTED_MESSAGES = 100;
 
 function stripLargeDataUrls(messages: PersistedMessage[]): PersistedMessage[] {
   return messages.map((m) => ({

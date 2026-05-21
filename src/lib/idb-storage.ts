@@ -103,6 +103,9 @@ export async function idbDeleteImageBlob(id: string): Promise<void> {
 async function urlToBlob(url: string): Promise<Blob> {
   if (url.startsWith('data:')) {
     const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Data URL 读取失败: ${res.status}`);
+    }
     return await res.blob();
   }
 
@@ -112,23 +115,24 @@ async function urlToBlob(url: string): Promise<Blob> {
     const data = await res.json();
     if (data.dataUrl) {
       const blobRes = await fetch(data.dataUrl);
+      if (!blobRes.ok) {
+        throw new Error(`代理图片读取失败: ${blobRes.status}`);
+      }
       return await blobRes.blob();
     }
   }
 
   const directRes = await fetch(url);
+  if (!directRes.ok) {
+    throw new Error(`图片读取失败: ${directRes.status}`);
+  }
   return await directRes.blob();
 }
 
 export async function saveImageBlobFromUrl(imageId: string, url: string): Promise<string> {
-  try {
-    const blob = await urlToBlob(url);
-    await idbPutImageBlob(imageId, blob);
-    return imageId;
-  } catch (e) {
-    console.warn('[IDB] 保存图片 Blob 失败:', e);
-    return url;
-  }
+  const blob = await urlToBlob(url);
+  await idbPutImageBlob(imageId, blob);
+  return imageId;
 }
 
 function blobToDataURL(blob: Blob): Promise<string> {
@@ -149,7 +153,19 @@ export async function getImageUrl(imageId: string, fallbackUrl: string): Promise
   } catch (e) {
     console.warn('[IDB] 读取图片 Blob 失败:', e);
   }
-  return fallbackUrl;
+
+  if (fallbackUrl?.startsWith('data:')) {
+    return fallbackUrl;
+  }
+
+  if (fallbackUrl?.startsWith('http')) {
+    saveImageBlobFromUrl(imageId, fallbackUrl).catch((e) => {
+      console.warn('[IDB] 重新缓存图片失败:', e);
+    });
+    return fallbackUrl;
+  }
+
+  return '';
 }
 
 export { STORES };

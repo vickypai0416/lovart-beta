@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, History, Eye } from 'lucide-react';
+import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, History } from 'lucide-react';
 import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearImgGenHistory, ImgGenHistoryItem } from '@/lib/history-manager';
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -88,6 +88,11 @@ export default function ImageGeneratorWorkflow() {
       fetchPromptTemplates();
     }
   }, [activeTab]);
+
+  const refreshImageHistory = async () => {
+    const updatedHistory = await getImgGenHistoryWithUrls();
+    setImageHistory(updatedHistory);
+  };
 
   const fetchPromptTemplates = async () => {
     try {
@@ -270,11 +275,15 @@ export default function ImageGeneratorWorkflow() {
         if (result?.success) {
           const urls = result.urls || (result.url ? [result.url] : []);
           if (urls.length > 0) {
-            for (const url of urls) {
-              await saveImgGenHistory(url, prompt.trim(), selectedSize, selectedModel);
-            }
-            const updatedHistory = await getImgGenHistoryWithUrls();
-            setImageHistory(updatedHistory);
+            await Promise.all(urls.map((url: string) => saveImgGenHistory({
+              url,
+              prompt: prompt.trim(),
+              productName: '图片生成器',
+              scene: prompt.trim() || '图片生成',
+              platform: selectedModel,
+              size: selectedSize,
+            })));
+            await refreshImageHistory();
             setGeneratedImages(urls);
             setEnglishPrompt('');
             
@@ -419,7 +428,7 @@ export default function ImageGeneratorWorkflow() {
               提示词库
             </button>
             <button
-              onClick={() => setActiveTab('history')}
+              onClick={async () => { setActiveTab('history'); await refreshImageHistory(); }}
               className={`px-3 py-1 text-xs font-medium rounded-r-lg transition-colors flex items-center gap-1 ${
                 activeTab === 'history' ? 'bg-black text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
               }`}
@@ -694,42 +703,67 @@ export default function ImageGeneratorWorkflow() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {imageHistory.map((item) => (
-                  <div key={item.id} className="group relative">
-                    <div
-                      className="relative aspect-square rounded-xl overflow-hidden border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => {
-                        setGeneratedImages([item.url]);
-                        setActiveTab('generator');
-                      }}
-                    >
-                      <img
-                        src={item.url}
-                        alt={item.prompt}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <p className="text-white text-xs line-clamp-2">{item.prompt}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-white/70 text-[10px]">{item.size}</span>
-                          <span className="text-white/70 text-[10px]">·</span>
-                          <span className="text-white/70 text-[10px]">{item.model}</span>
-                        </div>
+                {imageHistory.map((item) => {
+                  const hasImage = Boolean(item.url);
+                  return (
+                    <div key={item.id} className="group relative">
+                      <div
+                        className={`relative aspect-square rounded-xl overflow-hidden border border-gray-100 transition-shadow ${hasImage ? 'cursor-pointer hover:shadow-md' : 'cursor-default bg-gray-50'}`}
+                        onClick={() => {
+                          if (!hasImage) return;
+                          setGeneratedImages([item.url]);
+                          setActiveTab('generator');
+                        }}
+                      >
+                        {hasImage ? (
+                          <img
+                            src={item.url}
+                            alt={item.prompt}
+                            className="w-full h-full object-cover"
+                            onError={async () => {
+                              await refreshImageHistory();
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-4 text-center text-gray-400">
+                            <ImageIcon size={28} />
+                            <p className="text-xs">图片已失效</p>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await refreshImageHistory();
+                              }}
+                              className="px-2 py-1 text-[11px] rounded-md border border-gray-200 text-gray-500 hover:bg-white"
+                            >
+                              重试加载
+                            </button>
+                          </div>
+                        )}
+                        {hasImage && <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
+                        {hasImage && (
+                          <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="text-white text-xs line-clamp-2">{item.prompt}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-white/70 text-[10px]">{item.size}</span>
+                              <span className="text-white/70 text-[10px]">·</span>
+                              <span className="text-white/70 text-[10px]">{item.model}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await deleteImgGenImage(item.id);
+                          await refreshImageHistory();
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await deleteImgGenImage(item.id);
-                        setImageHistory(await getImgGenHistoryWithUrls());
-                      }}
-                      className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

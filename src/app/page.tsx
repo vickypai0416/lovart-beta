@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Gift, Wand2, Plus } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Gift, Wand2, Plus, Gem } from 'lucide-react';
 import { saveChatImageToHistory, getChatHistory, getChatHistoryWithUrls, deleteChatImage, clearChatHistory, ChatImageHistoryItem, saveChatMessages, getChatMessages } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
 import { PERSONAS, PersonaConfig } from '@/lib/persona';
@@ -21,6 +21,7 @@ import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflo
 import EcommerceWorkflow from '@/components/workflows/EcommerceWorkflow';
 import AmazonCreativeDirectorWorkflow from '@/components/workflows/AmazonCreativeDirectorWorkflow';
 import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
+import GeminiWorkflow from '@/components/workflows/GeminiWorkflow';
 import { downloadImageByUrl } from '@/lib/download';
 import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -431,12 +432,9 @@ export default function Home() {
   const isAmazonVisualPlan = (content: string): boolean => {
   const normalized = content.replace(/[-–—]/g, '-');
   return normalized.includes('6图亚马逊视觉方案') || 
+         normalized.includes('9图亚马逊视觉方案') ||
          normalized.includes('Image 1 -') ||
          normalized.includes('亚马逊定制商品视觉方案');
-};
-
-const containsChinese = (text: string): boolean => {
-  return /[\u4e00-\u9fa5]/.test(text);
 };
 
 const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
@@ -444,41 +442,21 @@ const parseAmazonVisualPlan = (content: string): GeneratedImagePlan[] => {
   const normalized = content.replace(/[-–—]/g, '-');
   
   for (let i = 1; i <= 9; i++) {
-    const regex = new RegExp(`Image ${i} - ([\\s\\S]*?)(?=Image ${i + 1} -|$)`);
+    const regex = new RegExp(`[Ii]mage\\s*${i}\\s*[-:]\\s*([\\s\\S]*?)(?=[Ii]mage\\s*${i + 1}\\s*[-:]|$)`);
     const match = normalized.match(regex);
     if (match) {
       const planContent = match[1].trim();
       const titleMatch = planContent.match(/^([^\n]+)/);
-      const titleTextMatch = planContent.match(/标题文案[：:]([^\n]+)/);
-      const subTitleMatch = planContent.match(/副标题[：:]([^\n]+)/);
       const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
       
-      const title = titleMatch ? titleMatch[1].trim() : `Image ${i}`;
-      const titleText = titleTextMatch ? titleTextMatch[1].trim() : '';
-      const subTitle = subTitleMatch ? subTitleMatch[1].trim() : '';
-      
+      const title = titleMatch ? titleMatch[1].trim() : `图${i}`;
       let prompt = compositionMatch ? compositionMatch[1].trim().replace(/\n/g, ' ') : '';
       
-      let textOverlay = '';
-      if (titleText && !containsChinese(titleText)) {
-        textOverlay = `text overlay "${titleText}"`;
-        if (subTitle && !containsChinese(subTitle)) {
-          textOverlay += `, subtitle "${subTitle}"`;
-        }
-        textOverlay += ', professional typography, clean font, centered text, readable text overlay on product image';
-      }
-      
       if (!prompt) {
-        prompt = `Professional Amazon product photography, ${title}`;
+        prompt = `专业亚马逊产品摄影，${title}，cinematic commercial photography风格`;
       } else {
-        prompt = `Professional Amazon product photography, ${title}, ${prompt}`;
+        prompt = `专业亚马逊产品摄影，${title}，${prompt}，cinematic commercial photography风格`;
       }
-      
-      if (textOverlay) {
-        prompt = `${prompt}, ${textOverlay}`;
-      }
-      
-      prompt += ', cinematic commercial photography style';
       
       plans.push({
         index: i,
@@ -508,7 +486,7 @@ const isSelectiveGenerationRequest = (content: string): { match: boolean; indice
     const match = content.match(pattern);
     if (match) {
       const idx = parseInt(match[1]);
-      if (idx >= 1 && idx <= 6) {
+      if (idx >= 1 && idx <= 9) {
         indices.push(idx);
       }
     }
@@ -523,53 +501,24 @@ const isSelectiveGenerationRequest = (content: string): { match: boolean; indice
 const parseAmazonPlan = (content: string): GeneratedImagePlan[] => {
   const plans: GeneratedImagePlan[] = [];
   const normalized = content.replace(/[-–—]/g, '-');
+  const imagePattern = /Image (\d+) - ([^\n]+)\n用途[：:]([^\n]+)\n构图[：:]\n((?:- [^\n]+\n?)+)(?:风格[：:]([^\n]+))?/g;
   
-  for (let i = 1; i <= 9; i++) {
-    const regex = new RegExp(`Image ${i} - ([\\s\\S]*?)(?=Image ${i + 1} -|$)`);
-    const match = normalized.match(regex);
-    if (match) {
-      const planContent = match[1].trim();
-      const titleMatch = planContent.match(/^([^\n]+)/);
-      const titleTextMatch = planContent.match(/标题文案[：:]([^\n]+)/);
-      const subTitleMatch = planContent.match(/副标题[：:]([^\n]+)/);
-      const purposeMatch = planContent.match(/用途[：:]([^\n]+)/);
-      const compositionMatch = planContent.match(/构图[：:]([\s\S]*?)(?=风格[：:]|$)/);
-      const styleMatch = planContent.match(/风格[：:]([^\n]+)/);
-      
-      const title = titleMatch ? titleMatch[1].trim() : `Image ${i}`;
-      const titleText = titleTextMatch ? titleTextMatch[1].trim() : '';
-      const subTitle = subTitleMatch ? subTitleMatch[1].trim() : '';
-      const purpose = purposeMatch ? purposeMatch[1].trim() : '';
-      const composition = compositionMatch ? compositionMatch[1].trim().replace(/\n/g, ', ') : '';
-      const style = styleMatch ? styleMatch[1].trim() : '';
-      
-      let promptParts: string[] = [];
-      promptParts.push(`Professional product photography for Amazon listing`);
-      if (!containsChinese(title)) promptParts.push(title);
-      if (purpose && !containsChinese(purpose)) promptParts.push(purpose);
-      if (composition && !containsChinese(composition)) promptParts.push(composition);
-      if (style && !containsChinese(style)) promptParts.push(style);
-      
-      if (titleText && !containsChinese(titleText)) {
-        let textOverlay = `text overlay "${titleText}"`;
-        if (subTitle && !containsChinese(subTitle)) {
-          textOverlay += `, subtitle "${subTitle}"`;
-        }
-        textOverlay += ', professional typography, clean font, centered text, readable text overlay on product image';
-        promptParts.push(textOverlay);
-      }
-      
-      promptParts.push('cinematic lighting, premium quality, high-end commercial photography');
-      
-      const prompt = promptParts.join(', ');
-      
-      plans.push({
-        index,
-        title,
-        prompt,
-        status: 'pending' as const,
-      });
-    }
+  let match;
+  while ((match = imagePattern.exec(normalized)) !== null) {
+    const index = parseInt(match[1]);
+    const title = match[2].trim();
+    const purpose = match[3].trim();
+    const composition = match[4].trim();
+    const style = match[5]?.trim() || '';
+    
+    const prompt = `Professional product photography for Amazon listing, ${title}, ${purpose}, ${composition.replace(/\n-/g, ', ')}, ${style}, cinematic lighting, premium quality, high-end commercial photography`;
+    
+    plans.push({
+      index,
+      title,
+      prompt,
+      status: 'pending' as const,
+    });
   }
   
   return plans;
@@ -579,6 +528,7 @@ const isAmazonPlanResponse = (content: string, persona: string): boolean => {
   if (persona !== 'amazon-expert') return false;
   const normalized = content.replace(/[-–—]/g, '-');
   return normalized.includes('6图亚马逊视觉方案') || 
+         normalized.includes('9图亚马逊视觉方案') ||
          normalized.includes('Image 1 -') || 
          normalized.includes('亚马逊定制商品视觉方案');
 };
@@ -626,30 +576,24 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
   if (messageIndex === -1) return;
   
   const message = messages[messageIndex];
-  let planImages = message.planImages;
-  if (!planImages || planImages.length === 0) {
-    planImages = parseAmazonVisualPlan(message.content);
-  }
-  if (!planImages || planImages.length === 0) return;
+  if (!message.planImages || message.planImages.length === 0) return;
   
   if (isMounted.current) {
     setMessages(prev => prev.map(m => {
       if (m.id !== messageId) return m;
       return {
         ...m,
-        planImages: planImages?.map(img => ({ ...img, status: 'pending' as const })),
+        planImages: m.planImages?.map(img => ({ ...img, status: 'pending' as const })),
       };
     }));
   }
   
   const planAbortController = new AbortController();
   
-  for (let i = 0; i < planImages.length; i++) {
+  for (let i = 0; i < message.planImages.length; i++) {
     if (!isMounted.current) break;
     
-    const plan = planImages[i];
-    const startTime = Date.now();
-    let generationId: string | null = null;
+    const plan = message.planImages[i];
     
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
@@ -664,17 +608,6 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     }
     
     try {
-      // 追踪生成开始
-      if (isInitialized) {
-        generationId = await trackGeneration({
-          prompt: plan.prompt,
-          size: selectedSize,
-          quality: selectedQuality,
-          model: 'gpt-image-2-edit',
-          count: 1,
-        });
-      }
-      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -730,23 +663,6 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
       
       if (generatedUrl) {
         await handleSaveChatImage(generatedUrl, plan.prompt, messageId);
-        // 更新生成成功
-        if (generationId) {
-          await updateGeneration(generationId, {
-            status: 'success',
-            imageUrl: generatedUrl,
-            duration: Date.now() - startTime,
-          });
-        }
-      } else {
-        // 更新生成失败
-        if (generationId) {
-          await updateGeneration(generationId, {
-            status: 'failed',
-            error: '未获取到图片',
-            duration: Date.now() - startTime,
-          });
-        }
       }
       
       if (isMounted.current) {
@@ -766,14 +682,6 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
         break;
       }
       console.error(`[Plan Generation] Image ${i + 1} failed:`, error);
-      // 更新生成失败
-      if (generationId) {
-        await updateGeneration(generationId, {
-          status: 'failed',
-          error: error instanceof Error ? error.message : '未知错误',
-          duration: Date.now() - startTime,
-        });
-      }
       if (isMounted.current) {
         setMessages(prev => prev.map(m => {
           if (m.id !== messageId) return m;
@@ -791,46 +699,38 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
   }
 };
 
-const generateSingleImage = async (messageId: string, planIndex: number, referenceImage: string) => {
+const generateSingleImageFromPlan = async (messageId: string, planIndex: number, referenceImage: string) => {
   const messageIndex = messages.findIndex(m => m.id === messageId);
   if (messageIndex === -1) return;
   
   const message = messages[messageIndex];
-  let planImages = message.planImages;
-  if (!planImages || planImages.length === 0) {
+  
+  let planImages = message.planImages || [];
+  if (planImages.length === 0 && message.content) {
     planImages = parseAmazonVisualPlan(message.content);
   }
-  if (!planImages || planImages.length === 0 || planIndex < 0 || planIndex >= planImages.length) return;
   
-  const plan = planImages[planIndex];
-  const startTime = Date.now();
-  let generationId: string | null = null;
+  if (planImages.length === 0) return;
+  
+  const arrayIndex = planIndex - 1;
+  if (arrayIndex < 0 || arrayIndex >= planImages.length) return;
+  
+  const plan = planImages[arrayIndex];
   
   if (isMounted.current) {
     setMessages(prev => prev.map(m => {
       if (m.id !== messageId) return m;
-      const currentPlans = m.planImages || planImages;
+      const currentPlanImages = m.planImages && m.planImages.length > 0 ? m.planImages : planImages;
       return {
         ...m,
-        planImages: currentPlans.map((img, idx) => 
-          idx === planIndex ? { ...img, status: 'generating' as const } : img
+        planImages: currentPlanImages.map((img, idx) => 
+          idx === arrayIndex ? { ...img, status: 'generating' as const } : img
         ),
       };
     }));
   }
   
   try {
-    // 追踪生成开始
-    if (isInitialized) {
-      generationId = await trackGeneration({
-        prompt: plan.prompt,
-        size: selectedSize,
-        quality: selectedQuality,
-        model: 'gpt-image-2-edit',
-        count: 1,
-      });
-    }
-    
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -885,54 +785,31 @@ const generateSingleImage = async (messageId: string, planIndex: number, referen
     
     if (generatedUrl) {
       await handleSaveChatImage(generatedUrl, plan.prompt, messageId);
-      // 更新生成成功
-      if (generationId) {
-        await updateGeneration(generationId, {
-          status: 'success',
-          imageUrl: generatedUrl,
-          duration: Date.now() - startTime,
-        });
-      }
-    } else {
-      // 更新生成失败
-      if (generationId) {
-        await updateGeneration(generationId, {
-          status: 'failed',
-          error: '未获取到图片',
-          duration: Date.now() - startTime,
-        });
-      }
     }
     
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
         if (m.id !== messageId) return m;
+        const currentPlanImages = m.planImages && m.planImages.length > 0 ? m.planImages : planImages;
         return {
           ...m,
-          planImages: m.planImages?.map((img, idx) => 
-            idx === planIndex ? { ...img, status: generatedUrl ? 'completed' as const : 'failed' as const, imageUrl: generatedUrl } : img
+          planImages: currentPlanImages.map((img, idx) => 
+            idx === arrayIndex ? { ...img, status: generatedUrl ? 'completed' as const : 'failed' as const, imageUrl: generatedUrl } : img
           ),
           imageUrls: generatedUrl ? [...(m.imageUrls || []), generatedUrl] : m.imageUrls,
         };
       }));
     }
   } catch (error) {
-    console.error(`[Single Image Generation] Failed:`, error);
-    // 更新生成失败
-    if (generationId) {
-      await updateGeneration(generationId, {
-        status: 'failed',
-        error: error instanceof Error ? error.message : '未知错误',
-        duration: Date.now() - startTime,
-      });
-    }
+    console.error(`[Single Plan Generation] Image ${planIndex} failed:`, error);
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
         if (m.id !== messageId) return m;
+        const currentPlanImages = m.planImages && m.planImages.length > 0 ? m.planImages : planImages;
         return {
           ...m,
-          planImages: m.planImages?.map((img, idx) => 
-            idx === planIndex ? { ...img, status: 'failed' as const } : img
+          planImages: currentPlanImages.map((img, idx) => 
+            idx === arrayIndex ? { ...img, status: 'failed' as const } : img
           ),
         };
       }));
@@ -1052,7 +929,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
     }
   };
 
-const sendMessage = async () => {
+  const sendMessage = async () => {
     const effectiveContent = input.trim();
     const currentImages = [...userImagesRef.current];
     
@@ -1685,6 +1562,7 @@ const sendMessage = async () => {
               { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
               { id: 'ecommerce', name: '电商套图', icon: LayoutGrid },
               { id: 'amazon-creative', name: '亚马逊创意总监', icon: Gift },
+              { id: 'gemini', name: 'Gemini', icon: Gem },
             ].map((workflow) => {
               const Icon = workflow.icon;
               const isActive = currentWorkflow === workflow.id;
@@ -1825,6 +1703,9 @@ const sendMessage = async () => {
         <div style={{ display: currentWorkflow === 'amazon-creative' ? 'flex' : 'none' }} className="h-full">
           <AmazonCreativeDirectorWorkflow />
         </div>
+        <div style={{ display: currentWorkflow === 'gemini' ? 'flex' : 'none' }} className="h-full">
+          <GeminiWorkflow />
+        </div>
         <div style={{ display: currentWorkflow === 'chat' ? 'flex' : 'none' }} className="h-full overflow-hidden">
           {/* 会话列表侧边栏 */}
           <ChatSessionList
@@ -1942,7 +1823,7 @@ const sendMessage = async () => {
               messages={messages}
               onCopyContent={copyToClipboard}
               onGenerateFromPlan={generateImagesFromPlan}
-              onGenerateSingleImage={generateSingleImage}
+              onGenerateSingleImage={generateSingleImageFromPlan}
               scrollRef={scrollRef as React.RefObject<HTMLDivElement | null>}
               onScroll={handleScroll}
             />
@@ -2085,7 +1966,7 @@ const sendMessage = async () => {
       </div>
       </main>
 
-
+      
 
       {previewImage && (
         <div
@@ -2111,7 +1992,6 @@ const sendMessage = async () => {
     </div>
   );
 }
-
 interface WorkflowTabsProps {
   currentWorkflow: string;
   onWorkflowChange: (workflow: string) => void;

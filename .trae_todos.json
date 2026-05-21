@@ -1,1 +1,1 @@
-[{"activeForm":"正在重启开发服务器","content":"重启开发服务器","status":"in_progress"},{"activeForm":"正在停止占用5000端口的进程并重启","content":"停止占用5000端口并重启","status":"in_progress"}]
+[{"content":"定位左侧导航结构","status":"in_progress","activeForm":"正在定位左侧导航结构"},{"content":"新增 gemini 标签页入口","status":"pending","activeForm":"正在新增 gemini 标签页入口"},{"content":"检查相关类型与渲染逻辑","status":"pending","activeForm":"正在检查相关类型与渲染逻辑"}]
