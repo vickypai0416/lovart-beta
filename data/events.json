@@ -3659,5 +3659,275 @@
       "referrer": "http://localhost:3000/"
     },
     "createdAt": "2026-05-21T08:21:11.479Z"
+  },
+  {
+    "id": "1779413626769-8cei2sdsp",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-22T01:33:46.769Z"
+  },
+  {
+    "id": "1779413626792-4bxyfpb0j",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-22T01:33:46.792Z"
+  },
+  {
+    "id": "1779413626805-fk2xcfr0b",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-22T01:33:46.805Z"
+  },
+  {
+    "id": "1779418154514-e54wawoqg",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-22T02:49:14.514Z"
+  },
+  {
+    "id": "1779418154522-0ue7w36r4",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-22T02:49:14.522Z"
+  },
+  {
+    "id": "1779418154531-py0vgl9bq",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-22T02:49:14.531Z"
+  },
+  {
+    "id": "1779418397273-4bd79qnwu",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:3000/"
+    },
+    "createdAt": "2026-05-22T02:53:17.274Z"
+  },
+  {
+    "id": "1779418397286-yrroszv7l",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:3000/"
+    },
+    "createdAt": "2026-05-22T02:53:17.287Z"
+  },
+  {
+    "id": "1779418397296-f90j7qgkp",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:3000/"
+    },
+    "createdAt": "2026-05-22T02:53:17.296Z"
+  },
+  {
+    "id": "1779418543589-3h92w6abi",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:3000/"
+    },
+    "createdAt": "2026-05-22T02:55:43.589Z"
+  },
+  {
+    "id": "1779418543601-wsfs22u21",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:3000/"
+    },
+    "createdAt": "2026-05-22T02:55:43.601Z"
+  },
+  {
+    "id": "1779418543610-oxa289d0e",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": "http://localhost:3000/"
+    },
+    "createdAt": "2026-05-22T02:55:43.610Z"
+  },
+  {
+    "id": "1779681631322-famjff9oz",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T04:00:31.322Z"
+  },
+  {
+    "id": "1779681631334-3bmgkct8t",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T04:00:31.334Z"
+  },
+  {
+    "id": "1779681631345-5k6gvppg0",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T04:00:31.345Z"
+  },
+  {
+    "id": "1779695508893-xveq760ue",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T07:51:48.893Z"
+  },
+  {
+    "id": "1779695508908-fac5poief",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T07:51:48.908Z"
+  },
+  {
+    "id": "1779695508918-sz3fsbju0",
+    "sessionId": "1779348544535-yvyojzx7c",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T07:51:48.918Z"
+  },
+  {
+    "id": "1779695961089-h4o3nznaw",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T07:59:21.089Z"
+  },
+  {
+    "id": "1779695961103-pz0ouutlt",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T07:59:21.103Z"
+  },
+  {
+    "id": "1779695961115-mfhv7pzmx",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T07:59:21.115Z"
+  },
+  {
+    "id": "1779696785619-1cxusv04l",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T08:13:05.619Z"
+  },
+  {
+    "id": "1779696821797-5zn2azpj6",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T08:13:41.797Z"
+  },
+  {
+    "id": "1779698370609-93g11km60",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T08:39:30.609Z"
+  },
+  {
+    "id": "1779698377857-h0pt1fllq",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T08:39:37.857Z"
+  },
+  {
+    "id": "1779698389243-43zsds1x1",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T08:39:49.243Z"
+  },
+  {
+    "id": "1779698469428-wrfepokid",
+    "sessionId": "1778234519283-wbm25f4la",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-25T08:41:09.428Z"
   }
 ]

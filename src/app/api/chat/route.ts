@@ -5,6 +5,7 @@ import {
 } from '@/lib/image-models';
 import { getPersonaById } from '@/lib/persona';
 import { createGeneration, updateGeneration } from '@/lib/analytics';
+import { transferImageToHost } from '@/lib/image-host';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[API] Received request');
     const body = await request.json();
-    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high', referenceImages = [] } = body as {
+    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high', referenceImages = [], systemPrompt } = body as {
       messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>;
       model?: ImageModel;
       autoGenerate?: boolean;
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
       size?: string;
       quality?: string;
       referenceImages?: string[];
+      systemPrompt?: string;
     };
 
     console.log('[API] Request params:', { 
@@ -123,7 +125,7 @@ export async function POST(request: NextRequest) {
               controller, 
               encoder,
               autoGenerate,
-              personaConfig.systemPrompt
+              systemPrompt || personaConfig.systemPrompt
             );
           } else {
             console.log(`[API] 使用 ${modelConfig.name} 生成图片`);
@@ -280,23 +282,38 @@ async function generateImageDirectly(
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
       } else {
-        // 更新生成记录为成功
+        // 将图片转存到自建图床
+        let hostedImageUrls: string[] = [];
+        try {
+          hostedImageUrls = await Promise.all(
+            imageUrls.map((url, index) => 
+              transferImageToHost(url, `gen-${Date.now()}-${index}.png`)
+            )
+          );
+          console.log('[API] 图片已转存到自建图床:', hostedImageUrls);
+        } catch (hostError) {
+          console.error('[API] 转存图片到自建图床失败，使用原始 URL:', hostError);
+          // 如果图床上传失败，回退到原始 URL
+          hostedImageUrls = imageUrls;
+        }
+
+        // 更新生成记录为成功（使用图床 URL）
         if (generationId) {
           await updateGeneration(generationId, {
             status: 'success',
-            imageUrl: imageUrls[0],
+            imageUrl: hostedImageUrls[0],
             duration: Date.now() - startTime,
           });
         }
-        for (let i = 0; i < imageUrls.length; i++) {
+        for (let i = 0; i < hostedImageUrls.length; i++) {
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 type: 'image',
-                url: imageUrls[i],
+                url: hostedImageUrls[i],
                 model: modelId,
                 index: i,
-                total: imageUrls.length,
+                total: hostedImageUrls.length,
               })}\n\n`
             )
           );

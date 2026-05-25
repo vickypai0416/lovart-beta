@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Copy, Sparkles } from 'lucide-react';
+import { Copy, Sparkles, XCircle } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 
@@ -32,6 +32,7 @@ interface ChatMessagesProps {
   onCopyContent: (content: string) => void;
   onGenerateFromPlan: (messageId: string, referenceImage: string) => void;
   onGenerateSingleImage?: (messageId: string, planIndex: number, referenceImage: string) => void;
+  onCancelRequest?: () => void;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
 }
@@ -108,6 +109,7 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
   onCopyContent, 
   onGenerateFromPlan,
   onGenerateSingleImage,
+  onCancelRequest,
   scrollRef,
   onScroll,
 }) => {
@@ -223,30 +225,18 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-gray-700">📋 亚马逊{validPlanImages.length}图视觉方案</span>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            const msgIndex = messages.findIndex(m => m.id === message.id);
-                            let refImage: string | undefined;
-                            for (let i = msgIndex - 1; i >= 0; i--) {
-                              const m = messages[i];
-                              if (m.role === 'user' && m.userImages && m.userImages.length > 0) {
-                                refImage = m.userImages.find((img) => typeof img === 'string' && img.trim().length > 0);
-                                if (refImage) break;
-                              }
-                            }
-                            if (refImage) {
-                              onGenerateFromPlan(message.id, refImage);
-                            } else {
-                              alert('请先上传产品图片');
-                            }
-                          }}
-                          disabled={validPlanImages.some(img => img.status === 'generating')}
-                          className="flex items-center gap-1.5"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          {validPlanImages.some(img => img.status === 'generating') ? '生成中...' : '按照方案生成图片'}
-                        </Button>
+                        {validPlanImages.some(img => img.status === 'generating') && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">生成中...</span>
+                            <button
+                              onClick={onCancelRequest}
+                              className="px-3 py-1.5 text-sm rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-1"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              取消
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         {validPlanImages.map((plan, idx) => (

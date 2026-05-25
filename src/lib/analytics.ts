@@ -474,14 +474,16 @@ function inRange<T extends { createdAt: Date }>(items: T[], startDate?: Date, en
   });
 }
 
+function hasGeneratedImage(g: Generation): boolean {
+  return g.status === 'success' && typeof g.imageUrl === 'string' && g.imageUrl.trim().length > 0;
+}
+
 export async function getSummary(startDate?: Date, endDate?: Date) {
   const sessions = await getStorage().getAllSessions();
   const events = await getStorage().getAllEvents();
-  const generations = inRange(await getStorage().getAllGenerations(), startDate, endDate);
+  const allGenerations = inRange(await getStorage().getAllGenerations(), startDate, endDate);
+  const generations = allGenerations.filter(hasGeneratedImage);
   const feedbacks = inRange(await getStorage().getAllFeedbacks(), startDate, endDate);
-
-  const successfulGenerations = generations.filter((g) => g.status === 'success').length;
-  const failedGenerations = generations.filter((g) => g.status === 'failed').length;
 
   const ratings = feedbacks.filter((f) => typeof f.rating === 'number').map((f) => f.rating as number);
   const averageRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
@@ -506,8 +508,8 @@ export async function getSummary(startDate?: Date, endDate?: Date) {
     totalSessions: sessions.length,
     totalEvents: events.length,
     totalGenerations: generations.length,
-    successfulGenerations,
-    failedGenerations,
+    successfulGenerations: generations.length,
+    failedGenerations: allGenerations.filter((g) => g.status === 'failed').length,
     totalFeedbacks: feedbacks.length,
     averageRating: Math.round(averageRating * 10) / 10,
     averageDuration: Math.round(averageDuration),
@@ -519,6 +521,7 @@ export async function getSummary(startDate?: Date, endDate?: Date) {
 
 export async function getGenerations(page = 1, pageSize = 20, status?: string) {
   let list = await getStorage().getAllGenerations();
+  list = list.filter(hasGeneratedImage);
   if (status) list = list.filter((g) => g.status === status);
   list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const total = list.length;

@@ -588,7 +588,7 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     }));
   }
   
-  const planAbortController = new AbortController();
+  abortControllerRef.current = new AbortController();
   
   for (let i = 0; i < message.planImages.length; i++) {
     if (!isMounted.current) break;
@@ -608,56 +608,38 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     }
     
     try {
-      const response = await fetch('/api/chat', {
+      const requestBody: Record<string, unknown> = {
+        prompt: plan.prompt,
+        size: selectedSize,
+        quality: selectedQuality,
+        n: 1,
+      };
+      
+      const isValidImageUrl = referenceImage && (
+        referenceImage.startsWith('data:') || 
+        referenceImage.startsWith('http://') || 
+        referenceImage.startsWith('https://')
+      );
+      
+      if (isValidImageUrl) {
+        requestBody.referenceImage = referenceImage;
+        requestBody.model = 'gpt-image-2-edit';
+      } else {
+        requestBody.model = 'gpt-image-2-all';
+      }
+      
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: plan.prompt }],
-          referenceImages: [referenceImage],
-          model: 'gpt-image-2-edit',
-          size: selectedSize,
-          quality: selectedQuality,
-          n: 1,
-        }),
-        signal: planAbortController.signal,
+        body: JSON.stringify(requestBody),
+        signal: abortControllerRef.current?.signal,
       });
       
       if (!isMounted.current) break;
       if (!response.ok) throw new Error('生成失败');
       
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取响应');
-      
-      const decoder = new TextDecoder();
-      let sseBuffer = '';
-      let generatedUrl: string | null = null;
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split('\n');
-        sseBuffer = lines.pop() || '';
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          
-          try {
-            let jsonString = line;
-            if (jsonString.startsWith('data: ')) {
-              jsonString = jsonString.slice(6);
-            }
-            
-            const data = JSON.parse(jsonString);
-            if (data.type === 'image' && data.url) {
-              generatedUrl = data.url;
-            }
-          } catch {
-            // 忽略解析错误
-          }
-        }
-      }
+      const data = await response.json();
+      const generatedUrl = data.url || data.urls?.[0] || (data.images && data.images[0]);
       
       if (!isMounted.current) break;
       
@@ -697,6 +679,8 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
     
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
+  
+  abortControllerRef.current = null;
 };
 
 const generateSingleImageFromPlan = async (messageId: string, planIndex: number, referenceImage: string) => {
@@ -731,55 +715,37 @@ const generateSingleImageFromPlan = async (messageId: string, planIndex: number,
   }
   
   try {
-    const response = await fetch('/api/chat', {
+    const requestBody: Record<string, unknown> = {
+      prompt: plan.prompt,
+      size: selectedSize,
+      quality: selectedQuality,
+      n: 1,
+    };
+    
+    const isValidImageUrl = referenceImage && (
+      referenceImage.startsWith('data:') || 
+      referenceImage.startsWith('http://') || 
+      referenceImage.startsWith('https://')
+    );
+    
+    if (isValidImageUrl) {
+      requestBody.referenceImage = referenceImage;
+      requestBody.model = 'gpt-image-2-edit';
+    } else {
+      requestBody.model = 'gpt-image-2-all';
+    }
+    
+    const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: plan.prompt }],
-        referenceImages: [referenceImage],
-        model: 'gpt-image-2-edit',
-        size: selectedSize,
-        quality: selectedQuality,
-        n: 1,
-      }),
+      body: JSON.stringify(requestBody),
     });
     
     if (!isMounted.current) return;
     if (!response.ok) throw new Error('生成失败');
     
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('无法读取响应');
-    
-    const decoder = new TextDecoder();
-    let sseBuffer = '';
-    let generatedUrl: string | null = null;
-    
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      sseBuffer += decoder.decode(value, { stream: true });
-      const lines = sseBuffer.split('\n');
-      sseBuffer = lines.pop() || '';
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        try {
-          let jsonString = line;
-          if (jsonString.startsWith('data: ')) {
-            jsonString = jsonString.slice(6);
-          }
-          
-          const data = JSON.parse(jsonString);
-          if (data.type === 'image' && data.url) {
-            generatedUrl = data.url;
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    }
+    const data = await response.json();
+    const generatedUrl = data.url || data.urls?.[0] || (data.images && data.images[0]);
     
     if (!isMounted.current) return;
     
@@ -1824,6 +1790,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
               onCopyContent={copyToClipboard}
               onGenerateFromPlan={generateImagesFromPlan}
               onGenerateSingleImage={generateSingleImageFromPlan}
+              onCancelRequest={cancelRequest}
               scrollRef={scrollRef as React.RefObject<HTMLDivElement | null>}
               onScroll={handleScroll}
             />

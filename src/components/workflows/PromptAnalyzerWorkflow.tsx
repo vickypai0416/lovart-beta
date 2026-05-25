@@ -268,6 +268,7 @@ export default function PromptAnalyzerWorkflow() {
           }],
           model: 'gpt-5-nano',
           persona: 'default',
+          systemPrompt,
         }),
         signal,
       });
@@ -590,7 +591,7 @@ ${productImage ? '3. 一张产品图片' : ''}
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500 text-sm font-bold text-white">1</div>
                 <div>
                   <h3 className="text-sm font-semibold text-slate-800">上传参考图</h3>
-                  <p className="text-xs text-slate-500">选择喜欢的风格图，AI将提取风格特征</p>
+                  <p className="text-xs text-slate-500">上传喜欢的图片，AI将分析并提取其生图提示词</p>
                 </div>
               </div>
 
@@ -654,7 +655,7 @@ ${productImage ? '3. 一张产品图片' : ''}
                 className="mt-3 h-10 w-full rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-sm font-medium text-white shadow-lg hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isAnalyzing ? <><Loader2 className="h-4 w-4 animate-spin" />分析中...</>
-                  : <><Sparkles className="h-4 w-4" />开始分析</>}
+                  : <><Sparkles className="h-4 w-4" />分析图片生成提示词</>}
               </button>
 
               {error && (
