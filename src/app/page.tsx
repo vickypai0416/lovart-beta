@@ -625,11 +625,12 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     
     const croppedImages = await cropGridImages(gridUrl);
     const validImages = croppedImages.filter(Boolean) as string[];
+    const displayImages = validImages.length > 0 ? validImages : [gridUrl];
 
     if (validImages.length === 0) {
-      throw new Error('九宫格图片裁剪失败，请检查生成图片是否允许跨域访问');
+      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image instead');
     }
-    
+
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
         if (m.id !== messageId) return m;
@@ -637,13 +638,14 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
           ...m,
           isGenerating: false,
           content: '',
-          imageUrls: validImages,
+          imageUrls: displayImages,
         };
       }));
     }
-    
-    for (let i = 0; i < validImages.length; i++) {
-      await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
+
+    for (let i = 0; i < displayImages.length; i++) {
+      const label = validImages.length > 0 ? `亚马逊listing套图 - 图${i + 1}` : '亚马逊listing九宫格套图';
+      await handleSaveChatImage(displayImages[i], label, messageId);
     }
     
     const updatedHistory = await getChatHistoryWithUrls();
@@ -732,21 +734,34 @@ async function cropGridImages(gridUrl: string): Promise<(string | null)[]> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    
+    let settled = false;
+
+    const finish = (results: (string | null)[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve(results);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      console.warn('[Amazon Grid Generation] Grid image load timed out');
+      finish(Array(9).fill(null));
+    }, 30000);
+
     img.onload = () => {
       try {
         const results: (string | null)[] = [];
         const cellWidth = img.width / 3;
         const cellHeight = img.height / 3;
-        
+
         for (let i = 0; i < 9; i++) {
           const row = Math.floor(i / 3);
           const col = i % 3;
-          
+
           const canvas = document.createElement('canvas');
           canvas.width = cellWidth;
           canvas.height = cellHeight;
-          
+
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, col * cellWidth, row * cellHeight, cellWidth, cellHeight, 0, 0, cellWidth, cellHeight);
@@ -755,13 +770,14 @@ async function cropGridImages(gridUrl: string): Promise<(string | null)[]> {
             results.push(null);
           }
         }
-        resolve(results);
-      } catch {
-        resolve(Array(9).fill(null));
+        finish(results);
+      } catch (error) {
+        console.warn('[Amazon Grid Generation] Grid crop failed:', error);
+        finish(Array(9).fill(null));
       }
     };
-    
-    img.onerror = () => resolve(Array(9).fill(null));
+
+    img.onerror = () => finish(Array(9).fill(null));
     img.src = gridUrl;
   });
 }

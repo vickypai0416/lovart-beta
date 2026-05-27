@@ -98,6 +98,29 @@ function extractImageUrls(data: unknown): string[] {
   return imageUrls;
 }
 
+async function normalizeImageUrlsForClient(imageUrls: string[]): Promise<string[]> {
+  return Promise.all(imageUrls.map(async (imageUrl) => {
+    if (imageUrl.startsWith('data:')) return imageUrl;
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) return imageUrl;
+
+    try {
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        console.warn('[Generate API] 图片 URL 服务端下载失败:', response.status, imageUrl);
+        return imageUrl;
+      }
+
+      const contentType = response.headers.get('content-type') || 'image/png';
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+      return `data:${contentType};base64,${base64}`;
+    } catch (error) {
+      console.warn('[Generate API] 图片 URL 转 base64 失败:', error);
+      return imageUrl;
+    }
+  }));
+}
+
 async function imageToBlob(referenceImage: string): Promise<Blob> {
   if (referenceImage.startsWith('data:')) {
     const base64Data = referenceImage.split(',')[1];
@@ -309,18 +332,21 @@ export async function POST(request: NextRequest) {
         const imageUrls = extractImageUrls(data);
         
         if (imageUrls.length > 0) {
+          const clientImageUrls = await normalizeImageUrlsForClient(imageUrls);
           console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
           if (generationId) {
             await updateGeneration(generationId, {
               status: 'success',
-              imageUrl: imageUrls[0],
+              imageUrl: clientImageUrls[0],
               duration: Date.now() - startTime,
             });
           }
           return NextResponse.json({
             success: true,
-            url: imageUrls[0],
-            urls: imageUrls,
+            url: clientImageUrls[0],
+            urls: clientImageUrls,
+            originalUrl: imageUrls[0],
+            originalUrls: imageUrls,
             size,
             specType,
             model: modelName,
