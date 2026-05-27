@@ -126,7 +126,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { 
-      product, 
+      clientRequestId,
+      product,
       scene, 
       size = '1024x1024', 
       specType = 'main',
@@ -168,6 +169,7 @@ export async function POST(request: NextRequest) {
     
     generationId = (await createGeneration({
       sessionId,
+      clientRequestId: typeof clientRequestId === 'string' ? clientRequestId : undefined,
       prompt: finalPrompt,
       size,
       quality,

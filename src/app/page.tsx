@@ -403,6 +403,35 @@ export default function Home() {
     }
   };
 
+  const formatGenerationError = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return '未知错误';
+    }
+  };
+
+  const recoverGeneratedImage = async (clientRequestId: string): Promise<string | null> => {
+    for (let i = 0; i < 40; i++) {
+      try {
+        const response = await fetch(`/api/generate/status?clientRequestId=${encodeURIComponent(clientRequestId)}`, {
+          cache: 'no-store',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success' && data.url) return data.url;
+          if (data.status === 'failed') throw new Error(data.error || '图片生成失败');
+        }
+      } catch (error) {
+        console.warn('[Generate Recovery] 查询生成状态失败:', error);
+      }
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    return null;
+  };
+
   const handleDeleteChatImage = async (imageId: string) => {
     await deleteChatImage(imageId);
     const updated = await getChatHistoryWithUrls();
@@ -583,7 +612,8 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
 
 const generateAmazonGridImage = async (messageId: string, referenceImage: string | undefined, userContent: string = '') => {
   abortControllerRef.current = new AbortController();
-  
+  const clientRequestId = `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
   try {
     const isValidReferenceImage = !!referenceImage && (referenceImage.startsWith('data:') || referenceImage.startsWith('http://') || referenceImage.startsWith('https://'));
     if (!isValidReferenceImage) {
@@ -594,6 +624,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     const gridPrompt = userContent ? `${basePrompt}，${userContent}` : basePrompt;
     
     const requestBody: Record<string, unknown> = {
+      clientRequestId,
       prompt: gridPrompt,
       // 九宫格大图：使用云雾 edits 接口支持的 2048 正方形（3840 不在支持列表会导致上游拒绝）
       size: '2048x2048',
@@ -661,8 +692,36 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       return;
     }
     console.error('[Amazon Grid Generation] Failed:', error);
-    const errorMessage = error instanceof Error ? error.message : '未知错误';
-    
+    const recoveredUrl = await recoverGeneratedImage(clientRequestId);
+    if (recoveredUrl) {
+      const croppedImages = await cropGridImages(recoveredUrl);
+      const validImages = croppedImages.filter(Boolean) as string[];
+      const displayImages = validImages.length > 0 ? validImages : [recoveredUrl];
+
+      if (isMounted.current) {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            isGenerating: false,
+            content: '',
+            imageUrls: displayImages,
+          };
+        }));
+      }
+
+      for (let i = 0; i < displayImages.length; i++) {
+        const label = validImages.length > 0 ? `亚马逊listing套图 - 图${i + 1}` : '亚马逊listing九宫格套图';
+        await handleSaveChatImage(displayImages[i], label, messageId);
+      }
+
+      const updatedHistory = await getChatHistoryWithUrls();
+      setChatImageHistory(updatedHistory);
+      return;
+    }
+
+    const errorMessage = formatGenerationError(error);
+
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
         if (m.id !== messageId) return m;

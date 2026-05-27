@@ -19,6 +19,7 @@ export interface Event {
 export interface Generation {
   id: string;
   sessionId: string;
+  clientRequestId?: string;
   prompt: string;
   displayPrompt?: string;
   size: string;
@@ -453,6 +454,7 @@ export async function getEventsBySession(sessionId: string): Promise<Event[]> { 
 export async function createGeneration(data: Omit<Generation, 'id' | 'createdAt'>): Promise<Generation> { return getStorage().createGeneration(data); }
 export async function updateGeneration(id: string, updates: Partial<Generation>): Promise<void> { return getStorage().updateGeneration(id, updates); }
 export async function getGenerationsBySession(sessionId: string): Promise<Generation[]> { return getStorage().getGenerationsBySession(sessionId); }
+export async function getAllGenerationRecords(): Promise<Generation[]> { return getStorage().getAllGenerations(); }
 export async function createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback> { return getStorage().createFeedback(data); }
 export async function getFeedbacksBySession(sessionId: string): Promise<Feedback[]> { return getStorage().getFeedbacksBySession(sessionId); }
 export async function createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> { return getStorage().createMessage(data); }
