@@ -54,7 +54,9 @@ export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'ti
   };
 
   if (item.url) {
-    await saveImageBlobFromUrl(newItem.id, item.url);
+    await saveImageBlobFromUrl(newItem.id, item.url).catch((error) => {
+      console.warn('[History] 缓存电商图片失败，保留原始 URL:', error);
+    });
   }
 
   let currentSession = history.sessions.find(
@@ -199,7 +201,9 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
   };
 
   if (url) {
-    await saveImageBlobFromUrl(newItem.id, url);
+    await saveImageBlobFromUrl(newItem.id, url).catch((error) => {
+      console.warn('[History] 缓存聊天图片失败，保留原始 URL:', error);
+    });
   }
 
   history.unshift(newItem);
@@ -340,5 +344,6 @@ export {
   getRecentImages as getImgGenHistoryWithUrls,
   deleteImage as deleteImgGenImage,
   clearHistory as clearImgGenHistory,
-  ImageHistoryItem as ImgGenHistoryItem,
 };
+
+export type { ImageHistoryItem as ImgGenHistoryItem };

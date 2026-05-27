@@ -380,22 +380,26 @@ export default function Home() {
   }, [messages]);
 
   const handleSaveChatImage = async (url: string, prompt: string, messageId?: string) => {
-    const item = await saveChatImageToHistory(url, prompt);
-    const updated = await getChatHistoryWithUrls();
-    setChatImageHistory(updated);
-    const persistedUrl = await getImageUrl(item.id, url);
-    if (messageId) {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== messageId) return m;
-        const urls = m.imageUrls || [];
-        const idx = urls.indexOf(url);
-        if (idx >= 0) {
-          const newUrls = [...urls];
-          newUrls[idx] = persistedUrl;
-          return { ...m, imageUrls: newUrls };
-        }
-        return m;
-      }));
+    try {
+      const item = await saveChatImageToHistory(url, prompt);
+      const updated = await getChatHistoryWithUrls();
+      setChatImageHistory(updated);
+      const persistedUrl = await getImageUrl(item.id, url);
+      if (messageId) {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== messageId) return m;
+          const urls = m.imageUrls || [];
+          const idx = urls.indexOf(url);
+          if (idx >= 0) {
+            const newUrls = [...urls];
+            newUrls[idx] = persistedUrl;
+            return { ...m, imageUrls: newUrls };
+          }
+          return m;
+        }));
+      }
+    } catch (error) {
+      console.warn('[Chat Image] 保存图片历史失败，保留当前消息图片:', error);
     }
   };
 
