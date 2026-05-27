@@ -155,5 +155,68 @@
     "imageCount": 1,
     "id": "1779249813357-7nejblmnz",
     "createdAt": "2026-05-20T04:03:33.357Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "用于情人节的袜子",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779760382273-zsr8mc75p",
+    "createdAt": "2026-05-26T01:53:02.273Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "父亲节毛毯",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779762020189-t67o5lbkm",
+    "createdAt": "2026-05-26T02:20:20.189Z"
+  },
+  {
+    "sessionId": "1778234519283-wbm25f4la",
+    "content": "40x50 / 50x60 / 60x80\nMade in USA”",
+    "model": "gpt-5-nano",
+    "hasImages": false,
+    "imageCount": 0,
+    "id": "1779762084332-d5x0mv5na",
+    "createdAt": "2026-05-26T02:21:24.332Z"
+  },
+  {
+    "sessionId": "1779767002306-wrggvqjwl",
+    "content": "亚克力夜灯",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779767071749-1gezowcj7",
+    "createdAt": "2026-05-26T03:44:31.750Z"
+  },
+  {
+    "sessionId": "1778812002931-u59r5g2fa",
+    "content": "亚克力夜灯",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779767354270-xy04cn6qd",
+    "createdAt": "2026-05-26T03:49:14.270Z"
+  },
+  {
+    "sessionId": "1778812002931-u59r5g2fa",
+    "content": "亚克力夜灯",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779780583340-ue5mpnweq",
+    "createdAt": "2026-05-26T07:29:43.340Z"
+  },
+  {
+    "sessionId": "1779767002306-wrggvqjwl",
+    "content": "亚克力夜灯",
+    "model": "gpt-5-nano",
+    "hasImages": true,
+    "imageCount": 1,
+    "id": "1779780771340-cd508aadt",
+    "createdAt": "2026-05-26T07:32:51.340Z"
   }
 ]
