@@ -8,10 +8,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, History } from 'lucide-react';
+import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, History, ZoomIn } from 'lucide-react';
 import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearImgGenHistory, ImgGenHistoryItem } from '@/lib/history-manager';
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { isRateLimitError } from '@/lib/upstream-api-error';
 
 const compressImageToDataUrl = async (
     file: File,
@@ -49,10 +50,6 @@ const compressImageToDataUrl = async (
       dataUrl = tryEncode(q);
     }
 
-    if (getBytes(dataUrl) > maxBytes) {
-      throw new Error('图片压缩后仍过大');
-    }
-
     return dataUrl;
   };
 
@@ -74,13 +71,21 @@ export default function ImageGeneratorWorkflow() {
   const [promptTemplates, setPromptTemplates] = useState<Array<{id: string; content: string; author?: string; likes: number}>>([]);
   const [newPromptContent, setNewPromptContent] = useState('');
   const [newPromptAuthor, setNewPromptAuthor] = useState('');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generationIdRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       getImgGenHistoryWithUrls().then(setImageHistory);
     }
+    
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -89,74 +94,58 @@ export default function ImageGeneratorWorkflow() {
     }
   }, [activeTab]);
 
-  const refreshImageHistory = async () => {
-    const updatedHistory = await getImgGenHistoryWithUrls();
-    setImageHistory(updatedHistory);
-  };
-
   const fetchPromptTemplates = async () => {
     try {
       const response = await fetch('/api/prompt-templates');
       const data = await response.json();
       setPromptTemplates(data.templates || []);
-    } catch (error) {
-      console.error('[Prompt Templates] Failed to fetch:', error);
+    } catch {
+      console.error('Failed to fetch templates');
     }
   };
 
-  const savePromptToLibrary = async () => {
+  const savePromptTemplate = async () => {
     if (!newPromptContent.trim()) return;
     try {
       await fetch('/api/prompt-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newPromptContent, author: newPromptAuthor || undefined }),
+        body: JSON.stringify({ content: newPromptContent, author: newPromptAuthor }),
       });
       setNewPromptContent('');
       setNewPromptAuthor('');
       fetchPromptTemplates();
-    } catch (error) {
-      console.error('[Prompt Templates] Failed to save:', error);
+    } catch {
+      console.error('Failed to save template');
     }
   };
 
-  const likePrompt = async (id: string) => {
+  const likeTemplate = async (id: string) => {
     try {
       await fetch('/api/prompt-templates', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'like' }),
+        body: JSON.stringify({ id }),
       });
       fetchPromptTemplates();
-    } catch (error) {
-      console.error('[Prompt Templates] Failed to like:', error);
+    } catch {
+      console.error('Failed to like template');
     }
   };
-
-  const usePrompt = (content: string) => {
-    setPrompt(content);
-    setActiveTab('generator');
-  };
-
-  const sizes = [
-    { value: '1024x1024', label: '1024×1024 (1:1)' },
-    { value: '1536x1024', label: '1536×1024 (3:2)' },
-    { value: '1024x1536', label: '1024×1536 (2:3)' },
-    { value: '2000x1125', label: '2000×1125 (16:9)' },
-    { value: '1125x2000', label: '1125×2000 (9:16)' },
-    { value: '2000x2000', label: '2000×2000 (1:1 高清)' },
-  ];
 
   const models = [
     { value: 'gpt-image-2-all', label: 'GPT Image 2 All' },
   ];
 
+  const sizes = [
+    { value: '1024x1024', label: '1:1 方形' },
+    { value: '1024x1536', label: '2:3 竖版' },
+    { value: '1536x1024', label: '3:2 横版' },
+  ];
+
   const presetTemplates = [
-    { label: '主图白底', prompt: 'Professional product photography on pure white background, studio lighting, centered composition, clean and minimal, Amazon main image style, high resolution product shot' },
-    { label: '场景图', prompt: 'Product in lifestyle scene, natural environment setting, warm ambient lighting, contextual usage display, professional e-commerce photography' },
-    { label: '细节图', prompt: 'Extreme close-up product detail shot, macro photography, highlighting texture and material quality, sharp focus, professional studio lighting' },
-    { label: '生活方式图', prompt: 'Product in real-life usage scenario, model interacting with product, aspirational lifestyle setting, natural lighting, editorial photography style' },
-    { label: '对比图', prompt: 'Before and after comparison, split composition showing product effectiveness, clean layout, professional advertising style' },
+    { label: '白底主图', prompt: 'Professional product photography, clean white background, studio lighting, commercial quality, high detail, e-commerce style' },
+    { label: '场景展示', prompt: 'Product in lifestyle setting, natural environment, soft lighting, authentic atmosphere, commercial photography' },
     { label: '节日主题', prompt: 'Product with festive holiday decoration, seasonal theme, celebratory atmosphere, gift-ready presentation, warm and inviting mood' },
   ];
 
@@ -204,16 +193,16 @@ export default function ImageGeneratorWorkflow() {
     const maxRetries = 2;
     const timeoutMs = 300000;
 
+    abortControllerRef.current = new AbortController();
+    
     for (let retry = 0; retry <= maxRetries; retry++) {
       try {
-        const controller = new AbortController();
-        
         const timeoutId = setTimeout(() => {
           console.log(`[Generate] Timeout after ${timeoutMs}ms, aborting request`);
-          controller.abort();
+          abortControllerRef.current?.abort();
         }, timeoutMs);
 
-        controller.signal.addEventListener('abort', (ev) => {
+        abortControllerRef.current.signal.addEventListener('abort', (ev) => {
           console.log(`[Generate] AbortController signal aborted, reason:`, ev);
         });
 
@@ -238,7 +227,7 @@ export default function ImageGeneratorWorkflow() {
             model: selectedModel,
             ...(referenceImages.length > 0 ? { referenceImages } : {}),
           }),
-          signal: controller.signal,
+          signal: abortControllerRef.current.signal,
         });
 
         clearTimeout(timeoutId);
@@ -257,35 +246,40 @@ export default function ImageGeneratorWorkflow() {
           }
           const safeText = (rawText || '').trim();
           const errorMessage = safeText
-            ? `生成失败: ${safeText.slice(0, 220)}`
-            : `生成失败: 请求返回非 JSON (${response.status})`;
-          throw new Error(errorMessage);
-        }
-
-        if (!response.ok) {
-          if (retry < maxRetries) {
-            console.log(`[Generate] 第 ${retry + 1} 次请求失败，正在重试...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            continue;
+            ? `服务器返回非 JSON 格式: ${safeText.substring(0, 100)}`
+            : '服务器返回空响应';
+          alert(errorMessage);
+          if (generationId) {
+            await updateGeneration(generationId, {
+              status: 'failed',
+              error: errorMessage,
+              duration: Date.now() - startTime,
+            });
           }
-          const message = result?.error || result?.message || `请求失败 (${response.status})`;
-          throw new Error(message);
+          break;
         }
 
-        if (result?.success) {
+        if (response.ok && result) {
           const urls = result.urls || (result.url ? [result.url] : []);
+          
           if (urls.length > 0) {
-            await Promise.all(urls.map((url: string) => saveImgGenHistory({
-              url,
-              prompt: prompt.trim(),
-              productName: '图片生成器',
-              scene: prompt.trim() || '图片生成',
-              platform: selectedModel,
-              size: selectedSize,
-            })));
-            await refreshImageHistory();
+            console.log(`[Generate] 图片生成成功: ${urls.length} 张`);
             setGeneratedImages(urls);
             setEnglishPrompt('');
+            
+            for (const url of urls) {
+              await saveImgGenHistory({
+                url,
+                prompt: englishPrompt || prompt.trim() || '图片生成',
+                size: selectedSize,
+                productName: 'Custom Product',
+                scene: 'Everyday',
+                platform: 'general',
+              });
+            }
+            
+            const updated = await getImgGenHistoryWithUrls();
+            setImageHistory(updated);
             
             if (generationId) {
               await updateGeneration(generationId, {
@@ -306,12 +300,16 @@ export default function ImageGeneratorWorkflow() {
             }
           }
         } else {
-          if (retry < maxRetries) {
+          const errorText = String(result?.error || result?.message || '');
+          const rateLimited = isRateLimitError(response.status, errorText);
+          if (retry < maxRetries && !rateLimited) {
             console.log(`[Generate] 第 ${retry + 1} 次请求失败，正在重试...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
-          const errorMsg = '生成失败: ' + (result?.error || result?.message || '未知错误');
+          const errorMsg = rateLimited
+            ? '生成失败: 上游负载已满 (429)，请稍后再试，勿重复点击'
+            : '生成失败: ' + (errorText || '未知错误');
           alert(errorMsg);
           if (generationId) {
             await updateGeneration(generationId, {
@@ -331,12 +329,15 @@ export default function ImageGeneratorWorkflow() {
           console.log(`[Generate] 请求被中止，可能是超时或手动取消`);
         }
         
-        if (retry < maxRetries) {
+        const rateLimited = error instanceof Error && isRateLimitError(429, error.message);
+        if (retry < maxRetries && !rateLimited) {
           console.log(`[Generate] 等待 2 秒后重试...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
-        const errorMsg = '生成失败，请重试: ' + (error instanceof Error ? error.message : '网络错误');
+        const errorMsg = rateLimited
+          ? '生成失败: 上游负载已满 (429)，请稍后再试，勿重复点击'
+          : '生成失败，请重试: ' + (error instanceof Error ? error.message : '网络错误');
         alert(errorMsg);
         if (generationId) {
           await updateGeneration(generationId, {
@@ -348,6 +349,7 @@ export default function ImageGeneratorWorkflow() {
       }
     }
 
+    abortControllerRef.current = null;
     setIsGenerating(false);
   };
 
@@ -358,30 +360,42 @@ export default function ImageGeneratorWorkflow() {
       const response = await fetch('/api/enhance-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrl: referenceImages[0],
-          userDescription: prompt.trim() || undefined,
-        }),
+        body: JSON.stringify({ images: referenceImages }),
       });
-      const result = await response.json();
-      if (result.success) {
-        setPrompt(result.displayPrompt || '');
-        setEnglishPrompt(result.prompt || '');
-      } else {
-        alert('AI识别失败: ' + (result.error || '请重试'));
+      const data = await response.json();
+      if (data.prompt) {
+        setEnglishPrompt(data.prompt);
       }
     } catch (error) {
-      console.error('AI识别失败:', error);
-      alert('AI识别失败，请重试');
-    } finally {
-      setIsEnhancing(false);
+      console.error('Failed to enhance prompt:', error);
     }
+    setIsEnhancing(false);
   };
 
-  const applyTemplate = (template: typeof presetTemplates[number]) => {
+  const applyTemplate = (template: { label: string; prompt: string }) => {
     setPrompt(template.prompt);
-    setEnglishPrompt('');
     setShowTemplates(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        try {
+          const compressed = await compressImageToDataUrl(file);
+          setReferenceImages(prev => [...prev, compressed]);
+        } catch {
+          console.error('Failed to compress image');
+        }
+      }
+    }
+    e.target.value = '';
+  };
+
+  const removeReferenceImage = (index: number) => {
+    setReferenceImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const downloadImage = (url?: string) => {
@@ -412,36 +426,40 @@ export default function ImageGeneratorWorkflow() {
           <div className="flex border-l border-gray-200 pl-3">
             <button
               onClick={() => setActiveTab('generator')}
-              className={`px-3 py-1 text-xs font-medium rounded-l-lg transition-colors ${
-                activeTab === 'generator' ? 'bg-black text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                activeTab === 'generator'
+                  ? 'bg-black text-white'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              图片生成
+              生成
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                activeTab === 'history'
+                  ? 'bg-black text-white'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              历史
             </button>
             <button
               onClick={() => setActiveTab('prompts')}
-              className={`px-3 py-1 text-xs font-medium transition-colors flex items-center gap-1 ${
-                activeTab === 'prompts' ? 'bg-black text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                activeTab === 'prompts'
+                  ? 'bg-black text-white'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Sparkles size={12} />
-              提示词库
-            </button>
-            <button
-              onClick={async () => { setActiveTab('history'); await refreshImageHistory(); }}
-              className={`px-3 py-1 text-xs font-medium rounded-r-lg transition-colors flex items-center gap-1 ${
-                activeTab === 'history' ? 'bg-black text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <History size={12} />
-              图片历史 ({imageHistory.length})
+              提示词
             </button>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <Select value={selectedModel} onValueChange={setSelectedModel}>
             <SelectTrigger className="w-36 h-8 text-xs border-gray-200">
-              <SelectValue placeholder="选择模型" />
+              <SelectValue placeholder="模型" />
             </SelectTrigger>
             <SelectContent>
               {models.map((model) => (
@@ -452,8 +470,8 @@ export default function ImageGeneratorWorkflow() {
             </SelectContent>
           </Select>
           <Select value={selectedSize} onValueChange={setSelectedSize}>
-            <SelectTrigger className="w-36 h-8 text-xs border-gray-200">
-              <SelectValue placeholder="选择尺寸" />
+            <SelectTrigger className="w-28 h-8 text-xs border-gray-200">
+              <SelectValue placeholder="尺寸" />
             </SelectTrigger>
             <SelectContent>
               {sizes.map((size) => (
@@ -495,22 +513,25 @@ export default function ImageGeneratorWorkflow() {
               {generatedImages.length > 0 && (
                 <div className="mt-3 pt-3">
                   {generatedImages.length === 1 ? (
-                    <div className="relative group rounded-xl overflow-hidden border border-gray-100">
+                    <div className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer" onClick={() => setPreviewImage(generatedImages[0])}>
                       <img
                         src={generatedImages[0]}
                         alt="Generated"
                         className="w-full max-h-96 object-contain bg-gray-50"
                       />
-                      <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <ZoomIn className="w-8 h-8 text-white" />
+                      </div>
+                      <div className="absolute bottom-3 right-3 flex gap-2">
                         <button
-                          onClick={() => downloadImage(generatedImages[0])}
+                          onClick={(e) => { e.stopPropagation(); downloadImage(generatedImages[0]); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-black/80 text-white rounded-lg text-xs font-medium hover:bg-black transition-colors"
                         >
                           <Download size={14} />
                           下载
                         </button>
                         <button
-                          onClick={generateImage}
+                          onClick={(e) => { e.stopPropagation(); generateImage(); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-black/80 text-white rounded-lg text-xs font-medium hover:bg-black transition-colors"
                         >
                           <RefreshCw size={14} />
@@ -522,18 +543,21 @@ export default function ImageGeneratorWorkflow() {
                     <div className="space-y-3">
                       <div className={`grid gap-3 ${generatedImages.length === 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
                         {generatedImages.map((url, index) => (
-                          <div key={index} className="relative group rounded-xl overflow-hidden border border-gray-100">
+                          <div key={index} className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer" onClick={() => setPreviewImage(url)}>
                             <img
                               src={url}
                               alt={`Generated ${index + 1}`}
                               className="w-full aspect-square object-contain bg-gray-50"
                             />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <ZoomIn className="w-6 h-6 text-white" />
+                            </div>
                             <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 text-white rounded text-xs font-medium">
                               {index + 1}
                             </div>
-                            <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute bottom-2 right-2 flex gap-1">
                               <button
-                                onClick={() => downloadImage(url)}
+                                onClick={(e) => { e.stopPropagation(); downloadImage(url); }}
                                 className="p-1.5 bg-black/80 text-white rounded-lg text-xs hover:bg-black transition-colors"
                               >
                                 <Download size={12} />
@@ -572,366 +596,274 @@ export default function ImageGeneratorWorkflow() {
                 </div>
               )}
               {isGenerating && (
-                <div className="flex justify-start">
-                  <div className="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-sm shadow-sm">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                  </div>
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-16 h-16 border-4 border-gray-200 border-t-black rounded-full animate-spin mb-4"></div>
+                  <p className="text-gray-500 text-sm">正在生成图片...</p>
                 </div>
               )}
             </div>
-          ) : null}
-        </div>
-      )}
-
-      {activeTab === 'prompts' && (
-        <div className="flex-1 overflow-y-auto px-8 pb-4">
-          <div className="space-y-6">
-            <div className="py-4">
-              <h3 className="text-2xl font-bold text-gray-900 mb-2 text-center">提示词库</h3>
-              <p className="text-gray-400 text-center font-light">所有用户共享的优质提示词</p>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+              <ImageIcon className="w-16 h-16 mb-4 opacity-50" />
+              <p className="text-sm">输入提示词开始生成图片</p>
+              <p className="text-xs mt-1">支持中英文提示词</p>
             </div>
-
-            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-              <h4 className="text-sm font-medium text-gray-700">保存你的优质提示词</h4>
-              <textarea
-                value={newPromptContent}
-                onChange={(e) => setNewPromptContent(e.target.value)}
-                placeholder="输入你的提示词..."
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-black/20"
-                rows={3}
-              />
-              <div className="flex items-center justify-between">
-                <input
-                  type="text"
-                  value={newPromptAuthor}
-                  onChange={(e) => setNewPromptAuthor(e.target.value)}
-                  placeholder="你的名字（可选）"
-                  className="flex-1 mr-3 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/20"
-                />
-                <button
-                  onClick={savePromptToLibrary}
-                  disabled={!newPromptContent.trim()}
-                  className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  保存
-                </button>
-              </div>
-            </div>
-
-            {promptTemplates.length === 0 ? (
-              <div className="text-center py-12">
-                <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">暂无提示词</p>
-                <p className="text-gray-400 text-sm mt-1">成为第一个贡献者吧！</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {promptTemplates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="bg-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer group"
-                  >
-                    <p className="text-sm text-gray-700 line-clamp-4 mb-3">{template.content}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">
-                        {template.author || '匿名用户'}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); likePrompt(template.id); }}
-                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-500 transition-colors"
-                        >
-                          <span>❤️</span>
-                          <span>{template.likes}</span>
-                        </button>
-                        <button
-                          onClick={() => usePrompt(template.content)}
-                          className="px-2 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-800 transition-colors"
-                        >
-                          使用
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       )}
 
       {activeTab === 'history' && (
-        <div className="flex-1 overflow-y-auto px-8 pb-4">
-          <div className="space-y-6">
-            <div className="py-4">
-              <h3 className="text-2xl font-bold text-gray-900 mb-2 text-center">图片历史</h3>
-              <p className="text-gray-400 text-center font-light">共 {imageHistory.length} 张历史图片</p>
-            </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">生成历史</h3>
+            {imageHistory.length > 0 && (
+              <button
+                onClick={async () => { await clearImgGenHistory(); setImageHistory([]); }}
+                className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1"
+              >
+                <Trash2 size={14} />
+                清空全部
+              </button>
+            )}
+          </div>
 
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">
-                点击图片可放大查看，悬停可删除
-              </span>
-              {imageHistory.length > 0 && (
-                <button
-                  onClick={async () => { await clearImgGenHistory(); setImageHistory([]); }}
-                  className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1"
-                >
-                  <Trash2 size={14} />
-                  清空全部
-                </button>
-              )}
+          {imageHistory.length === 0 ? (
+            <div className="border border-gray-100 rounded-2xl p-12 text-center bg-gray-50">
+              <ImageIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+              <p className="text-gray-500 text-lg">暂无图片历史</p>
+              <p className="text-gray-400 mt-2">
+                生成图片后会自动保存到这里
+              </p>
+              <button
+                className="mt-4 px-4 py-2 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
+                onClick={() => setActiveTab('generator')}
+              >
+                开始生成图片
+              </button>
             </div>
-
-            {imageHistory.length === 0 ? (
-              <div className="border border-gray-100 rounded-2xl p-12 text-center bg-gray-50">
-                <ImageIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-500 text-lg">暂无图片历史</p>
-                <p className="text-gray-400 mt-2">
-                  生成图片后会自动保存到这里
-                </p>
-                <button
-                  className="mt-4 px-4 py-2 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
-                  onClick={() => setActiveTab('generator')}
-                >
-                  开始生成图片
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {imageHistory.map((item) => {
-                  const hasImage = Boolean(item.url);
-                  return (
-                    <div key={item.id} className="group relative">
-                      <div
-                        className={`relative aspect-square rounded-xl overflow-hidden border border-gray-100 transition-shadow ${hasImage ? 'cursor-pointer hover:shadow-md' : 'cursor-default bg-gray-50'}`}
-                        onClick={() => {
-                          if (!hasImage) return;
-                          setGeneratedImages([item.url]);
-                          setActiveTab('generator');
-                        }}
-                      >
-                        {hasImage ? (
-                          <img
-                            src={item.url}
-                            alt={item.prompt}
-                            className="w-full h-full object-cover"
-                            onError={async () => {
-                              await refreshImageHistory();
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-4 text-center text-gray-400">
-                            <ImageIcon size={28} />
-                            <p className="text-xs">图片已失效</p>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await refreshImageHistory();
-                              }}
-                              className="px-2 py-1 text-[11px] rounded-md border border-gray-200 text-gray-500 hover:bg-white"
-                            >
-                              重试加载
-                            </button>
-                          </div>
-                        )}
-                        {hasImage && <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
-                        {hasImage && (
-                          <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-white text-xs line-clamp-2">{item.prompt}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-white/70 text-[10px]">{item.size}</span>
-                              <span className="text-white/70 text-[10px]">·</span>
-                              <span className="text-white/70 text-[10px]">{item.model}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {imageHistory.map((item) => {
+                const hasImage = Boolean(item.url);
+                return (
+                  <div key={item.id} className="group relative">
+                    <div
+                      className={`aspect-square rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 ${
+                        hasImage ? 'cursor-pointer' : ''
+                      }`}
+                      onClick={() => hasImage && setPreviewImage(item.url)}
+                    >
+                      {hasImage ? (
+                        <img
+                          src={item.url}
+                          alt={item.prompt || 'Generated'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ImageIcon className="w-8 h-8 text-gray-300" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="absolute -top-2 -right-2 flex gap-1">
                       <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await deleteImgGenImage(item.id);
-                          await refreshImageHistory();
-                        }}
-                        className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                        onClick={() => hasImage && downloadImage(item.url)}
+                        className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-800"
+                      >
+                        <Download size={12} />
+                      </button>
+                      <button
+                        onClick={() => deleteImgGenImage(item.id).then(() => getImgGenHistoryWithUrls().then(setImageHistory))}
+                        className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                       >
                         <X size={12} />
                       </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {activeTab === 'generator' && (
-        <div className="p-6 pt-2">
-          <div className="relative border border-gray-200 rounded-2xl bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300 transition-all">
+      {activeTab === 'prompts' && (
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">保存提示词模板</h3>
+            <textarea
+              value={newPromptContent}
+              onChange={(e) => setNewPromptContent(e.target.value)}
+              placeholder="输入提示词内容..."
+              className="w-full h-20 px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-black"
+            />
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="text"
+                value={newPromptAuthor}
+                onChange={(e) => setNewPromptAuthor(e.target.value)}
+                placeholder="作者（可选）"
+                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black"
+              />
+              <button
+                onClick={savePromptTemplate}
+                disabled={!newPromptContent.trim()}
+                className="px-4 py-1.5 bg-black text-white text-sm rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">已保存的模板</h3>
+          {promptTemplates.length === 0 ? (
+            <p className="text-gray-400 text-sm">暂无保存的模板</p>
+          ) : (
+            <div className="space-y-2">
+              {promptTemplates.map((template) => (
+                <div key={template.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-700">{template.content}</p>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-xs text-gray-400">
+                      {template.author || '匿名'}
+                    </span>
+                    <button
+                      onClick={() => likeTemplate(template.id)}
+                      className="text-xs text-gray-500 hover:text-red-500 flex items-center gap-1"
+                    >
+                      <Sparkles size={12} />
+                      {template.likes}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="p-4 pt-2 border-t border-gray-100">
+        {referenceImages.length > 0 && (
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {referenceImages.map((img, index) => (
+              <div key={index} className="inline-flex items-center gap-2 px-2 py-1 bg-gray-100 rounded-lg">
+                <img src={img} alt={`参考图 ${index + 1}`} className="w-10 h-10 object-cover rounded" />
+                <span className="text-xs text-gray-500">{index + 1}</span>
+                <button onClick={() => removeReferenceImage(index)} className="text-gray-400 hover:text-red-500">
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <div className="flex-1 relative">
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="描述你想要生成的图片..."
-              className="w-full h-24 p-4 resize-none outline-none text-gray-700 placeholder-gray-300 bg-transparent rounded-t-2xl"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   if (!isGenerating) generateImage();
                 }
               }}
+              placeholder="描述你想要生成的图片..."
+              className="w-full px-4 py-3 pr-12 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-black min-h-[48px] max-h-32"
+              rows={1}
             />
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={async (e) => {
-                const files = e.target.files;
-                if (!files || files.length === 0) return;
-                
-                const maxImages = 16;
-                const maxTotalSize = 50 * 1024 * 1024;
-                
-                let totalSize = referenceImages.reduce((acc, img) => {
-                  if (img.startsWith('data:')) {
-                    const base64Data = img.split(',')[1];
-                    return acc + Math.floor((base64Data.length * 3) / 4);
-                  }
-                  return acc;
-                }, 0);
-                
-                const processedImages: string[] = [];
-                
-                for (let i = 0; i < files.length; i++) {
-                  const file = files[i];
-                  
-                  if (referenceImages.length + processedImages.length >= maxImages) {
-                    alert(`最多上传 ${maxImages} 张图片`);
-                    break;
-                  }
-                  
-                  try {
-                    const compressedDataUrl = await compressImageToDataUrl(file);
-                    const compressedSize = Math.floor((compressedDataUrl.split(',')[1].length * 3) / 4);
-                    
-                    if (totalSize + compressedSize > maxTotalSize) {
-                      alert('总文件大小不能超过 50MB');
-                      break;
-                    }
-                    
-                    totalSize += compressedSize;
-                    processedImages.push(compressedDataUrl);
-                  } catch (error) {
-                    console.error('图片压缩失败:', error);
-                    alert(`图片压缩失败: ${error instanceof Error ? error.message : '未知错误'}`);
-                  }
-                }
-                
-                if (processedImages.length > 0) {
-                  setReferenceImages((prev) => [...prev, ...processedImages]);
-                }
-                
-                e.target.value = '';
-              }}
-            />
-            {referenceImages.length > 0 && (
-              <div className="px-4 py-2 border-t border-gray-50">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {referenceImages.map((img, index) => (
-                    <div key={index} className="inline-flex items-center gap-2 px-2 py-1 bg-gray-100 rounded-lg">
-                      <img src={img} alt={`参考图 ${index + 1}`} className="w-10 h-10 object-cover rounded" />
-                      <span className="text-xs text-gray-500">{index + 1}</span>
-                      <button
-                        onClick={() => setReferenceImages((prev) => prev.filter((_, i) => i !== index))}
-                        className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setReferenceImages([])}
-                    className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1"
-                  >
-                    清空全部
-                  </button>
-                  <button
-                    onClick={enhancePrompt}
-                    disabled={isEnhancing}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      isEnhancing
-                        ? 'bg-purple-100 text-purple-400 cursor-not-allowed'
-                        : 'bg-purple-500 text-white hover:bg-purple-600 shadow-sm'
-                    }`}
-                  >
-                    <Sparkles size={14} className={isEnhancing ? 'animate-pulse' : ''} />
-                    {isEnhancing ? 'AI识别中...' : 'AI识别生成提示词'}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center justify-between px-3 py-2 border-t border-gray-50">
-              <div className="flex items-center gap-2">
-                <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors" title="上传参考图">
-                  <Paperclip size={18} />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              {referenceImages.length > 0 && (
+                <button
+                  onClick={enhancePrompt}
+                  disabled={isEnhancing}
+                  className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors"
+                  title="AI 优化提示词"
+                >
+                  <Sparkles size={18} className={isEnhancing ? 'animate-pulse' : ''} />
                 </button>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowTemplates(!showTemplates)}
-                    className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors"
-                    title="预设模板"
-                  >
-                    <ImageIcon size={18} />
-                  </button>
-                  {showTemplates && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowTemplates(false)} />
-                      <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20">
-                        <div className="px-3 py-1.5 text-xs text-gray-400 font-medium">商品图场景模板</div>
-                        {presetTemplates.map((template) => (
-                          <button
-                            key={template.label}
-                            onClick={() => applyTemplate(template)}
-                            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            {template.label}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {isGenerating ? (
-                  <button
-                    onClick={() => {}}
-                    className="p-2 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors"
-                  >
-                    <div className="w-4 h-4 border-2 border-gray-400 rounded-full"></div>
-                  </button>
-                ) : (
-                  <button
-                    onClick={generateImage}
-                    disabled={!prompt.trim() && referenceImages.length === 0}
-                    className={`p-2 rounded-full transition-all ${
-                      prompt.trim() || referenceImages.length > 0
-                        ? 'bg-black text-white hover:bg-gray-800 shadow-md'
-                        : 'bg-gray-200 text-white cursor-not-allowed'
-                    }`}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
-                )}
-              </div>
+              )}
+              {isGenerating ? (
+                <button
+                  onClick={() => {}}
+                  className="p-2 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors"
+                >
+                  <div className="w-4 h-4 border-2 border-gray-400 rounded-full"></div>
+                </button>
+              ) : (
+                <button
+                  onClick={generateImage}
+                  disabled={!prompt.trim() && referenceImages.length === 0}
+                  className={`p-2 rounded-full transition-all ${
+                    prompt.trim() || referenceImages.length > 0
+                      ? 'bg-black text-white hover:bg-gray-800 shadow-md'
+                      : 'bg-gray-200 text-white cursor-not-allowed'
+                  }`}
+                >
+                  <ArrowUp size={18} />
+                </button>
+              )}
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors" title="上传参考图">
+              <Paperclip size={18} />
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors"
+                title="预设模板"
+              >
+                <ImageIcon size={18} />
+              </button>
+              {showTemplates && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowTemplates(false)} />
+                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20">
+                    <div className="px-3 py-1.5 text-xs text-gray-400 font-medium">商品图场景模板</div>
+                    {presetTemplates.map((template) => (
+                      <button
+                        key={template.label}
+                        onClick={() => applyTemplate(template)}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        {template.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 p-2 text-white hover:bg-white/20 rounded-full transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>

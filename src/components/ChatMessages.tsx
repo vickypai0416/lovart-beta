@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
-import { Copy, Sparkles, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Copy, XCircle, X, Download, ZoomIn } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { Button } from '@/components/ui/button';
+import { downloadImageByUrl } from '@/lib/download';
 
 interface GeneratedImagePlan {
   index: number;
@@ -90,6 +90,53 @@ function fallbackParseAmazonPlan(content: string): GeneratedImagePlan[] {
   return plans;
 }
 
+interface ImageContextMenuState {
+  x: number;
+  y: number;
+  url: string;
+  filename: string;
+}
+
+function ChatMessageImage({
+  src,
+  alt,
+  className,
+  badge,
+  filename,
+  onPreview,
+  onContextMenu,
+}: {
+  src: string;
+  alt: string;
+  className: string;
+  badge?: React.ReactNode;
+  filename: string;
+  onPreview: (url: string, filename: string) => void;
+  onContextMenu: (e: React.MouseEvent, url: string, filename: string) => void;
+}) {
+  return (
+    <div className="relative group">
+      <img
+        src={src}
+        alt={alt}
+        className={`${className} cursor-zoom-in`}
+        draggable
+        onClick={() => onPreview(src, filename)}
+        onContextMenu={(e) => onContextMenu(e, src, filename)}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/uri-list', src);
+          e.dataTransfer.setData('text/plain', src);
+          e.dataTransfer.effectAllowed = 'copy';
+        }}
+      />
+      <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/15 transition-colors pointer-events-none flex items-center justify-center opacity-0 group-hover:opacity-100">
+        <ZoomIn className="w-5 h-5 text-white drop-shadow-md" />
+      </div>
+      {badge}
+    </div>
+  );
+}
+
 function shouldRenderAmazonPlanButton(content: string): boolean {
   if (!content) return false;
   const normalized = content.replace(/[-–—]/g, '-');
@@ -113,6 +160,34 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
   scrollRef,
   onScroll,
 }) => {
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewFilename, setPreviewFilename] = useState('chat-image.png');
+  const [contextMenu, setContextMenu] = useState<ImageContextMenuState | null>(null);
+
+  const handlePreview = useCallback((url: string, filename: string) => {
+    setPreviewImage(url);
+    setPreviewFilename(filename);
+  }, []);
+
+  const handleImageContextMenu = useCallback(
+    (e: React.MouseEvent, url: string, filename: string) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, url, filename });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
+
   return (
     <ErrorBoundary>
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-6 pb-4">
@@ -137,36 +212,31 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                   {validUserImages.length > 0 && (
                     <div className="mb-3">
                       {validUserImages.length === 1 ? (
-                        <img
+                        <ChatMessageImage
                           src={validUserImages[0]}
                           alt="Uploaded"
-                          className="max-w-full max-h-48 rounded-lg object-contain cursor-grab active:cursor-grabbing"
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/uri-list', validUserImages[0]);
-                            e.dataTransfer.setData('text/plain', validUserImages[0]);
-                            e.dataTransfer.effectAllowed = 'copy';
-                          }}
+                          className="max-w-full max-h-48 rounded-lg object-contain"
+                          filename={`upload-${message.id}.png`}
+                          onPreview={handlePreview}
+                          onContextMenu={handleImageContextMenu}
                         />
                       ) : (
                         <div className="grid grid-cols-2 gap-2">
                           {validUserImages.map((img, imgIdx) => (
-                            <div key={`${message.id}-user-${imgIdx}`} className="relative">
-                              <img
-                                src={img}
-                                alt={`图${imgIdx + 1}`}
-                                className="w-full max-h-32 rounded-lg object-contain cursor-grab active:cursor-grabbing"
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('text/uri-list', img);
-                                  e.dataTransfer.setData('text/plain', img);
-                                  e.dataTransfer.effectAllowed = 'copy';
-                                }}
-                              />
-                              <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 text-white rounded text-[10px] font-medium">
-                                图{imgIdx + 1}
-                              </div>
-                            </div>
+                            <ChatMessageImage
+                              key={`${message.id}-user-${imgIdx}`}
+                              src={img}
+                              alt={`图${imgIdx + 1}`}
+                              className="w-full max-h-32 rounded-lg object-contain"
+                              filename={`upload-${message.id}-${imgIdx + 1}.png`}
+                              onPreview={handlePreview}
+                              onContextMenu={handleImageContextMenu}
+                              badge={
+                                <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 text-white rounded text-[10px] font-medium pointer-events-none">
+                                  图{imgIdx + 1}
+                                </div>
+                              }
+                            />
                           ))}
                         </div>
                       )}
@@ -186,36 +256,31 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                   {validGeneratedImages.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       {validGeneratedImages.length === 1 ? (
-                        <img
+                        <ChatMessageImage
                           src={validGeneratedImages[0]}
                           alt="Generated"
-                          className="max-w-full max-h-64 rounded-lg object-contain cursor-grab active:cursor-grabbing"
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/uri-list', validGeneratedImages[0]);
-                            e.dataTransfer.setData('text/plain', validGeneratedImages[0]);
-                            e.dataTransfer.effectAllowed = 'copy';
-                          }}
+                          className="max-w-full max-h-64 rounded-lg object-contain"
+                          filename={`generated-${message.id}.png`}
+                          onPreview={handlePreview}
+                          onContextMenu={handleImageContextMenu}
                         />
                       ) : (
-                        <div className="grid gap-2 grid-cols-2">
+                        <div className="grid gap-2 grid-cols-3">
                           {validGeneratedImages.map((url, idx) => (
-                            <div key={`${message.id}-gen-${idx}`} className="relative">
-                              <img
-                                src={url}
-                                alt={`Generated ${idx + 1}`}
-                                className="w-full aspect-square rounded-lg object-contain cursor-grab active:cursor-grabbing bg-gray-50"
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('text/uri-list', url);
-                                  e.dataTransfer.setData('text/plain', url);
-                                  e.dataTransfer.effectAllowed = 'copy';
-                                }}
-                              />
-                              <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 text-white rounded text-[10px] font-medium">
-                                {idx + 1}
-                              </div>
-                            </div>
+                            <ChatMessageImage
+                              key={`${message.id}-gen-${idx}`}
+                              src={url}
+                              alt={`Generated ${idx + 1}`}
+                              className="w-full aspect-square rounded-lg object-contain bg-gray-50"
+                              filename={`generated-${message.id}-${idx + 1}.png`}
+                              onPreview={handlePreview}
+                              onContextMenu={handleImageContextMenu}
+                              badge={
+                                <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 text-white rounded text-[10px] font-medium pointer-events-none">
+                                  {idx + 1}
+                                </div>
+                              }
+                            />
                           ))}
                         </div>
                       )}
@@ -238,20 +303,17 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                           </div>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         {validPlanImages.map((plan, idx) => (
                           <div key={`${message.id}-plan-${plan.index}-${idx}`} className="relative aspect-square rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group">
                             {plan.status === 'completed' && plan.imageUrl && plan.imageUrl.trim().length > 0 ? (
-                              <img
+                              <ChatMessageImage
                                 src={plan.imageUrl}
                                 alt={plan.title || ''}
-                                className="w-full h-full object-contain cursor-grab active:cursor-grabbing"
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('text/uri-list', plan.imageUrl!);
-                                  e.dataTransfer.setData('text/plain', plan.imageUrl!);
-                                  e.dataTransfer.effectAllowed = 'copy';
-                                }}
+                                className="w-full h-full object-contain"
+                                filename={`amazon-plan-${message.id}-${plan.index}.png`}
+                                onPreview={handlePreview}
+                                onContextMenu={handleImageContextMenu}
                               />
                             ) : plan.status === 'generating' ? (
                               <div className="w-full h-full flex flex-col items-center justify-center">
@@ -338,6 +400,59 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
           })}
         </div>
       </div>
+
+      {contextMenu && (
+        <div
+          className="fixed z-[100] min-w-[148px] py-1 bg-white rounded-lg shadow-xl border border-gray-200"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            onClick={() => {
+              downloadImageByUrl(contextMenu.url, contextMenu.filename);
+              setContextMenu(null);
+            }}
+          >
+            <Download className="w-4 h-4" />
+            下载图片
+          </button>
+        </div>
+      )}
+
+      {previewImage && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh] w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute -top-11 right-0 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => downloadImageByUrl(previewImage, previewFilename)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 text-gray-900 rounded-lg text-sm font-medium hover:bg-white transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                下载
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 text-white hover:text-gray-300 transition-colors"
+                aria-label="关闭预览"
+              >
+                <X className="w-7 h-7" />
+              </button>
+            </div>
+            <img
+              src={previewImage}
+              alt="预览"
+              className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain"
+            />
+          </div>
+        </div>
+      )}
     </ErrorBoundary>
   );
 });

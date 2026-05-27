@@ -5,7 +5,9 @@
   "scripts": {
     "build": "next build",
     "build:local": "bash ./scripts/build.sh",
-    "dev": "bash ./scripts/dev.sh",
+    "dev": "tsx watch src/server.ts",
+    "dev:bash": "bash ./scripts/dev.sh",
+    "dev:win": "powershell -ExecutionPolicy Bypass -File ./scripts/dev.ps1",
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "start": "bash ./scripts/start.sh",

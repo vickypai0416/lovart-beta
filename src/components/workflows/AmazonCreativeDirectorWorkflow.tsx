@@ -38,10 +38,13 @@ import {
   Plus,
   Upload,
   Edit,
+  ZoomIn,
+  Grid3X3,
 } from 'lucide-react';
 import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearImgGenHistory, ImgGenHistoryItem } from '@/lib/history-manager';
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { cropGridImage, cropAllGridImages } from '@/lib/image-utils';
 
 // 产品类型预设
 const productTypes = [
@@ -144,11 +147,18 @@ export default function AmazonCreativeDirectorWorkflow() {
   const [customDescription, setCustomDescription] = useState('');
   const [selectedImages, setSelectedImages] = useState<string[]>(['main', 'scene']);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [activeTab, setActiveTab] = useState<'generator' | 'history'>('generator');
   const [imageHistory, setImageHistory] = useState<ImgGenHistoryItem[]>([]);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewPrompt, setPreviewPrompt] = useState<string>('');
+  const [gridPreview, setGridPreview] = useState<string | null>(null);
+  const [splitImages, setSplitImages] = useState<(string | null)[]>(Array(9).fill(null));
+  const [isGeneratingGrid, setIsGeneratingGrid] = useState(false);
+  const [isSplitting, setIsSplitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const productImageInputRef = useRef<HTMLInputElement>(null);
   const generationIdRef = useRef<string | null>(null);
@@ -203,8 +213,8 @@ export default function AmazonCreativeDirectorWorkflow() {
     let prompt = basePrompt;
     
     // 添加产品场景
-    if (product?.scene) {
-      prompt += `, ${product.scene}`;
+    if (currentProduct?.scene) {
+      prompt += `, ${currentProduct.scene}`;
     }
     
     // 添加风格
@@ -251,6 +261,7 @@ export default function AmazonCreativeDirectorWorkflow() {
     setIsGenerating(true);
     setGeneratedImages([]);
     const startTime = Date.now();
+    const prompts = [];
     
     if (!isInitialized) {
       console.log('[Analytics] Waiting for initialization...');
@@ -268,7 +279,9 @@ export default function AmazonCreativeDirectorWorkflow() {
     const allPrompts = selectedImages.map(imageId => {
       const imageConfig = sixImageStructure.find(img => img.id === imageId);
       if (!imageConfig) return '';
-      return generatePromptForImage(imageId, imageConfig.defaultPrompt);
+      const prompt = generatePromptForImage(imageId, imageConfig.defaultPrompt);
+      prompts.push(prompt);
+      return prompt;
     }).filter(Boolean);
 
     const newImages: (string | null)[] = new Array(allPrompts.length).fill(null);
@@ -329,42 +342,146 @@ export default function AmazonCreativeDirectorWorkflow() {
         }
 
         if (imageUrl) {
-          newImages[i] = imageUrl;
-          
-          const generationId = await trackGeneration({
-            prompt,
-            size: '1024x1024',
-            quality: 'high',
-            model: 'gpt-image-2-all',
-            count: 1,
-          });
-          
-          if (generationId) {
-            await updateGeneration(generationId, {
-              status: 'success',
-              duration: Date.now() - startTime,
-              imageUrl,
+            newImages[i] = imageUrl;
+            
+            const generationId = await trackGeneration({
+              prompt,
+              size: '1024x1024',
+              quality: 'high',
+              model: 'gpt-image-2-all',
+              count: 1,
+            });
+            
+            if (generationId) {
+              await updateGeneration(generationId, {
+                status: 'success',
+                duration: Date.now() - startTime,
+                imageUrl,
+              });
+            }
+            
+            await saveImgGenHistory({
+              url: imageUrl,
+              prompt: prompt,
+              size: '1024x1024',
+              productName: selectedProduct === 'custom' 
+                ? customProduct.name || '自定义产品' 
+                : productTypes.find(p => p.value === selectedProduct)?.label || 'Custom Product',
+              scene: selectedHoliday 
+                ? holidays.find(h => h.value === selectedHoliday)?.label || 'Everyday'
+                : 'Everyday',
+              platform: 'amazon'
             });
           }
-          
-          const historyItem = await saveImgGenHistory(
-            imageUrl,
-            prompt,
-            '1024x1024',
-            'gpt-image-2-all'
-          );
-          
-          if (historyItem) {
-            setImageHistory(prev => [historyItem, ...prev]);
-          }
-        }
       } catch (error) {
         console.error('Error generating image:', error);
       }
     }
     
     setGeneratedImages(newImages.filter(Boolean) as string[]);
+    setGeneratedPrompts(prompts);
+    
+    const updatedHistory = await getImgGenHistoryWithUrls();
+    setImageHistory(updatedHistory);
+    
     setIsGenerating(false);
+  };
+
+  // 生成九宫格全貌图
+  const generateGridPreview = async () => {
+    setIsGeneratingGrid(true);
+    
+    try {
+      const productName = getProductName();
+      const gridPrompt = `${productName} 亚马逊listing商品套图，9张图以九宫格形式输出，统一风格，专业电商摄影，白色背景主图，生活场景图，细节特写，尺寸展示，功能特性`;
+      
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: gridPrompt }],
+          model: 'gpt-image-2-all',
+          n: 1,
+          size: '1024x1024',
+          quality: 'high',
+        }),
+      });
+      
+      const data = await response.json();
+      if (data.image_urls && data.image_urls.length > 0) {
+        setGridPreview(data.image_urls[0]);
+        setSplitImages(Array(9).fill(null));
+      }
+    } catch (error) {
+      console.error('生成九宫格失败:', error);
+    } finally {
+      setIsGeneratingGrid(false);
+    }
+  };
+
+  // 拆分全部图片
+  const splitAllImages = async () => {
+    if (!gridPreview) return;
+    
+    setIsSplitting(true);
+    try {
+      const images = await cropAllGridImages(gridPreview);
+      setSplitImages(images);
+      
+      // 保存到历史记录
+      for (let i = 0; i < images.length; i++) {
+        if (images[i]) {
+          await saveImgGenHistory({
+            url: images[i],
+            prompt: `九宫格拆分 - 图${i + 1}`,
+            size: '1024x1024',
+            productName: getProductName(),
+            scene: getProductScene(),
+            platform: 'amazon',
+          });
+        }
+      }
+      
+      // 更新历史列表
+      const updatedHistory = await getImgGenHistoryWithUrls();
+      setImageHistory(updatedHistory);
+    } catch (error) {
+      console.error('拆分图片失败:', error);
+    } finally {
+      setIsSplitting(false);
+    }
+  };
+
+  // 拆分单张图片
+  const splitSingleImage = async (index: number) => {
+    if (!gridPreview) return;
+    
+    try {
+      const image = await cropGridImage(gridPreview, index);
+      if (image) {
+        setSplitImages(prev => {
+          const newImages = [...prev];
+          newImages[index] = image;
+          return newImages;
+        });
+        
+        await saveImgGenHistory({
+          url: image,
+          prompt: `九宫格拆分 - 图${index + 1}`,
+          size: '1024x1024',
+          productName: getProductName(),
+          scene: getProductScene(),
+          platform: 'amazon',
+        });
+        
+        const updatedHistory = await getImgGenHistoryWithUrls();
+        setImageHistory(updatedHistory);
+      }
+    } catch (error) {
+      console.error('拆分单张图片失败:', error);
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -411,10 +528,10 @@ export default function AmazonCreativeDirectorWorkflow() {
     }
   };
 
-  const product = selectedProduct === 'custom' 
+  const currentProduct = selectedProduct === 'custom' 
     ? { value: 'custom', label: customProduct.name || '自定义产品', scene: customProduct.scene }
     : productTypes.find(p => p.value === selectedProduct);
-  const holiday = selectedHoliday ? holidays.find(h => h.value === selectedHoliday) : null;
+  const currentHoliday = selectedHoliday ? holidays.find(h => h.value === selectedHoliday) : null;
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-gray-50">
@@ -536,9 +653,9 @@ export default function AmazonCreativeDirectorWorkflow() {
                       </div>
                     )}
                     
-                    {product && !showCustomProductForm && (
+                    {currentProduct && !showCustomProductForm && (
                       <div className="mt-2 p-2 bg-blue-50 rounded-lg text-sm text-blue-700">
-                        <p>📋 推荐场景：{product.scene}</p>
+                        <p>📋 推荐场景：{currentProduct.scene}</p>
                       </div>
                     )}
                   </CardContent>
@@ -566,9 +683,9 @@ export default function AmazonCreativeDirectorWorkflow() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {holiday && (
+                    {currentHoliday && (
                       <div className="mt-2 p-2 bg-purple-50 rounded-lg text-sm text-purple-700">
-                        <p>💭 情绪方向：{holiday.emotion}</p>
+                        <p>💭 情绪方向：{currentHoliday.emotion}</p>
                       </div>
                     )}
                   </CardContent>
@@ -661,24 +778,45 @@ export default function AmazonCreativeDirectorWorkflow() {
                 </Card>
 
                 {/* 生成按钮 */}
-                <Button
-                  size="lg"
-                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                  onClick={generateImages}
-                  disabled={isGenerating || selectedImages.length === 0}
-                >
-                  {isGenerating ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      正在生成...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 mr-2" />
-                      生成 {selectedImages.length} 张图片
-                    </>
-                  )}
-                </Button>
+                <div className="space-y-3">
+                  <Button
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                    onClick={generateGridPreview}
+                    disabled={isGeneratingGrid}
+                  >
+                    {isGeneratingGrid ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        生成九宫格预览...
+                      </>
+                    ) : (
+                      <>
+                        <Grid3X3 className="w-4 h-4 mr-2" />
+                        生成九宫格全貌图
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                    onClick={generateImages}
+                    disabled={isGenerating || selectedImages.length === 0}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        正在生成...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        单独生成 {selectedImages.length} 张图片
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -736,21 +874,155 @@ export default function AmazonCreativeDirectorWorkflow() {
                   </CardContent>
                 </Card>
 
+                {/* 九宫格预览 */}
+                {gridPreview && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center text-lg">
+                        <Grid3X3 className="w-5 h-5 mr-2" />
+                        九宫格全貌图
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative aspect-square bg-gray-100 rounded-lg flex items-center justify-center mb-4">
+                        <img 
+                          src={gridPreview} 
+                          alt="九宫格预览" 
+                          className="w-full h-full object-contain rounded-lg"
+                        />
+                      </div>
+                      
+                      {/* 拆分按钮 */}
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={splitAllImages}
+                          disabled={isSplitting}
+                          className="flex-1 min-w-[120px]"
+                        >
+                          {isSplitting ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              拆分中...
+                            </>
+                          ) : (
+                            <>
+                              <Grid3X3 className="w-4 h-4 mr-2" />
+                              拆分全部
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      {/* 拆分后的图片 */}
+                      {splitImages.some(img => img) && (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">拆分后的单张图</h4>
+                          <div className="grid grid-cols-3 gap-2">
+                            {splitImages.map((img, idx) => (
+                              <div key={idx} className="relative aspect-square bg-gray-100 rounded-lg flex items-center justify-center group">
+                                {img ? (
+                                  <>
+                                    <img 
+                                      src={img} 
+                                      alt={`拆分图 ${idx + 1}`} 
+                                      className="w-full h-full object-contain rounded-lg cursor-pointer"
+                                      onClick={() => {
+                                        setPreviewImage(img);
+                                        setPreviewPrompt(`九宫格拆分 - 图${idx + 1}`);
+                                      }}
+                                    />
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="h-8 w-8 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const link = document.createElement('a');
+                                          link.href = img;
+                                          link.download = `grid-split-${idx + 1}.png`;
+                                          document.body.appendChild(link);
+                                          link.click();
+                                          document.body.removeChild(link);
+                                        }}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="w-full h-full p-0"
+                                    onClick={() => splitSingleImage(idx)}
+                                  >
+                                    拆分图{idx + 1}
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* 生成的图片预览 */}
                 {generatedImages.length > 0 && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="flex items-center text-lg">
                         <Eye className="w-5 h-5 mr-2" />
-                        生成的图片
+                        单独生成的图片
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 gap-3">
                         {generatedImages.map((img, idx) => (
-                          <div key={idx} className="relative aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                          <div key={idx} className="relative aspect-square bg-gray-100 rounded-lg flex items-center justify-center group">
                             {img ? (
-                              <img src={img} alt={`Generated ${idx + 1}`} className="w-full h-full object-contain rounded-lg" />
+                              <>
+                                <img 
+                                  src={img} 
+                                  alt={`Generated ${idx + 1}`} 
+                                  className="w-full h-full object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => {
+                                    setPreviewImage(img);
+                                    setPreviewPrompt(sixImageStructure[idx]?.name || `图片 ${idx + 1}`);
+                                  }}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="h-8 w-8 p-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPreviewImage(img);
+                                        setPreviewPrompt(sixImageStructure[idx]?.name || `图片 ${idx + 1}`);
+                                      }}
+                                    >
+                                      <ZoomIn className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="h-8 w-8 p-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        downloadImageByUrl(img, `amazon-image-${idx + 1}-${Date.now()}.png`);
+                                      }}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </>
                             ) : (
                               <div className="text-gray-400 text-center">
                                 <ImageIcon className="w-6 h-6 mx-auto mb-1" />
@@ -867,7 +1139,65 @@ export default function AmazonCreativeDirectorWorkflow() {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
-      </div>
-    );
-  }
+      </Tabs>
+
+      {/* 图片预览模态框 */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-full w-full h-full flex flex-col">
+            {/* 模态框头部 */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-white text-xl font-semibold">{previewPrompt}</h3>
+                {generatedPrompts[generatedImages.indexOf(previewImage)] && (
+                  <p className="text-gray-300 text-sm mt-1">{generatedPrompts[generatedImages.indexOf(previewImage)]}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const idx = generatedImages.indexOf(previewImage);
+                    downloadImageByUrl(previewImage, `amazon-image-${idx + 1}-${Date.now()}.png`);
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  下载
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewImage(null);
+                  }}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  关闭
+                </Button>
+              </div>
+            </div>
+            
+            {/* 图片内容 */}
+            <div 
+              className="flex-1 flex items-center justify-center overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img 
+                src={previewImage} 
+                alt={previewPrompt}
+                className="max-w-full max-h-full object-contain rounded-lg"
+                style={{ cursor: 'default' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -72,7 +72,7 @@ export const IMAGE_MODELS: Record<ImageModel, ImageModelConfig> = {
     name: 'GPT Image 2 All',
     description: 'GPT Image 2 全功能版，支持生成+编辑',
     type: 'image',
-    available: false,
+    available: true,
     apiKey: process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY || '',
     endpoint: 'https://yunwu.ai/v1/images/edits',
     modelName: 'gpt-image-2-all',
@@ -112,6 +112,24 @@ export function getImageModels(): ImageModelConfig[] {
  */
 export function getTextModels(): ImageModelConfig[] {
   return Object.values(IMAGE_MODELS).filter(m => m.type === 'text');
+}
+
+/** 图生图/编辑（含参考图）应走 /v1/images/edits，勿使用 gpt-image-2 的对话端点 */
+export function getImageEditModelConfig(requestedModel?: string): ImageModelConfig {
+  const editId: ImageModel =
+    requestedModel === 'gpt-image-2-edit'
+      ? 'gpt-image-2-edit'
+      : requestedModel === 'gpt-image-2-all'
+        ? 'gpt-image-2-all'
+        : 'gpt-image-2-all';
+
+  const config = IMAGE_MODELS[editId];
+  return {
+    ...config,
+    available: !!config.apiKey,
+    endpoint: config.endpoint || 'https://yunwu.ai/v1/images/edits',
+    modelName: config.modelName || 'gpt-image-2-all',
+  };
 }
 
 /**

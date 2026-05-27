@@ -3,7 +3,8 @@ import {
   ImageModel, 
   getModelConfig
 } from '@/lib/image-models';
-import { getPersonaById } from '@/lib/persona';
+import { getPersonaById, getAmazonExpertPrompt } from '@/lib/persona';
+import { recognizeProductByName } from '@/lib/amazon/template-selector';
 import { createGeneration, updateGeneration } from '@/lib/analytics';
 import { transferImageToHost } from '@/lib/image-host';
 
@@ -39,6 +40,35 @@ export async function POST(request: NextRequest) {
     });
 
     const personaConfig = getPersonaById(persona);
+    let enhancedSystemPrompt = personaConfig.systemPrompt;
+    
+    if (persona === 'amazon-expert') {
+      let productName = '';
+      
+      if (body.productName) {
+        productName = body.productName;
+      } else {
+        for (const msg of messages) {
+          if (typeof msg.content === 'string') {
+            const content = msg.content.toLowerCase();
+            const knownProducts = ['毛毯', '帆布画', '夜灯', '抱枕', '马克杯', '保温杯', '睡衣', '衬衫', '沙滩巾', '书包', '洗漱包', '菜板', '野营刀', '棒球帽', '睡裤', '服装', '画'];
+            for (const product of knownProducts) {
+              if (content.includes(product.toLowerCase())) {
+                productName = product;
+                break;
+              }
+            }
+            if (productName) break;
+          }
+        }
+      }
+      
+      if (productName) {
+        const result = recognizeProductByName(productName);
+        console.log(`[API] 识别到产品: ${productName}, 类型: ${result.category}, 匹配方式: ${result.matchedBy}`);
+        enhancedSystemPrompt = getAmazonExpertPrompt(productName);
+      }
+    }
 
     let extractedReferenceImages: string[] = referenceImages.length > 0 ? referenceImages : [];
     if (extractedReferenceImages.length === 0 && messages.length > 0) {
@@ -51,8 +81,8 @@ export async function POST(request: NextRequest) {
 
     const requestedModelId: ImageModel = selectedModel || 'gpt-5-nano';
     const imageModelIds: ImageModel[] = ['gpt-image-2', 'gpt-image-2-gen', 'gpt-image-2-edit', 'gpt-image-2-all', 'gpt-4o-image', 'openai-dalle'];
-    const forceTextForAmazonExpert = persona === 'amazon-expert' && imageModelIds.includes(requestedModelId);
-    const modelId: ImageModel = forceTextForAmazonExpert ? 'gpt-5.4' : requestedModelId;
+    // 亚马逊专家模式不再强制使用文本模型，允许直接生成图片
+    const modelId: ImageModel = requestedModelId;
     const modelConfig = getModelConfig(modelId);
     
     // 如果是图片模型，创建生成记录
@@ -125,7 +155,7 @@ export async function POST(request: NextRequest) {
               controller, 
               encoder,
               autoGenerate,
-              systemPrompt || personaConfig.systemPrompt
+              enhancedSystemPrompt
             );
           } else {
             console.log(`[API] 使用 ${modelConfig.name} 生成图片`);
@@ -644,15 +674,20 @@ async function generateWithYunwuAPIStream(
           const delta = parsed.choices?.[0]?.delta?.content;
           if (delta) {
             fullContent += delta;
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: 'text',
-                  content: fullContent,
-                  done: false,
-                })}\n\n`
-              )
-            );
+            try {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'text',
+                    content: fullContent,
+                    done: false,
+                  })}\n\n`
+                )
+              );
+            } catch (controllerError) {
+              console.error('Controller 已关闭，停止写入:', controllerError);
+              return;
+            }
           }
         } catch (e) {
           console.error('解析 SSE 数据失败:', e);
@@ -660,16 +695,20 @@ async function generateWithYunwuAPIStream(
       }
     }
 
-    controller.enqueue(
-      encoder.encode(
-        `data: ${JSON.stringify({
-          type: 'text',
-          content: fullContent,
-          done: true,
-        })}\n\n`
-      )
-    );
-    controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+    try {
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            type: 'text',
+            content: fullContent,
+            done: true,
+          })}\n\n`
+        )
+      );
+      controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+    } catch (controllerError) {
+      console.error('Controller 已关闭:', controllerError);
+    }
   } catch (error) {
     console.error('流式生成失败:', error);
     controller.enqueue(

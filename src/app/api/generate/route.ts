@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
-import { getModelConfig } from '@/lib/image-models';
+import { getImageEditModelConfig, getModelConfig } from '@/lib/image-models';
 import { createGeneration, updateGeneration } from '@/lib/analytics';
+import { parseUpstreamApiError } from '@/lib/upstream-api-error';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+
+/** 云雾 gpt-image-2-all 编辑接口支持的常见尺寸（见 Apifox /v1/images/edits） */
+const SUPPORTED_EDIT_SIZES = new Set([
+  '1024x1024', '1024x1536', '1536x1024',
+  '2048x2048', '2048x1536', '1536x2048', '2048x1152', '1152x2048',
+]);
+
+function normalizeEditSize(width: number, height: number): string {
+  const size = `${width}x${height}`;
+  if (SUPPORTED_EDIT_SIZES.has(size)) return size;
+  // 亚马逊九宫格：优先用文档支持的最大正方形
+  if (width >= 2048 && height >= 2048) return '2048x2048';
+  if (width >= 1536 && height >= 1536) return '1536x1536';
+  return '1024x1024';
+}
 
 function containsChinese(text: string): boolean {
   return /[\u4e00-\u9fff]/.test(text);
@@ -53,6 +69,55 @@ async function translateToEnglish(text: string): Promise<string> {
   }
 }
 
+function extractImageUrls(data: unknown): string[] {
+  const imageUrls: string[] = [];
+  const payload = data as { data?: Array<{ b64_json?: string; url?: string }>; url?: string };
+
+  if (payload.data && payload.data.length > 0) {
+    for (const item of payload.data) {
+      if (item.b64_json) {
+        const b64 = item.b64_json;
+        imageUrls.push(b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`);
+      } else if (item.url) {
+        imageUrls.push(item.url);
+      }
+    }
+  }
+
+  if (imageUrls.length === 0 && payload.url) {
+    imageUrls.push(payload.url);
+  }
+
+  if (imageUrls.length === 0 && typeof data === 'string') {
+    const urlMatch = data.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/gi);
+    if (urlMatch) {
+      imageUrls.push(urlMatch[0]);
+    }
+  }
+
+  return imageUrls;
+}
+
+async function imageToBlob(referenceImage: string): Promise<Blob> {
+  if (referenceImage.startsWith('data:')) {
+    const base64Data = referenceImage.split(',')[1];
+    const mimeType = referenceImage.split(';')[0].split(':')[1];
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+  }
+
+  const imageResponse = await fetch(referenceImage);
+  if (!imageResponse.ok) {
+    throw new Error(`参考图读取失败：${imageResponse.status}`);
+  }
+  return imageResponse.blob();
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let generationId: string | null = null;
@@ -75,9 +140,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const imageCount = Math.min(Math.max(Number(requestN) || 1, 1), 4);
-    
     const finalReferenceImages = referenceImages || (referenceImage ? [referenceImage] : []);
-
     let finalPrompt = prompt;
 
     if (finalPrompt && containsChinese(finalPrompt)) {
@@ -103,14 +166,12 @@ export async function POST(request: NextRequest) {
     const spec = AMAZON_IMAGE_SPECS[specType as ImageSpecType];
     const [width, height] = size.split('x').map(Number);
     
-    // 创建生成记录
-    const selectedModelName = model || 'gpt-image-2-all';
     generationId = (await createGeneration({
       sessionId,
       prompt: finalPrompt,
       size,
       quality,
-      model: selectedModelName,
+      model: model || 'gpt-image-2',
       count: imageCount,
       status: 'pending',
     })).id;
@@ -131,138 +192,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (model === 'gpt-image-2-all' && finalReferenceImages.length === 0) {
-      console.log('[Generate API] 使用 GPT Image 2 All 文生图模式（无参考图）');
-      console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
-      
-      const modelConfig = getModelConfig('gpt-image-2-all');
-      
-      if (!modelConfig.apiKey) {
-        console.error('[Generate API] GPT Image 2 All API Key 未配置');
-        return NextResponse.json(
-          { success: false, error: '图片生成失败：GPT Image 2 All API Key 未配置' },
-          { status: 400 }
-        );
-      }
-
-      const genEndpoint = 'https://yunwu.ai/v1/images/generations';
-      const modelName = modelConfig.modelName || 'gpt-image-2-all';
-
-      try {
-        const requestBody: Record<string, unknown> = {
-          model: modelName,
-          prompt: finalPrompt,
-          n: imageCount,
-          size: `${width}x${height}`,
-          quality: quality,
-        };
-
-        console.log('[Generate API] 发送请求到:', genEndpoint);
-        console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100));
-        console.log('[Generate API] 模型:', modelName);
-        console.log('[Generate API] 尺寸:', `${width}x${height}`);
-        
-        const response = await fetch(genEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${modelConfig.apiKey}`,
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        console.log('[Generate API] HTTP状态码:', response.status);
-        
-        if (!response.ok) {
-          const text = await response.text();
-          console.error('[Generate API] 生图失败 - 状态码:', response.status);
-          console.error('[Generate API] 响应内容:', text.substring(0, 500));
-          return NextResponse.json(
-            { success: false, error: `图片生成失败：API 返回错误 ${response.status}` },
-            { status: 500 }
-          );
-        }
-
-        const responseText = await response.text();
-        console.log('[Generate API] 响应内容:', responseText.substring(0, 500));
-        
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          console.error('[Generate API] 响应不是有效 JSON');
-          return NextResponse.json(
-            { success: false, error: '图片生成失败：API 返回格式错误' },
-            { status: 500 }
-          );
-        }
-        
-        let imageUrls: string[] = [];
-        
-        if (data.data && data.data.length > 0) {
-          for (const item of data.data) {
-            if (item.b64_json) {
-              const b64 = item.b64_json;
-              imageUrls.push(b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`);
-            } else if (item.url) {
-              imageUrls.push(item.url);
-            }
-          }
-        }
-        
-        if (imageUrls.length === 0 && data.url) {
-          imageUrls.push(data.url);
-        }
-        
-        if (imageUrls.length > 0) {
-          console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
-          // 更新生成记录为成功
-          if (generationId) {
-            await updateGeneration(generationId, {
-              status: 'success',
-              imageUrl: imageUrls[0],
-              duration: Date.now() - startTime,
-            });
-          }
-          return NextResponse.json({
-            success: true,
-            url: imageUrls[0],
-            urls: imageUrls,
-            size,
-            specType,
-            model: 'gpt-image-2-all',
-          });
-        } else {
-          console.error('[Generate API] 无法从响应中提取图片 URL');
-          // 更新生成记录为失败
-          if (generationId) {
-            await updateGeneration(generationId, {
-              status: 'failed',
-              error: '无法获取图片 URL',
-              duration: Date.now() - startTime,
-            });
-          }
-          return NextResponse.json(
-            { success: false, error: '图片生成失败：无法获取图片 URL' },
-            { status: 500 }
-          );
-        }
-      } catch (error) {
-        console.error('[Generate API] 调用失败:', error);
-        // 更新生成记录为失败
-        if (generationId) {
-          await updateGeneration(generationId, {
-            status: 'failed',
-            error: error instanceof Error ? error.message : '未知错误',
-            duration: Date.now() - startTime,
-          });
-        }
-        return NextResponse.json(
-          { success: false, error: `图片生成失败：${error instanceof Error ? error.message : '未知错误'}` },
-          { status: 500 }
-        );
-      }
+    if (model === 'gpt-image-2' && finalReferenceImages.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'gpt-image-2 编辑接口需要上传至少一张参考图。请先上传产品图后再生成亚马逊套图。' },
+        { status: 400 }
+      );
     }
 
     if (finalReferenceImages.length > 0) {
@@ -270,57 +204,35 @@ export async function POST(request: NextRequest) {
       console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
       console.log('[Generate API] 参考图数量:', finalReferenceImages.length);
       
-      const modelConfig = getModelConfig(model === 'gpt-image-2-all' ? 'gpt-image-2-all' : 'gpt-image-2-edit');
+      const modelConfig = getImageEditModelConfig(model);
       
       if (!modelConfig.apiKey) {
-        console.error('[Generate API] GPT Image 2 编辑模型 API Key 未配置');
+        console.error('[Generate API] GPT Image 2 编辑 API Key 未配置');
         return NextResponse.json(
-          { success: false, error: '图片生成失败：GPT Image 2 编辑模型 API Key 未配置' },
+          { success: false, error: '图片生成失败：GPT Image 2 编辑 API Key 未配置（GPT_IMAGE_2_API_KEY 或 YUNWU_API_KEY）' },
           { status: 400 }
         );
       }
 
-      const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/edits';
-      const modelName = modelConfig.modelName || 'gpt-image-2-all';
+      const endpoint = modelConfig.endpoint!;
+      const modelName = modelConfig.modelName!;
+      const editSize = normalizeEditSize(width, height);
+      if (editSize !== `${width}x${height}`) {
+        console.warn(
+          `[Generate API] 尺寸 ${width}x${height} 不在编辑接口支持列表，已调整为 ${editSize}`
+        );
+      }
 
       try {
         const imageBlobs: Blob[] = [];
         
         for (const referenceImage of finalReferenceImages) {
-          let imageBlob: Blob;
-          if (referenceImage.startsWith('data:')) {
-            const base64Data = referenceImage.split(',')[1];
-            const mimeType = referenceImage.split(';')[0].split(':')[1];
-            const byteCharacters = atob(base64Data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            imageBlob = new Blob([byteArray], { type: mimeType });
-          } else {
-            const imageResponse = await fetch(referenceImage);
-            imageBlob = await imageResponse.blob();
-          }
-          imageBlobs.push(imageBlob);
+          imageBlobs.push(await imageToBlob(referenceImage));
         }
 
         let styleRefBlob: Blob | null = null;
         if (styleReferenceImage) {
-          if (styleReferenceImage.startsWith('data:')) {
-            const base64Data = styleReferenceImage.split(',')[1];
-            const mimeType = styleReferenceImage.split(';')[0].split(':')[1];
-            const byteCharacters = atob(base64Data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            styleRefBlob = new Blob([byteArray], { type: mimeType });
-          } else {
-            const imageResponse = await fetch(styleReferenceImage);
-            styleRefBlob = await imageResponse.blob();
-          }
+          styleRefBlob = await imageToBlob(styleReferenceImage);
         }
 
         let promptForEdit = finalPrompt;
@@ -338,10 +250,13 @@ export async function POST(request: NextRequest) {
         formData.append('prompt', promptForEdit);
         formData.append('model', modelName);
         formData.append('n', String(imageCount));
-        formData.append('size', `${width}x${height}`);
-        formData.append('quality', quality);
+        formData.append('size', editSize);
+        // gpt-image-2-all 编辑接口：文档建议传 size；quality 部分分组不支持，仅非 all 模型附带
+        if (quality && modelName !== 'gpt-image-2-all') {
+          formData.append('quality', quality);
+        }
 
-        console.log('[Generate API] 发送请求到:', endpoint);
+        console.log('[Generate API] 发送请求到:', endpoint, '(images/edits)');
         console.log('[Generate API] 参考图片数量:', imageBlobs.length);
         imageBlobs.forEach((blob, i) => {
           console.log(`[Generate API] 图片 ${i + 1} 大小:`, blob.size, 'bytes');
@@ -363,11 +278,17 @@ export async function POST(request: NextRequest) {
         
         if (!response.ok) {
           const text = await response.text();
-          console.error('[Generate API] 生图失败 - 状态码:', response.status);
+          const upstream = parseUpstreamApiError(response.status, text);
+          console.error('[Generate API] 生图失败 - 状态码:', response.status, 'requestId:', upstream.requestId);
           console.error('[Generate API] 响应内容:', text.substring(0, 500));
           return NextResponse.json(
-            { success: false, error: `图片生成失败：API 返回错误 ${response.status}` },
-            { status: 500 }
+            {
+              success: false,
+              error: `图片生成失败：API 返回错误 ${response.status}，${upstream.message.substring(0, 200)}`,
+              requestId: upstream.requestId,
+              upstreamStatus: response.status,
+            },
+            { status: response.status === 429 ? 429 : 500 }
           );
         }
 
@@ -385,33 +306,10 @@ export async function POST(request: NextRequest) {
           );
         }
         
-        let imageUrls: string[] = [];
-        
-        if (data.data && data.data.length > 0) {
-          for (const item of data.data) {
-            if (item.b64_json) {
-              const b64 = item.b64_json;
-              imageUrls.push(b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`);
-            } else if (item.url) {
-              imageUrls.push(item.url);
-            }
-          }
-        }
-        
-        if (imageUrls.length === 0 && data.url) {
-          imageUrls.push(data.url);
-        }
-        
-        if (imageUrls.length === 0 && typeof data === 'string') {
-          const urlMatch = data.match(/https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/gi);
-          if (urlMatch) {
-            imageUrls.push(urlMatch[0]);
-          }
-        }
+        const imageUrls = extractImageUrls(data);
         
         if (imageUrls.length > 0) {
           console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
-          // 更新生成记录为成功
           if (generationId) {
             await updateGeneration(generationId, {
               status: 'success',
@@ -425,26 +323,24 @@ export async function POST(request: NextRequest) {
             urls: imageUrls,
             size,
             specType,
-            model: model || 'gpt-image-2-edit',
+            model: modelName,
           });
-        } else {
-          console.error('[Generate API] 无法从响应中提取图片 URL');
-          // 更新生成记录为失败
-          if (generationId) {
-            await updateGeneration(generationId, {
-              status: 'failed',
-              error: '无法获取图片 URL',
-              duration: Date.now() - startTime,
-            });
-          }
-          return NextResponse.json(
-            { success: false, error: '图片生成失败：无法获取图片 URL' },
-            { status: 500 }
-          );
         }
+
+        console.error('[Generate API] 无法从响应中提取图片 URL');
+        if (generationId) {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: '无法获取图片 URL',
+            duration: Date.now() - startTime,
+          });
+        }
+        return NextResponse.json(
+          { success: false, error: '图片生成失败：无法获取图片 URL' },
+          { status: 500 }
+        );
       } catch (error) {
         console.error('[Generate API] 调用失败:', error);
-        // 更新生成记录为失败
         if (generationId) {
           await updateGeneration(generationId, {
             status: 'failed',
@@ -459,21 +355,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('[Generate API] 使用 GPT Image 2 All 文生图模式（默认）');
+    console.log('[Generate API] 使用 GPT Image 2 生成模型（无参考图）');
     console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
     
-    const modelConfig = getModelConfig('gpt-image-2-all');
+    const modelConfig = getModelConfig(model || 'gpt-image-2-gen');
     
     if (!modelConfig.apiKey) {
-      console.error('[Generate API] GPT Image 2 All API Key 未配置');
+      console.error('[Generate API] 图片生成 API Key 未配置');
       return NextResponse.json(
-        { success: false, error: '图片生成失败：GPT Image 2 All API Key 未配置' },
+        { success: false, error: '图片生成失败：API Key 未配置' },
         { status: 400 }
       );
     }
 
-    const genEndpoint = 'https://yunwu.ai/v1/images/generations';
-    const modelName = modelConfig.modelName || 'gpt-image-2-all';
+    const genEndpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/generations';
+    const modelName = modelConfig.modelName || 'gpt-image-2';
 
     try {
       const requestBody: Record<string, unknown> = {
@@ -481,8 +377,11 @@ export async function POST(request: NextRequest) {
         prompt: finalPrompt,
         n: imageCount,
         size: `${width}x${height}`,
-        quality: quality,
       };
+
+      if (quality) {
+        requestBody.quality = quality;
+      }
 
       console.log('[Generate API] 发送请求到:', genEndpoint);
       console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100));
@@ -503,11 +402,17 @@ export async function POST(request: NextRequest) {
       
       if (!response.ok) {
         const text = await response.text();
-        console.error('[Generate API] 生图失败 - 状态码:', response.status);
+        const upstream = parseUpstreamApiError(response.status, text);
+        console.error('[Generate API] 生图失败 - 状态码:', response.status, 'requestId:', upstream.requestId);
         console.error('[Generate API] 响应内容:', text.substring(0, 500));
         return NextResponse.json(
-          { success: false, error: `图片生成失败：API 返回错误 ${response.status}` },
-          { status: 500 }
+          {
+            success: false,
+            error: `图片生成失败：API 返回错误 ${response.status}，${upstream.message.substring(0, 200)}`,
+            requestId: upstream.requestId,
+            upstreamStatus: response.status,
+          },
+          { status: response.status === 429 ? 429 : 500 }
         );
       }
 
@@ -525,26 +430,10 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      let imageUrls: string[] = [];
-      
-      if (data.data && data.data.length > 0) {
-        for (const item of data.data) {
-          if (item.b64_json) {
-            const b64 = item.b64_json;
-            imageUrls.push(b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`);
-          } else if (item.url) {
-            imageUrls.push(item.url);
-          }
-        }
-      }
-      
-      if (imageUrls.length === 0 && data.url) {
-        imageUrls.push(data.url);
-      }
+      const imageUrls = extractImageUrls(data);
       
       if (imageUrls.length > 0) {
         console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
-        // 更新生成记录为成功
         if (generationId) {
           await updateGeneration(generationId, {
             status: 'success',
@@ -558,26 +447,24 @@ export async function POST(request: NextRequest) {
           urls: imageUrls,
           size,
           specType,
-          model: 'gpt-image-2-all',
+          model: modelName,
         });
-      } else {
-        console.error('[Generate API] 无法从响应中提取图片 URL');
-        // 更新生成记录为失败
-        if (generationId) {
-          await updateGeneration(generationId, {
-            status: 'failed',
-            error: '无法获取图片 URL',
-            duration: Date.now() - startTime,
-          });
-        }
-        return NextResponse.json(
-          { success: false, error: '图片生成失败：无法获取图片 URL' },
-          { status: 500 }
-        );
       }
+
+      console.error('[Generate API] 无法从响应中提取图片 URL');
+      if (generationId) {
+        await updateGeneration(generationId, {
+          status: 'failed',
+          error: '无法获取图片 URL',
+          duration: Date.now() - startTime,
+        });
+      }
+      return NextResponse.json(
+        { success: false, error: '图片生成失败：无法获取图片 URL' },
+        { status: 500 }
+      );
     } catch (error) {
       console.error('[Generate API] 调用失败:', error);
-      // 更新生成记录为失败
       if (generationId) {
         await updateGeneration(generationId, {
           status: 'failed',
@@ -592,7 +479,6 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Image generation error:', error);
-    // 更新生成记录为失败
     if (generationId) {
       await updateGeneration(generationId, {
         status: 'failed',

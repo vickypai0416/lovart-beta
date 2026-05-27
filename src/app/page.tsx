@@ -571,7 +571,202 @@ const getLastAmazonPlan = (): { planImages: GeneratedImagePlan[], userImage: str
   return undefined;
 };
 
+// 已废弃：使用 generateAmazonGridImage 代替
 const generateImagesFromPlan = async (messageId: string, referenceImage: string) => {
+  console.log('[Deprecated] generateImagesFromPlan called, using generateAmazonGridImage instead');
+  await generateAmazonGridImage(messageId, referenceImage, '');
+};
+
+const generateAmazonGridImage = async (messageId: string, referenceImage: string | undefined, userContent: string = '') => {
+  abortControllerRef.current = new AbortController();
+  
+  try {
+    const isValidReferenceImage = !!referenceImage && (referenceImage.startsWith('data:') || referenceImage.startsWith('http://') || referenceImage.startsWith('https://'));
+    if (!isValidReferenceImage) {
+      throw new Error('gpt-image-2 编辑接口需要上传至少一张产品图，请先上传产品图后再生成亚马逊套图');
+    }
+
+    const basePrompt = "# 亚马逊美国站定制化产品 Listing 九宫格套图模板\n\n## 9 图转化型商业摄影生图提示词框架\n\n适用产品：`{PRODUCT_NAME}`  \n核心关键词：`{PRODUCT_KEYWORD}`  \n目标用户：`{TARGET_USER}`  \n使用场景：`{USE_SCENE}`  \n节日/送礼场景：`{HOLIDAY}`  \n主色调：`{COLOR_SCHEME}`  \n真实材质：`{MATERIAL}`  \n真实尺寸：`{SIZE}`  \n真实卖点：`{FEATURE_1}` / `{FEATURE_2}` / `{FEATURE_3}` / `{FEATURE_4}`  \n定制内容：`{CUSTOM_TEXT_TYPE}`，例如 name / date / message / photo / initials  \n产地/履约声明：`{ORIGIN_CLAIM}`\n\n`{ORIGIN_CLAIM}` 可选示例：\n\n- Personalized in the USA\n- Printed in the USA\n- Designed in the USA\n- Customized in the USA\n- Ships from USA\n- Assembled in USA with imported materials\n- Made in USA，仅限真实符合 FTC 要求时使用\n\n---\n\n## 核心风格指令\n\n- 高端商业摄影质感\n- 真实亚马逊产品图风格\n- 温暖、干净、可信赖\n- 适合美国消费者审美\n- 产品主体清晰突出\n- 定制区域必须可见\n- 材质、边缘、纹理真实\n- 光线柔和自然，避免过曝\n- 色彩统一，使用 `{COLOR_SCHEME}` 贯穿整套图片\n- 避免廉价拼贴感\n- 避免明显 AI 合成痕迹\n- 所有文字必须清晰、自然、无乱码\n- 不得生成产品不存在的配件、包装、认证或功能\n\n---\n\n# Image 1 - 白底主图\n\n## 用途\n\n提升点击率，合规展示产品完整形态。\n\n## 画面要求\n\n- 纯白背景，RGB 255,255,255\n- 产品居中展示\n- 产品占画面约 80%-85%\n- 展示完整产品形态\n- 定制内容可作为产品表面真实展示，但不能像后期广告文字\n- 无人物\n- 无道具\n- 无装饰元素\n- 无文字标题\n- 无徽章\n- 无水印\n- 无明显阴影，或仅保留非常轻微自然阴影\n\n## 镜头\n\n- 平视或轻微俯视\n- 商业电商主图构图\n- 产品边缘清晰，比例真实\n\n## 光线\n\n- 柔和均匀棚拍光\n- 突出材质和形状\n- 避免强反光\n\n## 禁止项\n\n- 禁止添加标题、卖点、图标、徽章\n- 禁止出现未随产品销售的配件\n- 禁止夸张场景\n- 禁止产品变形\n- 禁止 AI 生成错误文字\n\n---\n\n# Image 2 - 定制效果展示图\n\n## 标题文案\n\n`Customized Just for You`\n\n## 副标题文案\n\n`Add {CUSTOM_TEXT_TYPE} to Make It Personal`\n\n## 用途\n\n第一时间让买家知道这是可定制产品，并清楚看到定制区域。\n\n## 画面要求\n\n- 产品作为主体，占画面 55%-70%\n- 定制区域清晰可见\n- 可使用局部放大框展示定制细节\n- 背景为干净温暖的生活场景或浅色摄影棚背景\n- 可加入轻量化箭头或标注线指向定制区域\n- 文字不得遮挡产品主体\n- 如果展示手持产品，只出现自然手部，不强制露脸\n\n## 镜头\n\n- 中近景\n- 产品正面或最能展示定制区域的角度\n\n## 光线\n\n- 柔和自然光\n- 温暖但不过度泛黄\n- 使用 `{COLOR_SCHEME}` 色调\n\n## 风格\n\n- 高端\n- 清晰\n- 可信赖\n- 定制感强\n\n## 禁止项\n\n- 禁止把定制文字做成悬浮广告字\n- 禁止让定制文字乱码\n- 禁止遮挡定制区域\n- 禁止虚构定制能力\n\n---\n\n# Image 3 - 定制流程说明图\n\n## 标题文案\n\n`Easy to Personalize`\n\n## 副标题文案\n\n`Create Your Custom Gift in Minutes`\n\n## 用途\n\n降低买家下单顾虑，说明定制产品如何购买。\n\n## 画面要求\n\n采用简洁 4 步流程布局：\n\n1. `Click Customize Now`\n2. `Enter Your {CUSTOM_TEXT_TYPE}`\n3. `Preview Your Design`\n4. `We Make It for You`\n\n## 构图\n\n- 左侧或中央展示产品\n- 右侧展示 4 步流程\n- 每一步配简洁线性图标\n- 背景干净，不杂乱\n- 流程文字必须清晰可读\n- 产品定制区域保持可见\n\n## 镜头\n\n- 中景产品图\n- 信息图布局清晰\n\n## 光线\n\n- 柔和均匀\n- 保持 `{COLOR_SCHEME}` 色调\n\n## 风格\n\n- 专业\n- 易懂\n- 电商转化型\n- 信任感强\n\n## 禁止项\n\n- 禁止复杂流程\n- 禁止小字过多\n- 禁止生成错误 UI 按钮\n- 禁止出现亚马逊官方 Logo 或仿冒界面\n- 禁止承诺无法保证的交付时间\n\n---\n\n# Image 4 - 尺寸与比例展示图\n\n## 标题文案\n\n`Perfect Size for Everyday Display`\n\n## 副标题文案\n\n`Designed to Fit Beautifully in Your Space`\n\n## 用途\n\n解决买家对尺寸、比例、摆放效果的疑虑。\n\n## 画面要求\n\n- 展示产品真实尺寸 `{SIZE}`\n- 使用简洁尺寸线标注宽、高、厚度或容量\n- 可加入手持比例、桌面比例、墙面比例或空间比例\n- 背景为干净生活空间\n- 产品不能被场景淹没\n- 尺寸标注必须清晰\n\n## 镜头\n\n- 正面或 45 度角\n- 适合展示尺寸和厚度\n\n## 光线\n\n- 自然柔和光\n- 保持产品边缘清楚\n\n## 风格\n\n- 实用\n- 清晰\n- 干净\n- 有品质感\n\n## 禁止项\n\n- 禁止虚构尺寸\n- 禁止比例失真\n- 禁止让产品看起来比实际大很多或小很多\n- 禁止复杂背景影响阅读\n\n---\n\n# Image 5 - 材质与工艺微距图\n\n## 标题文案\n\n`Beautiful Details`\n\n## 副标题文案\n\n`Crafted with Care`\n\n## 用途\n\n提升品质感，展示产品材质、纹理、印刷、雕刻或表面工艺。\n\n## 画面要求\n\n- 局部微距展示产品关键细节\n- 突出 `{MATERIAL}` 的真实质感\n- 展示边缘、纹理、印刷、雕刻、表面处理等\n- 可加入一个小的完整产品缩略图作为参照\n- 背景简洁高级\n- 定制文字或图案局部清晰可见\n\n## 镜头\n\n- 微距特写\n- 浅景深\n- 重点细节清晰，背景自然虚化\n\n## 光线\n\n- 柔和侧光\n- 突出纹理和层次\n- 避免强反光\n\n## 风格\n\n- 精致\n- 高端\n- 真实\n- 手感强\n\n## 禁止项\n\n- 禁止过度放大导致变形\n- 禁止生成不存在的材质纹理\n- 禁止让文字糊成乱码\n- 禁止过度锐化或过度滤镜\n\n---\n\n# Image 6 - 产品真实卖点图\n\n## 标题文案\n\n`Premium Features`\n\n## 副标题文案\n\n`Quality You Can See and Feel`\n\n## 用途\n\n清楚展示产品优势，帮助买家理解为什么值得购买。\n\n## 画面要求\n\n- 左侧展示产品主图或场景图\n- 右侧展示 3-4 个真实卖点\n- 卖点只能使用以下输入内容：\n\n```text\n{FEATURE_1}\n{FEATURE_2}\n{FEATURE_3}\n{FEATURE_4}\n```\n\n## 推荐布局\n\n每个卖点搭配简洁图标，例如：\n\n- 材质图标\n- 定制图标\n- 耐用性图标\n- 展示/使用方式图标\n\n## 镜头\n\n- 中景\n- 产品清晰\n- 信息层级明确\n\n## 光线\n\n- 柔和均匀\n- 色调统一\n\n## 风格\n\n- 专业\n- 高级\n- 干净\n- 信息清楚\n\n## 禁止项\n\n- 禁止 AI 自行编造卖点\n- 禁止使用未经证实的词汇，如 waterproof、eco-friendly、non-toxic、handmade、certified、BPA-free，除非真实提供\n- 禁止图标遮挡产品\n- 禁止小字过多\n\n---\n\n# Image 7 - 真实生活使用场景图\n\n## 标题文案\n\n`Made for Meaningful Moments`\n\n## 副标题文案\n\n`Perfect for {USE_SCENE}`\n\n## 用途\n\n让买家想象产品在真实生活中的使用效果。\n\n## 画面要求\n\n- 产品融入真实家庭、办公、卧室、客厅、纪念空间或其他 `{USE_SCENE}` 场景\n- 产品必须是画面视觉焦点\n- 场景有生活气息，但保持干净高级\n- 可出现人物局部，例如手部、背影、侧脸虚化\n- 不强制人物露脸\n- 不让人物压过产品主体\n\n## 镜头\n\n- 中景\n- 产品与环境关系清楚\n\n## 光线\n\n- 温暖自然光\n- 轻微景深\n- 色调使用 `{COLOR_SCHEME}`\n\n## 风格\n\n- 温馨\n- 真实\n- 高端生活感\n- 不廉价\n\n## 禁止项\n\n- 禁止纯人物图\n- 禁止纯风景图\n- 禁止产品过小\n- 禁止背景杂乱\n- 禁止 AI 手部明显异常\n\n---\n\n# Image 8 - 送礼情绪场景图\n\n## 标题文案\n\n`A Thoughtful Gift for {TARGET_USER}`\n\n## 副标题文案\n\n`Perfect for {HOLIDAY}`\n\n## 用途\n\n强化送礼属性，制造情绪价值和购买动机。\n\n## 画面要求\n\n- 真实送礼或收到礼物的温馨瞬间\n- 产品必须清晰出现在画面中\n- 可出现人物互动，但产品仍是主体\n- 人物可采用手部、侧脸、背影或轻微虚化\n- 情绪自然，不夸张\n- 背景可有轻度节日氛围\n- 不默认展示礼盒、礼袋、卡片，除非产品真实包含\n\n## 镜头\n\n- 中景或中近景\n- 捕捉产品与情绪互动\n\n## 光线\n\n- 温暖自然\n- 节日氛围柔和\n- 不过度滤镜\n\n## 风格\n\n- 温馨\n- 情感化\n- 真实\n- 适合美国礼品市场\n\n## 禁止项\n\n- 禁止产品被人物遮挡\n- 禁止强制露脸\n- 禁止夸张假笑\n- 禁止出现不随产品附赠的包装\n- 禁止过度节日装饰\n\n---\n\n# Image 9 - 适用人群与节日矩阵图\n\n## 标题文案\n\n`Perfect for Every Occasion`\n\n## 副标题文案\n\n`A Personalized Gift They’ll Remember`\n\n## 用途\n\n扩大购买场景，让买家快速匹配送礼对象和节日。\n\n## 画面要求\n\n- 中央展示产品\n- 周围用简洁标签展示适用场景\n- 可包含 5-7 个送礼场景，例如：\n\n```text\nChristmas\nBirthday\nMother’s Day\nFather’s Day\nAnniversary\nHousewarming\nGraduation\n```\n\n或根据产品替换为：\n\n```text\nFor Mom\nFor Dad\nFor Wife\nFor Husband\nFor Grandma\nFor Teacher\nFor Friends\n```\n\n## 构图\n\n- 中央产品突出\n- 周围标签干净排列\n- 背景浅色或温暖生活场景\n- 信息清晰，不拥挤\n- 标签不得遮挡产品\n\n## 镜头\n\n- 产品中景或正面展示\n- 适合信息图布局\n\n## 光线\n\n- 柔和均匀\n- 保持整套图片统一色调\n\n## 风格\n\n- 礼品感\n- 清晰\n- 温暖\n- 转化导向\n\n## 禁止项\n\n- 禁止过多标签\n- 禁止小字难读\n- 禁止场景混乱\n- 禁止使用不适合该产品的节日或人群\n- 禁止出现误导性承诺\n\n---\n\n# 全局一致性控制\n\n## 视觉一致性\n\n- 所有图片保持统一 `{COLOR_SCHEME}` 色调\n- 使用一致的高端商业摄影风格\n- 光线温暖柔和\n- 背景干净\n- 产品比例稳定\n- 产品外观、颜色、材质在 9 张图中必须一致\n- 定制内容风格保持一致\n- 不同图片中的产品不能出现形状、颜色、材质明显变化\n\n## 字体建议\n\n- 英文字体风格：现代无衬线字体\n- 可参考 Montserrat、Avenir、Helvetica Neue 风格\n- 标题字号视觉上明显大于副标题\n- 标题建议 28-36pt\n- 副标题建议 16-22pt\n- 字体颜色与背景保持高对比度\n- 避免花体字、过细字体和难读字体\n\n## 文案控制\n\n- 文案简短\n- 每张图只表达一个核心卖点\n- 不堆砌关键词\n- 不使用夸张承诺\n- 不使用未经证实的认证或功能声明\n- 不写 Best、No.1、Guaranteed、Official、Certified 等高风险词，除非有真实依据\n\n## AI 生图稳定性要求\n\n- 产品主体必须清晰\n- 定制文字必须可读\n- 人物手部自然\n- 不出现多余手指、畸形手、扭曲人物\n- 不出现乱码文字\n- 不出现错误品牌 Logo\n- 不出现亚马逊 Logo\n- 不生成虚假包装\n- 不生成虚假配件\n- 不生成不存在的产品结构\n\n---\n\n# 合规避坑指南\n\n## 主图合规\n\n- 主图必须纯白背景\n- 主图无文字\n- 主图无图标\n- 主图无徽章\n- 主图无道具\n- 主图无场景\n- 主图只展示实际销售产品\n\n## 产地声明\n\n`Made in USA` 不得默认使用。  \n只有在产品真实符合 FTC 对美国制造声明要求时才可使用。\n\n更安全的变量包括：\n\n```text\nPersonalized in the USA\nPrinted in the USA\nDesigned in the USA\nCustomized in the USA\nShips from USA\nAssembled in USA with imported materials\n```\n\n## 功能声明\n\n禁止 AI 自行生成以下声明：\n\n```text\nWaterproof\nEco-friendly\nNon-toxic\nBPA-free\nFDA approved\nCertified\nHandmade\nScratch-resistant\nFade-proof\nLifetime warranty\nMade in USA\n```\n\n除非这些内容由真实产品资料明确提供。\n\n## 包装声明\n\n如果产品不包含礼盒、礼袋、贺卡、蝴蝶结或特殊包装，不得在图片中展示这些元素。\n\n## 节日元素\n\n节日氛围可以有，但不能遮挡产品。  \n不要让节日装饰比产品更抢眼。\n\n---\n\n# 推荐最终 9 图顺序\n\n```text\nImage 1：白底主图\nImage 2：定制效果展示\nImage 3：定制流程说明\nImage 4：尺寸与比例展示\nImage 5：材质与工艺微距\nImage 6：真实卖点说明\nImage 7：生活使用场景\nImage 8：送礼情绪场景\nImage 9：适用人群与节日矩阵\n```\n";
+    const gridPrompt = userContent ? `${basePrompt}，${userContent}` : basePrompt;
+    
+    const requestBody: Record<string, unknown> = {
+      prompt: gridPrompt,
+      // 九宫格大图：使用云雾 edits 接口支持的 2048 正方形（3840 不在支持列表会导致上游拒绝）
+      size: '2048x2048',
+      n: 1,
+      model: 'gpt-image-2-all',
+      referenceImage,
+    };
+    
+    console.log('[Amazon Grid Generation] Requesting /api/generate', {
+      model: requestBody.model,
+      size: requestBody.size,
+      n: requestBody.n,
+      hasReferenceImage: true,
+      promptLength: gridPrompt.length,
+    });
+
+    const gridResponse = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: abortControllerRef.current?.signal,
+    });
+    
+    const gridData = await gridResponse.json().catch(() => null);
+    if (!gridResponse.ok) {
+      const errorMessage = gridData?.error || gridData?.message || `/api/generate 请求失败：${gridResponse.status}`;
+      throw new Error(errorMessage);
+    }
+
+    const gridUrl = gridData?.url || gridData?.urls?.[0] || (gridData?.images && gridData.images[0]);
+    
+    if (!gridUrl) throw new Error('生成接口未返回图片 URL');
+    
+    const croppedImages = await cropGridImages(gridUrl);
+    const validImages = croppedImages.filter(Boolean) as string[];
+
+    if (validImages.length === 0) {
+      throw new Error('九宫格图片裁剪失败，请检查生成图片是否允许跨域访问');
+    }
+    
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isGenerating: false,
+          content: '',
+          imageUrls: validImages,
+        };
+      }));
+    }
+    
+    for (let i = 0; i < validImages.length; i++) {
+      await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
+    }
+    
+    const updatedHistory = await getChatHistoryWithUrls();
+    setChatImageHistory(updatedHistory);
+    
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log('[Amazon Grid Generation] Aborted');
+      return;
+    }
+    console.error('[Amazon Grid Generation] Failed:', error);
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isGenerating: false,
+          content: `❌ 图片生成失败：${errorMessage}`,
+        };
+      }));
+    }
+  }
+  
+  abortControllerRef.current = null;
+};
+
+// 裁剪九宫格图片（保持原始尺寸，不放大）
+async function cropGridImagesToSize(gridUrl: string, targetWidth: number, targetHeight: number): Promise<(string | null)[]> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      try {
+        const results: (string | null)[] = [];
+        const cellWidth = img.width / 3;
+        const cellHeight = img.height / 3;
+        
+        // 使用原始裁剪尺寸，不进行放大
+        const outputWidth = Math.min(cellWidth, targetWidth);
+        const outputHeight = Math.min(cellHeight, targetHeight);
+        
+        for (let i = 0; i < 9; i++) {
+          const row = Math.floor(i / 3);
+          const col = i % 3;
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = outputWidth;
+          canvas.height = outputHeight;
+          
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // 关闭图像平滑，保持清晰度
+            ctx.imageSmoothingEnabled = false;
+            
+            ctx.drawImage(
+              img,
+              col * cellWidth,
+              row * cellHeight,
+              cellWidth,
+              cellHeight,
+              0,
+              0,
+              outputWidth,
+              outputHeight
+            );
+            results.push(canvas.toDataURL('image/png'));
+          } else {
+            results.push(null);
+          }
+        }
+        resolve(results);
+      } catch {
+        resolve(Array(9).fill(null));
+      }
+    };
+    
+    img.onerror = () => resolve(Array(9).fill(null));
+    img.src = gridUrl;
+  });
+}
+
+async function cropGridImages(gridUrl: string): Promise<(string | null)[]> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      try {
+        const results: (string | null)[] = [];
+        const cellWidth = img.width / 3;
+        const cellHeight = img.height / 3;
+        
+        for (let i = 0; i < 9; i++) {
+          const row = Math.floor(i / 3);
+          const col = i % 3;
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = cellWidth;
+          canvas.height = cellHeight;
+          
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, col * cellWidth, row * cellHeight, cellWidth, cellHeight, 0, 0, cellWidth, cellHeight);
+            results.push(canvas.toDataURL('image/png'));
+          } else {
+            results.push(null);
+          }
+        }
+        resolve(results);
+      } catch {
+        resolve(Array(9).fill(null));
+      }
+    };
+    
+    img.onerror = () => resolve(Array(9).fill(null));
+    img.src = gridUrl;
+  });
+}
+
+const generateImagesFromPlanOld = async (messageId: string, referenceImage: string) => {
   const messageIndex = messages.findIndex(m => m.id === messageId);
   if (messageIndex === -1) return;
   
@@ -904,6 +1099,46 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
     console.log('[SendMessage] Content:', effectiveContent);
     console.log('[SendMessage] Images:', currentImages.length);
     console.log('[SendMessage] Selected persona:', selectedPersona);
+    
+    // 亚马逊专家模式：直接生成九宫格图片
+    if (selectedPersona === 'amazon-expert' && (currentImages.length > 0 || effectiveContent.trim().length > 0)) {
+      console.log('[SendMessage] Amazon expert mode - generating grid image directly');
+      
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: effectiveContent || '',
+        userImages: currentImages.length > 0 ? currentImages : undefined,
+      };
+      
+      const aiMessageId = (Date.now() + 1).toString();
+      
+      setMessages((prev) => [
+        ...prev,
+        userMessage,
+        { 
+          id: aiMessageId, 
+          role: 'assistant', 
+          content: '🎨 正在生成亚马逊listing九宫格套图...', 
+          isGenerating: true,
+          // 不设置 planImages，避免触发9图视觉方案界面
+        },
+      ]);
+      setInput('');
+      setIsLoading(true);
+      
+      try {
+        // 生成九宫格图片（传递用户输入内容）
+        await generateAmazonGridImage(aiMessageId, currentImages[0], effectiveContent);
+      } finally {
+        if (isMounted.current) {
+          setIsLoading(false);
+        }
+      }
+      
+      // 确保不会继续执行后续代码
+      return;
+    }
     
     // 检测是否是选择性生图请求（仅在亚马逊专家模式下，且没有上传新图片，且输入包含"生成"关键词时）
     const selectiveRequest = (selectedPersona === 'amazon-expert' && currentImages.length === 0 && effectiveContent.includes('生成')) 
@@ -1735,7 +1970,9 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {chatImageHistory.map((item) => (
+                    {chatImageHistory.map((item) => {
+                      if (!item.url || item.url.trim().length === 0) return null;
+                      return (
                       <div
                         key={item.id}
                         className="relative group aspect-square rounded-lg overflow-hidden shadow-md"
@@ -1778,7 +2015,8 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                           <p className="text-xs text-white truncate">{item.prompt}</p>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -1819,6 +2057,8 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                   <div className="flex items-center gap-2 overflow-x-auto pb-2">
                     {userImages.map((img, index) => {
                       const numberLabels = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯'];
+                      const isValidUrl = typeof img === 'string' && img.trim().length > 0;
+                      if (!isValidUrl) return null;
                       return (
                         <div key={index} className="relative group flex-shrink-0">
                           <div className="relative">
