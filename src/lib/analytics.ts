@@ -266,6 +266,16 @@ class KVStorageAdapter implements StorageAdapter {
     return id ? `analytics:${type}:${id}` : `analytics:${type}`;
   }
 
+  private cleanObject(obj: Record<string, unknown>): Record<string, unknown> {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = value;
+      }
+    }
+    return cleaned;
+  }
+
   private normalize<T extends { createdAt?: unknown; updatedAt?: unknown }>(obj: T): T {
     return {
       ...obj,
@@ -288,7 +298,7 @@ class KVStorageAdapter implements StorageAdapter {
   async createSession(userId?: string): Promise<Session> {
     await this.init();
     const session: Session = { id: generateId(), createdAt: new Date(), updatedAt: new Date(), userId };
-    await this.kv.hset(this.key('sessions', session.id), session as any);
+    await this.kv.hset(this.key('sessions', session.id), this.cleanObject(session as any));
     await this.kv.sadd('analytics:sessions:ids', session.id);
     return session;
   }
@@ -309,7 +319,7 @@ class KVStorageAdapter implements StorageAdapter {
   async createEvent(sessionId: string, type: string, payload: Record<string, unknown>): Promise<Event> {
     await this.init();
     const event: Event = { id: generateId(), sessionId, type, payload, createdAt: new Date() };
-    await this.kv.hset(this.key('events', event.id), event as any);
+    await this.kv.hset(this.key('events', event.id), this.cleanObject(event as any));
     await this.kv.sadd('analytics:events:ids', event.id);
     await this.kv.sadd(`analytics:sessions:${sessionId}:events`, event.id);
     return event;
@@ -330,7 +340,7 @@ class KVStorageAdapter implements StorageAdapter {
   async createGeneration(data: Omit<Generation, 'id' | 'createdAt'>): Promise<Generation> {
     await this.init();
     const generation: Generation = { ...data, id: generateId(), createdAt: new Date() };
-    await this.kv.hset(this.key('generations', generation.id), generation as any);
+    await this.kv.hset(this.key('generations', generation.id), this.cleanObject(generation as any));
     await this.kv.sadd('analytics:generations:ids', generation.id);
     await this.kv.sadd(`analytics:sessions:${generation.sessionId}:generations`, generation.id);
     return generation;
@@ -338,7 +348,7 @@ class KVStorageAdapter implements StorageAdapter {
 
   async updateGeneration(id: string, updates: Partial<Generation>): Promise<void> {
     await this.init();
-    await this.kv.hset(this.key('generations', id), updates as any);
+    await this.kv.hset(this.key('generations', id), this.cleanObject(updates as any));
   }
 
   async getGenerationsBySession(sessionId: string): Promise<Generation[]> {
@@ -356,7 +366,7 @@ class KVStorageAdapter implements StorageAdapter {
   async createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback> {
     await this.init();
     const feedback: Feedback = { ...data, id: generateId(), createdAt: new Date() };
-    await this.kv.hset(this.key('feedbacks', feedback.id), feedback as any);
+    await this.kv.hset(this.key('feedbacks', feedback.id), this.cleanObject(feedback as any));
     await this.kv.sadd('analytics:feedbacks:ids', feedback.id);
     await this.kv.sadd(`analytics:sessions:${feedback.sessionId}:feedbacks`, feedback.id);
     return feedback;
@@ -377,7 +387,7 @@ class KVStorageAdapter implements StorageAdapter {
   async createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
     await this.init();
     const message: Message = { ...data, id: generateId(), createdAt: new Date() };
-    await this.kv.hset(this.key('messages', message.id), message as any);
+    await this.kv.hset(this.key('messages', message.id), this.cleanObject(message as any));
     await this.kv.sadd('analytics:messages:ids', message.id);
     await this.kv.sadd(`analytics:sessions:${message.sessionId}:messages`, message.id);
     return message;
@@ -398,7 +408,7 @@ class KVStorageAdapter implements StorageAdapter {
   async createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> {
     await this.init();
     const template: PromptTemplate = { ...data, id: generateId(), likes: 0, createdAt: new Date() };
-    await this.kv.hset(this.key('prompt-templates', template.id), template as any);
+    await this.kv.hset(this.key('prompt-templates', template.id), this.cleanObject(template as any));
     await this.kv.sadd('analytics:prompt-templates:ids', template.id);
     return template;
   }
