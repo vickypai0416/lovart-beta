@@ -273,8 +273,6 @@ export interface PersistedMessage {
     imageUrl?: string;
     status: 'pending' | 'generating' | 'completed' | 'failed';
   }>;
-  isGenerating?: boolean;
-  clientRequestId?: string;
   timestamp: number;
 }
 

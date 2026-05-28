@@ -39,7 +39,6 @@ interface Message {
   isGenerating?: boolean;
   isAmazonPlan?: boolean;
   planImages?: GeneratedImagePlan[];
-  clientRequestId?: string;
 }
 
 interface GeneratedImagePlan {
@@ -115,8 +114,7 @@ export default function Home() {
           userImages,
           product: m.product,
           scene: m.scene,
-          isGenerating: m.isGenerating,
-          clientRequestId: m.clientRequestId,
+          isAmazonPlan: m.isAmazonPlan,
           planImages: m.planImages,
         };
       });
@@ -147,8 +145,7 @@ export default function Home() {
   const currentSessionIdRef = useRef<string | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const userImagesRef = useRef<string[]>([]);
-  const restoredGenerationIds = useRef<Set<string>>(new Set());
-
+  
   // 组件挂载状态，用于防止卸载后更新状态
   const isMounted = useRef(true);
   
@@ -406,49 +403,6 @@ export default function Home() {
     }
   };
 
-  const displayAmazonGridResult = async (messageId: string, gridUrl: string) => {
-    if (isMounted.current) {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== messageId) return m;
-        return {
-          ...m,
-          isGenerating: false,
-          content: '',
-          imageUrls: [gridUrl],
-        };
-      }));
-    }
-
-    await handleSaveChatImage(gridUrl, '亚马逊listing完整九宫格', messageId);
-
-    const croppedImages = await cropGridImages(gridUrl);
-    const validImages = croppedImages.filter(Boolean) as string[];
-    const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
-
-    if (validImages.length === 0) {
-      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image only');
-    }
-
-    if (validImages.length > 0 && isMounted.current) {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== messageId) return m;
-        return {
-          ...m,
-          isGenerating: false,
-          content: '',
-          imageUrls: displayImages,
-        };
-      }));
-    }
-
-    for (let i = 0; i < validImages.length; i++) {
-      await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
-    }
-
-    const updatedHistory = await getChatHistoryWithUrls();
-    setChatImageHistory(updatedHistory);
-  };
-
   const formatGenerationError = (error: unknown): string => {
     if (error instanceof Error) return error.message;
     if (typeof error === 'string') return error;
@@ -460,7 +414,7 @@ export default function Home() {
   };
 
   const recoverGeneratedImage = async (clientRequestId: string): Promise<string | null> => {
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 40; i++) {
       try {
         const response = await fetch(`/api/generate/status?clientRequestId=${encodeURIComponent(clientRequestId)}`, {
           cache: 'no-store',
@@ -477,38 +431,6 @@ export default function Home() {
     }
     return null;
   };
-
-
-  useEffect(() => {
-    const pending = messages.filter(
-      (message) => message.isGenerating && message.clientRequestId && !message.imageUrls?.length
-    );
-
-    for (const message of pending) {
-      const clientRequestId = message.clientRequestId;
-      if (!clientRequestId || restoredGenerationIds.current.has(clientRequestId)) continue;
-      restoredGenerationIds.current.add(clientRequestId);
-
-      void (async () => {
-        const recoveredUrl = await recoverGeneratedImage(clientRequestId);
-        if (recoveredUrl) {
-          await displayAmazonGridResult(message.id, recoveredUrl);
-          return;
-        }
-
-        if (isMounted.current) {
-          setMessages(prev => prev.map(m => {
-            if (m.id !== message.id) return m;
-            return {
-              ...m,
-              isGenerating: false,
-              content: '❌ 图片生成超时，请重新生成',
-            };
-          }));
-        }
-      })();
-    }
-  }, [messages]);
 
   const handleDeleteChatImage = async (imageId: string) => {
     await deleteChatImage(imageId);
@@ -688,9 +610,9 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
   await generateAmazonGridImage(messageId, referenceImage, '');
 };
 
-const generateAmazonGridImage = async (messageId: string, referenceImage: string | undefined, userContent: string = '', existingClientRequestId?: string) => {
+const generateAmazonGridImage = async (messageId: string, referenceImage: string | undefined, userContent: string = '') => {
   abortControllerRef.current = new AbortController();
-  const clientRequestId = existingClientRequestId || `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const clientRequestId = `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
   try {
     const isValidReferenceImage = !!referenceImage && (referenceImage.startsWith('data:') || referenceImage.startsWith('http://') || referenceImage.startsWith('https://'));
@@ -719,27 +641,12 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       promptLength: gridPrompt.length,
     });
 
-    let gridRequestTimeout: ReturnType<typeof setTimeout> | null = null;
-    const gridFetchPromise = fetch('/api/generate', {
+    const gridResponse = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
       signal: abortControllerRef.current?.signal,
     });
-    gridFetchPromise.catch(() => undefined);
-
-    const gridResponse = await Promise.race([
-      gridFetchPromise,
-      new Promise<Response>((_, reject) => {
-        gridRequestTimeout = setTimeout(() => {
-          reject(new Error('生成请求等待超时，正在尝试恢复已生成图片'));
-        }, 90000);
-      }),
-    ]);
-
-    if (gridRequestTimeout) {
-      clearTimeout(gridRequestTimeout);
-    }
     
     const gridData = await gridResponse.json().catch(() => null);
     if (!gridResponse.ok) {
@@ -751,8 +658,34 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     
     if (!gridUrl) throw new Error('生成接口未返回图片 URL');
     
-    await displayAmazonGridResult(messageId, gridUrl);
+    const croppedImages = await cropGridImages(gridUrl);
+    const validImages = croppedImages.filter(Boolean) as string[];
+    const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
 
+    if (validImages.length === 0) {
+      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image instead');
+    }
+
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isGenerating: false,
+          content: '',
+          imageUrls: displayImages,
+        };
+      }));
+    }
+
+    for (let i = 0; i < displayImages.length; i++) {
+      const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
+      await handleSaveChatImage(displayImages[i], label, messageId);
+    }
+    
+    const updatedHistory = await getChatHistoryWithUrls();
+    setChatImageHistory(updatedHistory);
+    
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       console.log('[Amazon Grid Generation] Aborted');
@@ -761,7 +694,29 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     console.error('[Amazon Grid Generation] Failed:', error);
     const recoveredUrl = await recoverGeneratedImage(clientRequestId);
     if (recoveredUrl) {
-      await displayAmazonGridResult(messageId, recoveredUrl);
+      const croppedImages = await cropGridImages(recoveredUrl);
+      const validImages = croppedImages.filter(Boolean) as string[];
+      const displayImages = validImages.length > 0 ? [recoveredUrl, ...validImages] : [recoveredUrl];
+
+      if (isMounted.current) {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            isGenerating: false,
+            content: '',
+            imageUrls: displayImages,
+          };
+        }));
+      }
+
+      for (let i = 0; i < displayImages.length; i++) {
+        const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
+        await handleSaveChatImage(displayImages[i], label, messageId);
+      }
+
+      const updatedHistory = await getChatHistoryWithUrls();
+      setChatImageHistory(updatedHistory);
       return;
     }
 
@@ -1234,8 +1189,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         content: effectiveContent || '',
         userImages: currentImages.length > 0 ? currentImages : undefined,
       };
-
-      const clientRequestId = `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      
       const aiMessageId = (Date.now() + 1).toString();
       
       setMessages((prev) => [
@@ -1246,7 +1200,6 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
           role: 'assistant', 
           content: '🎨 正在生成亚马逊listing九宫格套图...', 
           isGenerating: true,
-          clientRequestId,
           // 不设置 planImages，避免触发9图视觉方案界面
         },
       ]);
@@ -1255,7 +1208,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
       
       try {
         // 生成九宫格图片（传递用户输入内容）
-        await generateAmazonGridImage(aiMessageId, currentImages[0], effectiveContent, clientRequestId);
+        await generateAmazonGridImage(aiMessageId, currentImages[0], effectiveContent);
       } finally {
         if (isMounted.current) {
           setIsLoading(false);
@@ -1924,6 +1877,31 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                   <div className="flex flex-col py-0.5">
                     <span className="font-medium text-xs">GPT-5.4 nano</span>
                     <span className="text-[10px] text-gray-400">轻量对话 + 图片识别</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="gpt-5.4">
+                  <div className="flex flex-col py-0.5">
+                    <span className="font-medium text-xs">GPT-5.4</span>
+                    <span className="text-[10px] text-gray-400">旗舰推理能力</span>
+                  </div>
+                </SelectItem>
+                <div className="px-2 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-1">图片生成</div>
+                <SelectItem value="gpt-image-2">
+                  <div className="flex flex-col py-0.5">
+                    <span className="font-medium text-xs">GPT Image 2</span>
+                    <span className="text-[10px] text-gray-400">对话生图 + 图片识别</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="gpt-image-2-gen">
+                  <div className="flex flex-col py-0.5">
+                    <span className="font-medium text-xs">GPT Image 2 生成</span>
+                    <span className="text-[10px] text-gray-400">纯文本生图，多尺寸</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="gpt-image-2-edit">
+                  <div className="flex flex-col py-0.5">
+                    <span className="font-medium text-xs">GPT Image 2 编辑</span>
+                    <span className="text-[10px] text-gray-400">图片编辑 + 多图合并</span>
                   </div>
                 </SelectItem>
               </SelectContent>
