@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, History, ZoomIn } from 'lucide-react';
+import { ArrowUp, Paperclip, Sparkles, Image as ImageIcon, Download, RefreshCw, Trash2, X, ZoomIn } from 'lucide-react';
 import { saveImgGenHistory, getImgGenHistoryWithUrls, deleteImgGenImage, clearImgGenHistory, ImgGenHistoryItem } from '@/lib/history-manager';
 import { downloadImageByUrl, downloadMultipleImages } from '@/lib/download';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -61,6 +61,7 @@ export default function ImageGeneratorWorkflow() {
   const [selectedCount, setSelectedCount] = useState(1);
   const [selectedModel, setSelectedModel] = useState('gpt-image-2-all');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'generator' | 'history' | 'prompts'>('generator');
   const [imageHistory, setImageHistory] = useState<ImgGenHistoryItem[]>([]);
@@ -73,6 +74,7 @@ export default function ImageGeneratorWorkflow() {
   const [newPromptAuthor, setNewPromptAuthor] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isGeneratingRef = useRef(false);
   const generationIdRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -150,6 +152,7 @@ export default function ImageGeneratorWorkflow() {
   ];
 
   const generateImage = async () => {
+    if (isGeneratingRef.current) return;
     if (!prompt.trim() && referenceImages.length === 0) {
       console.log('[Generate] Abort: No prompt and no reference images');
       return;
@@ -162,9 +165,63 @@ export default function ImageGeneratorWorkflow() {
     console.log('[Generate] selectedQuality:', selectedQuality);
     console.log('[Generate] selectedCount:', selectedCount);
     console.log('[Generate] selectedModel:', selectedModel);
-    
+
+    isGeneratingRef.current = true;
     setIsGenerating(true);
+    setGenerationError(null);
     const startTime = Date.now();
+    const clientRequestId = `image-generator-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const applyGeneratedImages = async (urls: string[]) => {
+      console.log(`[Generate] 图片生成成功: ${urls.length} 张`);
+      setGeneratedImages(urls);
+      setEnglishPrompt('');
+      setGenerationError(null);
+
+      for (const url of urls) {
+        await saveImgGenHistory({
+          url,
+          prompt: englishPrompt || prompt.trim() || '图片生成',
+          size: selectedSize,
+          productName: 'Custom Product',
+          scene: 'Everyday',
+          platform: 'general',
+        });
+      }
+
+      const updated = await getImgGenHistoryWithUrls();
+      setImageHistory(updated);
+
+      if (generationIdRef.current) {
+        await updateGeneration(generationIdRef.current, {
+          status: 'success',
+          imageUrl: urls[0],
+          duration: Date.now() - startTime,
+        });
+      }
+    };
+
+    const recoverGeneratedImage = async () => {
+      for (let i = 0; i < 40; i++) {
+        try {
+          const response = await fetch(`/api/generate/status?clientRequestId=${encodeURIComponent(clientRequestId)}`, {
+            cache: 'no-store',
+          });
+          const data = await response.json().catch(() => null);
+          if (data?.success && data.status === 'success' && data.url) {
+            await applyGeneratedImages([data.url]);
+            return true;
+          }
+          if (data?.success && data.status === 'failed') {
+            return false;
+          }
+        } catch {
+          // keep polling
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      return false;
+    };
 
     if (!isInitialized) {
       console.log('[Generate] Waiting for analytics initialization...');
@@ -190,11 +247,11 @@ export default function ImageGeneratorWorkflow() {
     generationIdRef.current = generationId;
     console.log('[Generate] Tracked generation:', generationId);
 
-    const maxRetries = 2;
+    const maxRetries = 0;
     const timeoutMs = 300000;
 
     abortControllerRef.current = new AbortController();
-    
+
     for (let retry = 0; retry <= maxRetries; retry++) {
       try {
         const timeoutId = setTimeout(() => {
@@ -208,6 +265,7 @@ export default function ImageGeneratorWorkflow() {
 
         console.log(`[Generate] Attempt ${retry + 1}: Sending request to /api/generate`);
         console.log(`[Generate] Request body:`, {
+          clientRequestId,
           prompt: englishPrompt || prompt.trim(),
           size: selectedSize,
           quality: selectedQuality,
@@ -220,6 +278,7 @@ export default function ImageGeneratorWorkflow() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            clientRequestId,
             prompt: englishPrompt || prompt.trim(),
             size: selectedSize,
             quality: selectedQuality,
@@ -244,11 +303,12 @@ export default function ImageGeneratorWorkflow() {
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
-          const safeText = (rawText || '').trim();
+          if (await recoverGeneratedImage()) break;
+          const safeText = (rawText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
           const errorMessage = safeText
-            ? `服务器返回非 JSON 格式: ${safeText.substring(0, 100)}`
+            ? `服务器返回异常响应：${safeText.substring(0, 100)}`
             : '服务器返回空响应';
-          alert(errorMessage);
+          setGenerationError(errorMessage);
           if (generationId) {
             await updateGeneration(generationId, {
               status: 'failed',
@@ -261,36 +321,13 @@ export default function ImageGeneratorWorkflow() {
 
         if (response.ok && result) {
           const urls = result.urls || (result.url ? [result.url] : []);
-          
+
           if (urls.length > 0) {
-            console.log(`[Generate] 图片生成成功: ${urls.length} 张`);
-            setGeneratedImages(urls);
-            setEnglishPrompt('');
-            
-            for (const url of urls) {
-              await saveImgGenHistory({
-                url,
-                prompt: englishPrompt || prompt.trim() || '图片生成',
-                size: selectedSize,
-                productName: 'Custom Product',
-                scene: 'Everyday',
-                platform: 'general',
-              });
-            }
-            
-            const updated = await getImgGenHistoryWithUrls();
-            setImageHistory(updated);
-            
-            if (generationId) {
-              await updateGeneration(generationId, {
-                status: 'success',
-                imageUrl: urls[0],
-                duration: Date.now() - startTime,
-              });
-            }
+            await applyGeneratedImages(urls);
           } else {
-            const errorMsg = '生成失败: 未获取到图片';
-            alert(errorMsg);
+            if (await recoverGeneratedImage()) break;
+            const errorMsg = '生成失败：未获取到图片';
+            setGenerationError(errorMsg);
             if (generationId) {
               await updateGeneration(generationId, {
                 status: 'failed',
@@ -307,10 +344,11 @@ export default function ImageGeneratorWorkflow() {
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
+          if (await recoverGeneratedImage()) break;
           const errorMsg = rateLimited
-            ? '生成失败: 上游负载已满 (429)，请稍后再试，勿重复点击'
-            : '生成失败: ' + (errorText || '未知错误');
-          alert(errorMsg);
+            ? '生成失败：上游图片生成服务繁忙，请稍后再试，勿重复点击'
+            : '生成失败：' + (errorText || '未知错误');
+          setGenerationError(errorMsg);
           if (generationId) {
             await updateGeneration(generationId, {
               status: 'failed',
@@ -324,21 +362,22 @@ export default function ImageGeneratorWorkflow() {
         console.error(`[Generate] 第 ${retry + 1} 次请求失败:`, error);
         console.error(`[Generate] Error type:`, error instanceof Error ? error.name : typeof error);
         console.error(`[Generate] Error stack:`, error instanceof Error ? error.stack : null);
-        
+
         if (error instanceof Error && error.name === 'AbortError') {
           console.log(`[Generate] 请求被中止，可能是超时或手动取消`);
         }
-        
+
         const rateLimited = error instanceof Error && isRateLimitError(429, error.message);
         if (retry < maxRetries && !rateLimited) {
           console.log(`[Generate] 等待 2 秒后重试...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
+        if (await recoverGeneratedImage()) break;
         const errorMsg = rateLimited
-          ? '生成失败: 上游负载已满 (429)，请稍后再试，勿重复点击'
-          : '生成失败，请重试: ' + (error instanceof Error ? error.message : '网络错误');
-        alert(errorMsg);
+          ? '生成失败：上游图片生成服务繁忙，请稍后再试，勿重复点击'
+          : '生成失败，请重试：' + (error instanceof Error ? error.message : '网络错误');
+        setGenerationError(errorMsg);
         if (generationId) {
           await updateGeneration(generationId, {
             status: 'failed',
@@ -350,6 +389,7 @@ export default function ImageGeneratorWorkflow() {
     }
 
     abortControllerRef.current = null;
+    isGeneratingRef.current = false;
     setIsGenerating(false);
   };
 
@@ -756,7 +796,16 @@ export default function ImageGeneratorWorkflow() {
             ))}
           </div>
         )}
-        
+
+        {generationError && (
+          <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <span>{generationError}</span>
+            <button onClick={() => setGenerationError(null)} className="text-red-400 hover:text-red-600">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <input
             ref={fileInputRef}
