@@ -414,7 +414,7 @@ export default function Home() {
   };
 
   const recoverGeneratedImage = async (clientRequestId: string): Promise<string | null> => {
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 100; i++) {
       try {
         const response = await fetch(`/api/generate/status?clientRequestId=${encodeURIComponent(clientRequestId)}`, {
           cache: 'no-store',
@@ -627,7 +627,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       clientRequestId,
       prompt: gridPrompt,
       // 九宫格大图：使用云雾 edits 接口支持的 2048 正方形（3840 不在支持列表会导致上游拒绝）
-      size: '2688x2688',
+      size: '2304x2304',
       n: 1,
       model: 'gpt-image-2-all',
       referenceImage,
@@ -658,15 +658,29 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     
     if (!gridUrl) throw new Error('生成接口未返回图片 URL');
     
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isGenerating: false,
+          content: '',
+          imageUrls: [gridUrl],
+        };
+      }));
+    }
+
+    await handleSaveChatImage(gridUrl, '亚马逊listing完整九宫格', messageId);
+
     const croppedImages = await cropGridImages(gridUrl);
     const validImages = croppedImages.filter(Boolean) as string[];
     const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
 
     if (validImages.length === 0) {
-      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image instead');
+      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image only');
     }
 
-    if (isMounted.current) {
+    if (validImages.length > 0 && isMounted.current) {
       setMessages(prev => prev.map(m => {
         if (m.id !== messageId) return m;
         return {
@@ -678,9 +692,8 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       }));
     }
 
-    for (let i = 0; i < displayImages.length; i++) {
-      const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
-      await handleSaveChatImage(displayImages[i], label, messageId);
+    for (let i = 0; i < validImages.length; i++) {
+      await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
     }
     
     const updatedHistory = await getChatHistoryWithUrls();
@@ -694,11 +707,25 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     console.error('[Amazon Grid Generation] Failed:', error);
     const recoveredUrl = await recoverGeneratedImage(clientRequestId);
     if (recoveredUrl) {
+      if (isMounted.current) {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            isGenerating: false,
+            content: '',
+            imageUrls: [recoveredUrl],
+          };
+        }));
+      }
+
+      await handleSaveChatImage(recoveredUrl, '亚马逊listing完整九宫格', messageId);
+
       const croppedImages = await cropGridImages(recoveredUrl);
       const validImages = croppedImages.filter(Boolean) as string[];
       const displayImages = validImages.length > 0 ? [recoveredUrl, ...validImages] : [recoveredUrl];
 
-      if (isMounted.current) {
+      if (validImages.length > 0 && isMounted.current) {
         setMessages(prev => prev.map(m => {
           if (m.id !== messageId) return m;
           return {
@@ -710,9 +737,8 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
         }));
       }
 
-      for (let i = 0; i < displayImages.length; i++) {
-        const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
-        await handleSaveChatImage(displayImages[i], label, messageId);
+      for (let i = 0; i < validImages.length; i++) {
+        await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
       }
 
       const updatedHistory = await getChatHistoryWithUrls();

@@ -11,7 +11,7 @@ export const maxDuration = 300;
 const SUPPORTED_EDIT_SIZES = new Set([
   '1024x1024', '1024x1536', '1536x1024',
   '2048x2048', '2048x1536', '1536x2048', '2048x1152', '1152x2048',
-  '2688x2688',
+  '2304x2304',
 ]);
 
 function normalizeEditSize(width: number, height: number): string {
