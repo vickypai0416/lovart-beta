@@ -269,7 +269,7 @@ class KVStorageAdapter implements StorageAdapter {
   private cleanObject(obj: Record<string, unknown>): Record<string, unknown> {
     const cleaned: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined) {
+      if (value !== undefined && value !== null) {
         cleaned[key] = value;
       }
     }
@@ -284,7 +284,7 @@ class KVStorageAdapter implements StorageAdapter {
     } as T;
   }
 
-  private async getByIds<T>(type: string, ids: string[]): Promise<T[]> {
+  private async getByIds<T extends { createdAt?: unknown; updatedAt?: unknown }>(type: string, ids: string[]): Promise<T[]> {
     const out: T[] = [];
     for (const id of ids) {
       const data = await this.kv.hgetall(this.key(type, id));

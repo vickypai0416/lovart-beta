@@ -660,7 +660,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     
     const croppedImages = await cropGridImages(gridUrl);
     const validImages = croppedImages.filter(Boolean) as string[];
-    const displayImages = validImages.length > 0 ? validImages : [gridUrl];
+    const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
 
     if (validImages.length === 0) {
       console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image instead');
@@ -679,7 +679,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     }
 
     for (let i = 0; i < displayImages.length; i++) {
-      const label = validImages.length > 0 ? `亚马逊listing套图 - 图${i + 1}` : '亚马逊listing九宫格套图';
+      const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
       await handleSaveChatImage(displayImages[i], label, messageId);
     }
     
@@ -696,7 +696,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     if (recoveredUrl) {
       const croppedImages = await cropGridImages(recoveredUrl);
       const validImages = croppedImages.filter(Boolean) as string[];
-      const displayImages = validImages.length > 0 ? validImages : [recoveredUrl];
+      const displayImages = validImages.length > 0 ? [recoveredUrl, ...validImages] : [recoveredUrl];
 
       if (isMounted.current) {
         setMessages(prev => prev.map(m => {
@@ -711,7 +711,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       }
 
       for (let i = 0; i < displayImages.length; i++) {
-        const label = validImages.length > 0 ? `亚马逊listing套图 - 图${i + 1}` : '亚马逊listing九宫格套图';
+        const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
         await handleSaveChatImage(displayImages[i], label, messageId);
       }
 

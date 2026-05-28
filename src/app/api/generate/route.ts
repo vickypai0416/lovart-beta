@@ -167,16 +167,21 @@ export async function POST(request: NextRequest) {
     const spec = AMAZON_IMAGE_SPECS[specType as ImageSpecType];
     const [width, height] = size.split('x').map(Number);
     
-    generationId = (await createGeneration({
+    const generationPayload: Omit<Parameters<typeof createGeneration>[0], 'clientRequestId'> & { clientRequestId?: string } = {
       sessionId,
-      clientRequestId: typeof clientRequestId === 'string' ? clientRequestId : undefined,
       prompt: finalPrompt,
       size,
       quality,
       model: model || 'gpt-image-2',
       count: imageCount,
       status: 'pending',
-    })).id;
+    };
+
+    if (typeof clientRequestId === 'string' && clientRequestId.trim()) {
+      generationPayload.clientRequestId = clientRequestId.trim();
+    }
+
+    generationId = (await createGeneration(generationPayload)).id;
     
     if (spec) {
       if (spec.minWidth && width < spec.minWidth) {
