@@ -627,7 +627,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       clientRequestId,
       prompt: gridPrompt,
       // 九宫格大图：使用云雾 edits 接口支持的 2048 正方形（3840 不在支持列表会导致上游拒绝）
-      size: '2304x2304',
+      size: '2048x2048',
       n: 1,
       model: 'gpt-image-2-all',
       referenceImage,
@@ -641,12 +641,27 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       promptLength: gridPrompt.length,
     });
 
-    const gridResponse = await fetch('/api/generate', {
+    let gridRequestTimeout: ReturnType<typeof setTimeout> | null = null;
+    const gridFetchPromise = fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
       signal: abortControllerRef.current?.signal,
     });
+    gridFetchPromise.catch(() => undefined);
+
+    const gridResponse = await Promise.race([
+      gridFetchPromise,
+      new Promise<Response>((_, reject) => {
+        gridRequestTimeout = setTimeout(() => {
+          reject(new Error('生成请求等待超时，正在尝试恢复已生成图片'));
+        }, 90000);
+      }),
+    ]);
+
+    if (gridRequestTimeout) {
+      clearTimeout(gridRequestTimeout);
+    }
     
     const gridData = await gridResponse.json().catch(() => null);
     if (!gridResponse.ok) {
