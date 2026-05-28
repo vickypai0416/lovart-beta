@@ -172,54 +172,89 @@ export default function ImageGeneratorWorkflow() {
     const startTime = Date.now();
     const clientRequestId = `image-generator-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+    let shouldContinue = true;
+
+    const cleanupAndExit = () => {
+      console.log(`[Generate] 清理并退出，isGenerating: ${isGeneratingRef.current}`);
+      abortControllerRef.current = null;
+      isGeneratingRef.current = false;
+      setIsGenerating(false);
+    };
+
+    try {
+
     const applyGeneratedImages = async (urls: string[]) => {
       console.log(`[Generate] 图片生成成功: ${urls.length} 张`);
       setGeneratedImages(urls);
       setEnglishPrompt('');
       setGenerationError(null);
 
-      for (const url of urls) {
-        await saveImgGenHistory({
-          url,
-          prompt: englishPrompt || prompt.trim() || '图片生成',
-          size: selectedSize,
-          productName: 'Custom Product',
-          scene: 'Everyday',
-          platform: 'general',
-        });
-      }
+      try {
+        for (const url of urls) {
+          await saveImgGenHistory({
+            url,
+            prompt: englishPrompt || prompt.trim() || '图片生成',
+            size: selectedSize,
+            productName: 'Custom Product',
+            scene: 'Everyday',
+            platform: 'general',
+          });
+        }
 
-      const updated = await getImgGenHistoryWithUrls();
-      setImageHistory(updated);
+        const updated = await getImgGenHistoryWithUrls();
+        setImageHistory(updated);
 
-      if (generationIdRef.current) {
-        await updateGeneration(generationIdRef.current, {
-          status: 'success',
-          imageUrl: urls[0],
-          duration: Date.now() - startTime,
-        });
+        if (generationIdRef.current) {
+          await updateGeneration(generationIdRef.current, {
+            status: 'success',
+            imageUrl: urls[0],
+            duration: Date.now() - startTime,
+          });
+        }
+      } catch (saveError) {
+        console.error('[Generate] 保存历史记录失败:', saveError);
+        // 保存失败不影响图片显示
       }
     };
 
     const recoverGeneratedImage = async () => {
+      console.log(`[Generate] 开始恢复轮询，clientRequestId: ${clientRequestId}`);
       for (let i = 0; i < 40; i++) {
         try {
           const response = await fetch(`/api/generate/status?clientRequestId=${encodeURIComponent(clientRequestId)}`, {
             cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' },
           });
-          const data = await response.json().catch(() => null);
+          
+          if (!response.ok) {
+            console.log(`[Generate] 恢复轮询第 ${i+1} 次: HTTP ${response.status}`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+          
+          const data = await response.json().catch((err) => {
+            console.error(`[Generate] 恢复轮询解析失败:`, err);
+            return null;
+          });
+          
+          console.log(`[Generate] 恢复轮询第 ${i+1} 次:`, data);
+          
           if (data?.success && data.status === 'success' && data.url) {
+            console.log(`[Generate] 恢复成功，图片URL:`, data.url);
             await applyGeneratedImages([data.url]);
             return true;
           }
           if (data?.success && data.status === 'failed') {
+            console.log(`[Generate] 恢复失败:`, data.error);
+            setGenerationError(data.error || '图片生成失败');
             return false;
           }
-        } catch {
-          // keep polling
+        } catch (err) {
+          console.error(`[Generate] 恢复轮询异常:`, err);
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
+      console.log(`[Generate] 恢复轮询超时`);
       return false;
     };
 
@@ -293,11 +328,13 @@ export default function ImageGeneratorWorkflow() {
         console.log(`[Generate] Response received, status: ${response.status}`);
 
         const rawText = await response.text();
+        console.log(`[Generate] Response body (first 500 chars):`, rawText.substring(0, 500));
         let result: any = null;
 
         try {
           result = rawText ? JSON.parse(rawText) : null;
-        } catch {
+        } catch (parseError) {
+          console.error(`[Generate] JSON解析失败:`, parseError);
           if (retry < maxRetries) {
             console.log(`[Generate] 第 ${retry + 1} 次响应非 JSON，正在重试...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -319,7 +356,10 @@ export default function ImageGeneratorWorkflow() {
           break;
         }
 
+        console.log(`[Generate] Parsed result:`, JSON.stringify(result, null, 2).substring(0, 500));
+
         if (response.status === 202 && result?.status === 'pending') {
+          console.log(`[Generate] 收到202响应，进入恢复轮询`);
           if (await recoverGeneratedImage()) break;
           setGenerationError('图片仍在生成中，请稍后查看历史记录或重新打开页面');
           break;
@@ -329,8 +369,10 @@ export default function ImageGeneratorWorkflow() {
           const urls = result.urls || (result.url ? [result.url] : []);
 
           if (urls.length > 0) {
+            console.log(`[Generate] 获取到${urls.length}张图片，应用结果`);
             await applyGeneratedImages(urls);
           } else {
+            console.log(`[Generate] 响应成功但未包含图片URL，尝试恢复`);
             if (await recoverGeneratedImage()) break;
             const errorMsg = '生成失败：未获取到图片';
             setGenerationError(errorMsg);
@@ -345,6 +387,7 @@ export default function ImageGeneratorWorkflow() {
         } else {
           const errorText = String(result?.error || result?.message || '');
           const rateLimited = isRateLimitError(response.status, errorText);
+          console.log(`[Generate] 请求失败，status: ${response.status}, error: ${errorText}, rateLimited: ${rateLimited}`);
           if (retry < maxRetries && !rateLimited) {
             console.log(`[Generate] 第 ${retry + 1} 次请求失败，正在重试...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -393,10 +436,9 @@ export default function ImageGeneratorWorkflow() {
         }
       }
     }
-
-    abortControllerRef.current = null;
-    isGeneratingRef.current = false;
-    setIsGenerating(false);
+    } finally {
+      cleanupAndExit();
+    }
   };
 
   const enhancePrompt = async () => {

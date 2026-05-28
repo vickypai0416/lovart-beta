@@ -639,18 +639,38 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       n: requestBody.n,
       hasReferenceImage: true,
       promptLength: gridPrompt.length,
+      clientRequestId,
     });
 
-    const gridResponse = await fetch('/api/generate', {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('请求超时')), 300000) // 5分钟，与后端 maxDuration 一致
+    );
+
+    const fetchPromise = fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
       signal: abortControllerRef.current?.signal,
     });
+
+    const gridResponse = await Promise.race([fetchPromise, timeoutPromise]);
+    console.log('[Amazon Grid Generation] Response received, status:', gridResponse.status);
     
-    const gridData = await gridResponse.json().catch(() => null);
+    const rawText = await gridResponse.text().catch(() => null);
+    console.log('[Amazon Grid Generation] Response body (first 500 chars):', rawText?.substring(0, 500));
+    
+    let gridData: any = null;
+    if (rawText) {
+      try {
+        gridData = JSON.parse(rawText);
+      } catch {
+        console.error('[Amazon Grid Generation] Failed to parse response as JSON');
+      }
+    }
+    
     if (!gridResponse.ok) {
-      const errorMessage = gridData?.error || gridData?.message || `/api/generate 请求失败：${gridResponse.status}`;
+      const errorMessage = gridData?.error || gridData?.message || rawText || `/api/generate 请求失败：${gridResponse.status}`;
+      console.error('[Amazon Grid Generation] API Error:', errorMessage);
       throw new Error(errorMessage);
     }
 
@@ -692,6 +712,12 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       return;
     }
     console.error('[Amazon Grid Generation] Failed:', error);
+    
+    const isTimeout = error instanceof Error && error.message.includes('请求超时');
+    if (isTimeout) {
+      console.log('[Amazon Grid Generation] 请求超时，尝试从历史记录恢复...');
+    }
+    
     const recoveredUrl = await recoverGeneratedImage(clientRequestId);
     if (recoveredUrl) {
       const croppedImages = await cropGridImages(recoveredUrl);
