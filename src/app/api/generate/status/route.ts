@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
 
   const generations = await getAllGenerationRecords();
   generations.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  const matched = generations.find((generation) => generation.clientRequestId === clientRequestId);
+  const matchedSuccess = generations.find(
+    (generation) => generation.clientRequestId === clientRequestId && generation.status === 'success' && generation.imageUrl
+  );
+  const matched = matchedSuccess || generations.find((generation) => generation.clientRequestId === clientRequestId);
 
   if (!matched) {
     return NextResponse.json({ success: true, status: 'pending' });

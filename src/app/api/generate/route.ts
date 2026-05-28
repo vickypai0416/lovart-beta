@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
 import { getImageEditModelConfig, getModelConfig } from '@/lib/image-models';
-import { createGeneration, updateGeneration } from '@/lib/analytics';
+import { createGeneration, getAllGenerationRecords, updateGeneration } from '@/lib/analytics';
 import { parseUpstreamApiError } from '@/lib/upstream-api-error';
 
 export const runtime = 'nodejs';
@@ -167,6 +167,36 @@ export async function POST(request: NextRequest) {
     const spec = AMAZON_IMAGE_SPECS[specType as ImageSpecType];
     const [width, height] = size.split('x').map(Number);
     
+    const requestClientId = typeof clientRequestId === 'string' ? clientRequestId.trim() : '';
+    if (requestClientId) {
+      const generations = await getAllGenerationRecords();
+      generations.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const existingSuccess = generations.find(
+        (generation) => generation.clientRequestId === requestClientId && generation.status === 'success' && generation.imageUrl
+      );
+      if (existingSuccess?.imageUrl) {
+        return NextResponse.json({
+          success: true,
+          url: existingSuccess.imageUrl,
+          urls: [existingSuccess.imageUrl],
+          size,
+          specType,
+          model: existingSuccess.model,
+          recovered: true,
+        });
+      }
+
+      const existingPending = generations.find(
+        (generation) => generation.clientRequestId === requestClientId && generation.status === 'pending'
+      );
+      if (existingPending) {
+        return NextResponse.json(
+          { success: true, status: 'pending', generationId: existingPending.id },
+          { status: 202 }
+        );
+      }
+    }
+
     const generationPayload: Omit<Parameters<typeof createGeneration>[0], 'clientRequestId'> & { clientRequestId?: string } = {
       sessionId,
       prompt: finalPrompt,
@@ -177,8 +207,8 @@ export async function POST(request: NextRequest) {
       status: 'pending',
     };
 
-    if (typeof clientRequestId === 'string' && clientRequestId.trim()) {
-      generationPayload.clientRequestId = clientRequestId.trim();
+    if (requestClientId) {
+      generationPayload.clientRequestId = requestClientId;
     }
 
     generationId = (await createGeneration(generationPayload)).id;

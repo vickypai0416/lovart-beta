@@ -319,6 +319,12 @@ export default function ImageGeneratorWorkflow() {
           break;
         }
 
+        if (response.status === 202 && result?.status === 'pending') {
+          if (await recoverGeneratedImage()) break;
+          setGenerationError('图片仍在生成中，请稍后查看历史记录或重新打开页面');
+          break;
+        }
+
         if (response.ok && result) {
           const urls = result.urls || (result.url ? [result.url] : []);
 
