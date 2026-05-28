@@ -39,6 +39,7 @@ interface Message {
   isGenerating?: boolean;
   isAmazonPlan?: boolean;
   planImages?: GeneratedImagePlan[];
+  clientRequestId?: string;
 }
 
 interface GeneratedImagePlan {
@@ -114,7 +115,8 @@ export default function Home() {
           userImages,
           product: m.product,
           scene: m.scene,
-          isAmazonPlan: m.isAmazonPlan,
+          isGenerating: m.isGenerating,
+          clientRequestId: m.clientRequestId,
           planImages: m.planImages,
         };
       });
@@ -145,7 +147,8 @@ export default function Home() {
   const currentSessionIdRef = useRef<string | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const userImagesRef = useRef<string[]>([]);
-  
+  const restoredGenerationIds = useRef<Set<string>>(new Set());
+
   // 组件挂载状态，用于防止卸载后更新状态
   const isMounted = useRef(true);
   
@@ -403,6 +406,49 @@ export default function Home() {
     }
   };
 
+  const displayAmazonGridResult = async (messageId: string, gridUrl: string) => {
+    if (isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isGenerating: false,
+          content: '',
+          imageUrls: [gridUrl],
+        };
+      }));
+    }
+
+    await handleSaveChatImage(gridUrl, '亚马逊listing完整九宫格', messageId);
+
+    const croppedImages = await cropGridImages(gridUrl);
+    const validImages = croppedImages.filter(Boolean) as string[];
+    const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
+
+    if (validImages.length === 0) {
+      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image only');
+    }
+
+    if (validImages.length > 0 && isMounted.current) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isGenerating: false,
+          content: '',
+          imageUrls: displayImages,
+        };
+      }));
+    }
+
+    for (let i = 0; i < validImages.length; i++) {
+      await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
+    }
+
+    const updatedHistory = await getChatHistoryWithUrls();
+    setChatImageHistory(updatedHistory);
+  };
+
   const formatGenerationError = (error: unknown): string => {
     if (error instanceof Error) return error.message;
     if (typeof error === 'string') return error;
@@ -431,6 +477,38 @@ export default function Home() {
     }
     return null;
   };
+
+
+  useEffect(() => {
+    const pending = messages.filter(
+      (message) => message.isGenerating && message.clientRequestId && !message.imageUrls?.length
+    );
+
+    for (const message of pending) {
+      const clientRequestId = message.clientRequestId;
+      if (!clientRequestId || restoredGenerationIds.current.has(clientRequestId)) continue;
+      restoredGenerationIds.current.add(clientRequestId);
+
+      void (async () => {
+        const recoveredUrl = await recoverGeneratedImage(clientRequestId);
+        if (recoveredUrl) {
+          await displayAmazonGridResult(message.id, recoveredUrl);
+          return;
+        }
+
+        if (isMounted.current) {
+          setMessages(prev => prev.map(m => {
+            if (m.id !== message.id) return m;
+            return {
+              ...m,
+              isGenerating: false,
+              content: '❌ 图片生成超时，请重新生成',
+            };
+          }));
+        }
+      })();
+    }
+  }, [messages]);
 
   const handleDeleteChatImage = async (imageId: string) => {
     await deleteChatImage(imageId);
@@ -610,9 +688,9 @@ const generateImagesFromPlan = async (messageId: string, referenceImage: string)
   await generateAmazonGridImage(messageId, referenceImage, '');
 };
 
-const generateAmazonGridImage = async (messageId: string, referenceImage: string | undefined, userContent: string = '') => {
+const generateAmazonGridImage = async (messageId: string, referenceImage: string | undefined, userContent: string = '', existingClientRequestId?: string) => {
   abortControllerRef.current = new AbortController();
-  const clientRequestId = `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const clientRequestId = existingClientRequestId || `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
   try {
     const isValidReferenceImage = !!referenceImage && (referenceImage.startsWith('data:') || referenceImage.startsWith('http://') || referenceImage.startsWith('https://'));
@@ -673,47 +751,8 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     
     if (!gridUrl) throw new Error('生成接口未返回图片 URL');
     
-    if (isMounted.current) {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== messageId) return m;
-        return {
-          ...m,
-          isGenerating: false,
-          content: '',
-          imageUrls: [gridUrl],
-        };
-      }));
-    }
+    await displayAmazonGridResult(messageId, gridUrl);
 
-    await handleSaveChatImage(gridUrl, '亚马逊listing完整九宫格', messageId);
-
-    const croppedImages = await cropGridImages(gridUrl);
-    const validImages = croppedImages.filter(Boolean) as string[];
-    const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
-
-    if (validImages.length === 0) {
-      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image only');
-    }
-
-    if (validImages.length > 0 && isMounted.current) {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== messageId) return m;
-        return {
-          ...m,
-          isGenerating: false,
-          content: '',
-          imageUrls: displayImages,
-        };
-      }));
-    }
-
-    for (let i = 0; i < validImages.length; i++) {
-      await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
-    }
-    
-    const updatedHistory = await getChatHistoryWithUrls();
-    setChatImageHistory(updatedHistory);
-    
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       console.log('[Amazon Grid Generation] Aborted');
@@ -722,42 +761,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     console.error('[Amazon Grid Generation] Failed:', error);
     const recoveredUrl = await recoverGeneratedImage(clientRequestId);
     if (recoveredUrl) {
-      if (isMounted.current) {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== messageId) return m;
-          return {
-            ...m,
-            isGenerating: false,
-            content: '',
-            imageUrls: [recoveredUrl],
-          };
-        }));
-      }
-
-      await handleSaveChatImage(recoveredUrl, '亚马逊listing完整九宫格', messageId);
-
-      const croppedImages = await cropGridImages(recoveredUrl);
-      const validImages = croppedImages.filter(Boolean) as string[];
-      const displayImages = validImages.length > 0 ? [recoveredUrl, ...validImages] : [recoveredUrl];
-
-      if (validImages.length > 0 && isMounted.current) {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== messageId) return m;
-          return {
-            ...m,
-            isGenerating: false,
-            content: '',
-            imageUrls: displayImages,
-          };
-        }));
-      }
-
-      for (let i = 0; i < validImages.length; i++) {
-        await handleSaveChatImage(validImages[i], `亚马逊listing套图 - 图${i + 1}`, messageId);
-      }
-
-      const updatedHistory = await getChatHistoryWithUrls();
-      setChatImageHistory(updatedHistory);
+      await displayAmazonGridResult(messageId, recoveredUrl);
       return;
     }
 
@@ -1230,7 +1234,8 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         content: effectiveContent || '',
         userImages: currentImages.length > 0 ? currentImages : undefined,
       };
-      
+
+      const clientRequestId = `amazon-grid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const aiMessageId = (Date.now() + 1).toString();
       
       setMessages((prev) => [
@@ -1241,6 +1246,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
           role: 'assistant', 
           content: '🎨 正在生成亚马逊listing九宫格套图...', 
           isGenerating: true,
+          clientRequestId,
           // 不设置 planImages，避免触发9图视觉方案界面
         },
       ]);
@@ -1249,7 +1255,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
       
       try {
         // 生成九宫格图片（传递用户输入内容）
-        await generateAmazonGridImage(aiMessageId, currentImages[0], effectiveContent);
+        await generateAmazonGridImage(aiMessageId, currentImages[0], effectiveContent, clientRequestId);
       } finally {
         if (isMounted.current) {
           setIsLoading(false);
