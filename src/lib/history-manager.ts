@@ -196,7 +196,7 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
   const newItem: ChatImageHistoryItem = {
     id: createImageId(),
     url: toStorageSafeUrl(url),
-    prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+    prompt: prompt,
     timestamp: Date.now(),
   };
 

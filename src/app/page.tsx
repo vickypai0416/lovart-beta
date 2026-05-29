@@ -121,6 +121,16 @@ export default function Home() {
       setMessages(prev => [prev[0], ...migrated]);
     }
   }, []);
+
+  // 自动保存对话消息到 localStorage
+  useEffect(() => {
+    // 排除欢迎消息，只保存用户和助手的对话
+    const messagesToSave = messages.filter(m => m.id !== 'welcome');
+    if (messagesToSave.length > 0) {
+      saveChatMessages(messagesToSave);
+    }
+  }, [messages]);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ImageModelId | TextModelId>('gpt-5-nano');
@@ -1905,31 +1915,6 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                     <span className="text-[10px] text-gray-400">轻量对话 + 图片识别</span>
                   </div>
                 </SelectItem>
-                <SelectItem value="gpt-5.4">
-                  <div className="flex flex-col py-0.5">
-                    <span className="font-medium text-xs">GPT-5.4</span>
-                    <span className="text-[10px] text-gray-400">旗舰推理能力</span>
-                  </div>
-                </SelectItem>
-                <div className="px-2 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-1">图片生成</div>
-                <SelectItem value="gpt-image-2">
-                  <div className="flex flex-col py-0.5">
-                    <span className="font-medium text-xs">GPT Image 2</span>
-                    <span className="text-[10px] text-gray-400">对话生图 + 图片识别</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="gpt-image-2-gen">
-                  <div className="flex flex-col py-0.5">
-                    <span className="font-medium text-xs">GPT Image 2 生成</span>
-                    <span className="text-[10px] text-gray-400">纯文本生图，多尺寸</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="gpt-image-2-edit">
-                  <div className="flex flex-col py-0.5">
-                    <span className="font-medium text-xs">GPT Image 2 编辑</span>
-                    <span className="text-[10px] text-gray-400">图片编辑 + 多图合并</span>
-                  </div>
-                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -2116,8 +2101,17 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                             <X className="w-4 h-4 text-white" />
                           </button>
                         </div>
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                          <p className="text-xs text-white truncate">{item.prompt}</p>
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                          <p 
+                            className="text-xs text-white line-clamp-2 cursor-pointer hover:text-blue-200 transition-colors"
+                            title={item.prompt}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(item.prompt);
+                            }}
+                          >
+                            {item.prompt}
+                          </p>
                         </div>
                       </div>
                       );

@@ -78,9 +78,27 @@ export default function ImageGeneratorWorkflow() {
   const generationIdRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // 从 localStorage 恢复状态
   useEffect(() => {
     if (typeof window !== 'undefined') {
       getImgGenHistoryWithUrls().then(setImageHistory);
+      
+      // 恢复输入状态
+      const savedState = localStorage.getItem('imageGeneratorState');
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState);
+          if (state.prompt) setPrompt(state.prompt);
+          if (state.referenceImages) setReferenceImages(state.referenceImages);
+          if (state.englishPrompt) setEnglishPrompt(state.englishPrompt);
+          if (state.selectedSize) setSelectedSize(state.selectedSize);
+          if (state.selectedQuality) setSelectedQuality(state.selectedQuality);
+          if (state.selectedCount) setSelectedCount(state.selectedCount);
+          if (state.selectedModel) setSelectedModel(state.selectedModel);
+        } catch (e) {
+          console.warn('恢复图片生成状态失败:', e);
+        }
+      }
     }
     
     return () => {
@@ -89,6 +107,22 @@ export default function ImageGeneratorWorkflow() {
       }
     };
   }, []);
+
+  // 自动保存状态到 localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const state = {
+        prompt,
+        referenceImages,
+        englishPrompt,
+        selectedSize,
+        selectedQuality,
+        selectedCount,
+        selectedModel,
+      };
+      localStorage.setItem('imageGeneratorState', JSON.stringify(state));
+    }
+  }, [prompt, referenceImages, englishPrompt, selectedSize, selectedQuality, selectedCount, selectedModel]);
 
   useEffect(() => {
     if (activeTab === 'prompts') {
@@ -752,6 +786,19 @@ export default function ImageGeneratorWorkflow() {
                           <ImageIcon className="w-8 h-8 text-gray-300" />
                         </div>
                       )}
+                    </div>
+                    {/* 提示词显示 */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <p 
+                        className="text-xs text-white line-clamp-2 cursor-pointer hover:text-blue-200"
+                        title={item.prompt}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(item.prompt);
+                        }}
+                      >
+                        {item.prompt}
+                      </p>
                     </div>
                     <div className="absolute -top-2 -right-2 flex gap-1">
                       <button
