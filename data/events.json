@@ -7559,5 +7559,145 @@
       "referrer": ""
     },
     "createdAt": "2026-05-29T09:29:01.909Z"
+  },
+  {
+    "id": "1780047847523-hmy1hnejq",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-29T09:44:07.523Z"
+  },
+  {
+    "id": "1780047847542-w49604zvo",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-29T09:44:07.542Z"
+  },
+  {
+    "id": "1780047847561-6440hdh9j",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-05-29T09:44:07.561Z"
+  },
+  {
+    "id": "1780279260268-axuflhxhb",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:01:00.268Z"
+  },
+  {
+    "id": "1780279260285-knpehiiw1",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:01:00.285Z"
+  },
+  {
+    "id": "1780279260320-c887lnnss",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:01:00.320Z"
+  },
+  {
+    "id": "1780279900467-mdu7l7qwx",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:11:40.467Z"
+  },
+  {
+    "id": "1780279900503-7600blzoj",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:11:40.503Z"
+  },
+  {
+    "id": "1780280001806-97rty31sh",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:13:21.806Z"
+  },
+  {
+    "id": "1780280001829-yriav9tsy",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:13:21.829Z"
+  },
+  {
+    "id": "1780280263175-6kbyrt8qd",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:17:43.175Z"
+  },
+  {
+    "id": "1780280263185-3q3p6am14",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:17:43.185Z"
+  },
+  {
+    "id": "1780282265590-kzx3shx8q",
+    "sessionId": "1778812002931-u59r5g2fa",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:51:05.590Z"
+  },
+  {
+    "id": "1780282265635-dckojp2vd",
+    "sessionId": "1779846619223-93pof4nq1",
+    "type": "page_view",
+    "payload": {
+      "path": "/",
+      "referrer": ""
+    },
+    "createdAt": "2026-06-01T02:51:05.635Z"
   }
 ]

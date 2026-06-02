@@ -25,9 +25,16 @@ const MAX_SESSIONS = 20;
 const MAX_IMAGES_PER_SESSION = 12;
 const CHAT_MAX_IMAGES = 50;
 const MAX_PERSISTED_MESSAGES = 100;
+const STORAGE_USAGE_THRESHOLD = 0.8;
+const STORAGE_CLEANUP_BATCH = 10;
 
 function createImageId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function toStorageSafeUrl(url?: string): string {
+  if (!url) return '';
+  return url.startsWith('data:') ? '' : url;
 }
 
 function writeEcommerceHistory(history: { sessions: GenerationSession[] }): void {
@@ -38,13 +45,48 @@ function writeEcommerceHistory(history: { sessions: GenerationSession[] }): void
   }
 }
 
-function toStorageSafeUrl(url: string): string {
-  if (!url) return '';
-  if (url.length > 300000) return '';
-  return url;
+
+async function cleanupOldestImagesIfStorageNearQuota(): Promise<void> {
+  if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return;
+
+  try {
+    const estimate = await navigator.storage.estimate();
+    const usage = estimate.usage ?? 0;
+    const quota = estimate.quota ?? 0;
+    if (!quota || usage / quota < STORAGE_USAGE_THRESHOLD) return;
+
+    const history = getHistory();
+    const chatHistory = getChatHistory();
+    const candidates: Array<{ id: string; timestamp: number }> = [];
+
+    history.sessions.forEach((session) => {
+      session.images.forEach((img) => candidates.push({ id: img.id, timestamp: img.timestamp }));
+    });
+    chatHistory.forEach((img) => candidates.push({ id: img.id, timestamp: img.timestamp }));
+
+    candidates.sort((a, b) => a.timestamp - b.timestamp);
+    const toRemove = candidates.slice(0, STORAGE_CLEANUP_BATCH);
+    if (toRemove.length === 0) return;
+
+    const removeIds = new Set(toRemove.map((item) => item.id));
+
+    history.sessions.forEach((session) => {
+      session.images = session.images.filter((img) => !removeIds.has(img.id));
+    });
+    history.sessions = history.sessions.filter((session) => session.images.length > 0);
+    writeEcommerceHistory(history);
+
+    const filteredChatHistory = chatHistory.filter((img) => !removeIds.has(img.id));
+    safeSetChatHistory(filteredChatHistory);
+
+    await Promise.all(toRemove.map((item) => idbDeleteImageBlob(item.id).catch(() => {})));
+    console.warn(`[History] 存储占用接近上限，已自动清理最旧的 ${toRemove.length} 张图片缓存`);
+  } catch (error) {
+    console.warn('[History] 检查存储占用失败:', error);
+  }
 }
 
-export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'timestamp'>): Promise<ImageHistoryItem> {
+export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'timestamp' | 'url'> & { url?: string }): Promise<ImageHistoryItem> {
   const history = getHistory();
   const newItem: ImageHistoryItem = {
     ...item,
@@ -54,6 +96,7 @@ export async function saveImageToHistory(item: Omit<ImageHistoryItem, 'id' | 'ti
   };
 
   if (item.url) {
+    await cleanupOldestImagesIfStorageNearQuota();
     await saveImageBlobFromUrl(newItem.id, item.url).catch((error) => {
       console.warn('[History] 缓存电商图片失败，保留原始 URL:', error);
     });
@@ -200,14 +243,8 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
     timestamp: Date.now(),
   };
 
-  if (url) {
-    await saveImageBlobFromUrl(newItem.id, url).catch((error) => {
-      console.warn('[History] 缓存聊天图片失败，保留原始 URL:', error);
-    });
-  }
-
   history.unshift(newItem);
-  
+
   if (history.length > CHAT_MAX_IMAGES) {
     const removed = history.slice(CHAT_MAX_IMAGES);
     for (const img of removed) {
@@ -217,6 +254,18 @@ export async function saveChatImageToHistory(url: string, prompt: string): Promi
   }
 
   safeSetChatHistory(history);
+
+  if (url?.startsWith('data:')) {
+    await saveImageBlobFromUrl(newItem.id, url).catch((error) => {
+      console.warn('[History] 缓存聊天图片失败，保留原始 URL:', error);
+    });
+  } else if (url) {
+    cleanupOldestImagesIfStorageNearQuota()
+      .then(() => saveImageBlobFromUrl(newItem.id, url))
+      .catch((error) => {
+        console.warn('[History] 缓存聊天图片失败，保留原始 URL:', error);
+      });
+  }
 
   return newItem;
 }
@@ -271,7 +320,7 @@ export interface PersistedMessage {
     title: string;
     prompt: string;
     imageUrl?: string;
-    status: 'pending' | 'generating' | 'completed' | 'failed';
+    status: 'pending' | 'generating' | 'completed' | 'failed' | 'error';
   }>;
   timestamp: number;
 }

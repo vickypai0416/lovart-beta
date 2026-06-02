@@ -69,6 +69,13 @@ async function translateToEnglish(text: string): Promise<string> {
   }
 }
 
+
+function shouldKeepPendingForRecovery(error: unknown, clientRequestId?: string): boolean {
+  if (!clientRequestId) return false;
+  if (!(error instanceof Error)) return false;
+  return error.name === 'AbortError' || error.message === 'fetch failed';
+}
+
 function extractImageUrls(data: unknown): string[] {
   const imageUrls: string[] = [];
   const payload = data as { data?: Array<{ b64_json?: string; url?: string }>; url?: string };
@@ -124,7 +131,9 @@ export async function POST(request: NextRequest) {
   const sessionId = request.headers.get('X-Session-ID') || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   
   try {
+    console.log('[Generate API] POST received, before request.json');
     const body = await request.json();
+    console.log('[Generate API] request.json completed');
     const { 
       clientRequestId,
       product,
@@ -197,12 +206,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const generationModel = finalReferenceImages.length > 0 ? model : 'gpt-image-2-gen';
     const generationPayload: Omit<Parameters<typeof createGeneration>[0], 'clientRequestId'> & { clientRequestId?: string } = {
       sessionId,
       prompt: finalPrompt,
       size,
       quality,
-      model: model || 'gpt-image-2',
+      model: generationModel || 'gpt-image-2',
       count: imageCount,
       status: 'pending',
     };
@@ -229,19 +239,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (model === 'gpt-image-2' && finalReferenceImages.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'gpt-image-2 编辑接口需要上传至少一张参考图。请先上传产品图后再生成亚马逊套图。' },
-        { status: 400 }
-      );
-    }
-
     if (finalReferenceImages.length > 0) {
       console.log('[Generate API] 使用 GPT Image 2 编辑模型（有参考图）');
       console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
       console.log('[Generate API] 参考图数量:', finalReferenceImages.length);
       
-      const modelConfig = getImageEditModelConfig(model);
+      const modelConfig = getImageEditModelConfig();
       
       if (!modelConfig.apiKey) {
         console.error('[Generate API] GPT Image 2 编辑 API Key 未配置');
@@ -264,7 +267,9 @@ export async function POST(request: NextRequest) {
         const imageBlobs: Blob[] = [];
         
         for (const referenceImage of finalReferenceImages) {
+          console.log('[Generate API] imageToBlob start');
           imageBlobs.push(await imageToBlob(referenceImage));
+          console.log('[Generate API] imageToBlob completed');
         }
 
         let styleRefBlob: Blob | null = null;
@@ -288,10 +293,6 @@ export async function POST(request: NextRequest) {
         formData.append('model', modelName);
         formData.append('n', String(imageCount));
         formData.append('size', editSize);
-        // gpt-image-2-all 编辑接口：文档建议传 size；quality 部分分组不支持，仅非 all 模型附带
-        if (quality && modelName !== 'gpt-image-2-all') {
-          formData.append('quality', quality);
-        }
 
         console.log('[Generate API] 发送请求到:', endpoint, '(images/edits)');
         console.log('[Generate API] 参考图片数量:', imageBlobs.length);
@@ -377,7 +378,8 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       } catch (error) {
-        console.error('[Generate API] 调用失败:', error);
+        const cause = error instanceof Error && 'cause' in error ? error.cause : undefined;
+        console.error('[Generate API] 调用失败:', error, 'cause:', cause);
         if (generationId) {
           await updateGeneration(generationId, {
             status: 'failed',
@@ -395,7 +397,7 @@ export async function POST(request: NextRequest) {
     console.log('[Generate API] 使用 GPT Image 2 生成模型（无参考图）');
     console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
     
-    const modelConfig = getModelConfig(model || 'gpt-image-2-gen');
+    const modelConfig = getModelConfig('gpt-image-2-gen');
     
     if (!modelConfig.apiKey) {
       console.error('[Generate API] 图片生成 API Key 未配置');
@@ -503,11 +505,18 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('[Generate API] 调用失败:', error);
       if (generationId) {
-        await updateGeneration(generationId, {
-          status: 'failed',
-          error: error instanceof Error ? error.message : '未知错误',
-          duration: Date.now() - startTime,
-        });
+        if (shouldKeepPendingForRecovery(error, requestClientId)) {
+          await updateGeneration(generationId, {
+            status: 'pending',
+            duration: Date.now() - startTime,
+          });
+        } else {
+          await updateGeneration(generationId, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : '未知错误',
+            duration: Date.now() - startTime,
+          });
+        }
       }
       return NextResponse.json(
         { success: false, error: `图片生成失败：${error instanceof Error ? error.message : '未知错误'}` },

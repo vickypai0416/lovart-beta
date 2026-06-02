@@ -39,13 +39,13 @@ export const IMAGE_MODELS: Record<ImageModel, ImageModelConfig> = {
   },
   'gpt-image-2': {
     id: 'gpt-image-2',
-    name: 'GPT Image 2 (对话生图+图片识别)',
-    description: '对话生图+图片识别，支持图文输入和文本/图片输出',
+    name: 'GPT Image 2',
+    description: '统一图片生成/编辑模型',
     type: 'image',
     available: false,
     apiKey: process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/chat/completions',
-    modelName: 'gpt-image-2-all',
+    endpoint: 'https://yunwu.ai/v1/images/edits',
+    modelName: 'gpt-image-2',
   },
   'gpt-image-2-gen': {
     id: 'gpt-image-2-gen',
@@ -114,21 +114,14 @@ export function getTextModels(): ImageModelConfig[] {
   return Object.values(IMAGE_MODELS).filter(m => m.type === 'text');
 }
 
-/** 图生图/编辑（含参考图）应走 /v1/images/edits，勿使用 gpt-image-2 的对话端点 */
-export function getImageEditModelConfig(requestedModel?: string): ImageModelConfig {
-  const editId: ImageModel =
-    requestedModel === 'gpt-image-2-edit'
-      ? 'gpt-image-2-edit'
-      : requestedModel === 'gpt-image-2-all'
-        ? 'gpt-image-2-all'
-        : 'gpt-image-2-all';
-
-  const config = IMAGE_MODELS[editId];
+/** 图生图/编辑（含参考图）统一走 gpt-image-2 */
+export function getImageEditModelConfig(): ImageModelConfig {
+  const config = IMAGE_MODELS['gpt-image-2'];
   return {
     ...config,
     available: !!config.apiKey,
     endpoint: config.endpoint || 'https://yunwu.ai/v1/images/edits',
-    modelName: config.modelName || 'gpt-image-2-all',
+    modelName: config.modelName || 'gpt-image-2',
   };
 }
 

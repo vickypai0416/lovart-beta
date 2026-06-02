@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[API] Received request');
     const body = await request.json();
-    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high', referenceImages = [], systemPrompt } = body as {
+    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high', referenceImages = [], systemPrompt, clientRequestId } = body as {
       messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>;
       model?: ImageModel;
       autoGenerate?: boolean;
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       quality?: string;
       referenceImages?: string[];
       systemPrompt?: string;
+      clientRequestId?: string;
     };
 
     console.log('[API] Request params:', { 
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
       
       generationId = (await createGeneration({
         sessionId,
+        clientRequestId,
         prompt: userPrompt,
         size,
         quality,

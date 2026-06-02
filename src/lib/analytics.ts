@@ -71,6 +71,8 @@ interface StorageAdapter {
   updateGeneration(id: string, updates: Partial<Generation>): Promise<void>;
   getGenerationsBySession(sessionId: string): Promise<Generation[]>;
   getAllGenerations(): Promise<Generation[]>;
+  cleanupFailedGenerations(): Promise<void>;
+  cleanupOldGenerations(days: number): Promise<void>;
   createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback>;
   getFeedbacksBySession(sessionId: string): Promise<Feedback[]>;
   getAllFeedbacks(): Promise<Feedback[]>;
@@ -146,19 +148,15 @@ class FileStorageAdapter implements StorageAdapter {
   }
 
   async createEvent(sessionId: string, type: string, payload: Record<string, unknown>): Promise<Event> {
-    const event: Event = { id: generateId(), sessionId, type, payload, createdAt: new Date() };
-    const events = this.readData<Event>('events');
-    events.push(event);
-    this.writeData('events', events);
-    return event;
+    return { id: generateId(), sessionId, type, payload, createdAt: new Date() };
   }
 
   async getEventsBySession(sessionId: string): Promise<Event[]> {
-    return this.readData<Event>('events').filter((e) => e.sessionId === sessionId);
+    return [];
   }
 
   async getAllEvents(): Promise<Event[]> {
-    return this.readData<Event>('events');
+    return [];
   }
 
   async createGeneration(data: Omit<Generation, 'id' | 'createdAt'>): Promise<Generation> {
@@ -186,36 +184,41 @@ class FileStorageAdapter implements StorageAdapter {
     return this.readData<Generation>('generations');
   }
 
+  async cleanupFailedGenerations(): Promise<void> {
+    const list = this.readData<Generation>('generations');
+    const filtered = list.filter(g => g.status !== 'failed');
+    this.writeData('generations', filtered);
+  }
+
+  async cleanupOldGenerations(days: number): Promise<void> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const list = this.readData<Generation>('generations');
+    const filtered = list.filter(g => g.createdAt > cutoff);
+    this.writeData('generations', filtered);
+  }
+
   async createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback> {
-    const feedback: Feedback = { ...data, id: generateId(), createdAt: new Date() };
-    const list = this.readData<Feedback>('feedbacks');
-    list.push(feedback);
-    this.writeData('feedbacks', list);
-    return feedback;
+    return { ...data, id: generateId(), createdAt: new Date() };
   }
 
   async getFeedbacksBySession(sessionId: string): Promise<Feedback[]> {
-    return this.readData<Feedback>('feedbacks').filter((f) => f.sessionId === sessionId);
+    return [];
   }
 
   async getAllFeedbacks(): Promise<Feedback[]> {
-    return this.readData<Feedback>('feedbacks');
+    return [];
   }
 
   async createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
-    const message: Message = { ...data, id: generateId(), createdAt: new Date() };
-    const list = this.readData<Message>('messages');
-    list.push(message);
-    this.writeData('messages', list);
-    return message;
+    return { ...data, id: generateId(), createdAt: new Date() };
   }
 
   async getMessagesBySession(sessionId: string): Promise<Message[]> {
-    return this.readData<Message>('messages').filter((m) => m.sessionId === sessionId);
+    return [];
   }
 
   async getAllMessages(): Promise<Message[]> {
-    return this.readData<Message>('messages');
+    return [];
   }
 
   async createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> {
@@ -248,6 +251,7 @@ class FileStorageAdapter implements StorageAdapter {
 class KVStorageAdapter implements StorageAdapter {
   private kv: any;
   private initialized = false;
+  private static readonly TTL_SECONDS = 6 * 60 * 60;
 
   private async init(): Promise<void> {
     if (this.initialized) return;
@@ -284,13 +288,23 @@ class KVStorageAdapter implements StorageAdapter {
     } as T;
   }
 
-  private async getByIds<T extends { createdAt?: unknown; updatedAt?: unknown }>(type: string, ids: string[]): Promise<T[]> {
+  private async getByIds<T extends { createdAt?: unknown; updatedAt?: unknown }>(
+    type: string,
+    ids: string[],
+    idsSetKey?: string,
+  ): Promise<T[]> {
     const out: T[] = [];
+    const staleIds: string[] = [];
     for (const id of ids) {
       const data = await this.kv.hgetall(this.key(type, id));
       if (data && Object.keys(data).length > 0) {
         out.push(this.normalize(data as T));
+      } else {
+        staleIds.push(id);
       }
+    }
+    if (idsSetKey && staleIds.length > 0) {
+      await this.kv.srem(idsSetKey, ...staleIds);
     }
     return out;
   }
@@ -298,8 +312,11 @@ class KVStorageAdapter implements StorageAdapter {
   async createSession(userId?: string): Promise<Session> {
     await this.init();
     const session: Session = { id: generateId(), createdAt: new Date(), updatedAt: new Date(), userId };
-    await this.kv.hset(this.key('sessions', session.id), this.cleanObject(session as any));
+    const key = this.key('sessions', session.id);
+    await this.kv.hset(key, this.cleanObject(session as any));
     await this.kv.sadd('analytics:sessions:ids', session.id);
+    await this.kv.expire(key, KVStorageAdapter.TTL_SECONDS);
+    await this.kv.expire('analytics:sessions:ids', KVStorageAdapter.TTL_SECONDS);
     return session;
   }
 
@@ -313,110 +330,129 @@ class KVStorageAdapter implements StorageAdapter {
   async getAllSessions(): Promise<Session[]> {
     await this.init();
     const ids: string[] = await this.kv.smembers('analytics:sessions:ids');
-    return this.getByIds<Session>('sessions', ids || []);
+    return this.getByIds<Session>('sessions', ids || [], 'analytics:sessions:ids');
   }
 
   async createEvent(sessionId: string, type: string, payload: Record<string, unknown>): Promise<Event> {
-    await this.init();
-    const event: Event = { id: generateId(), sessionId, type, payload, createdAt: new Date() };
-    await this.kv.hset(this.key('events', event.id), this.cleanObject(event as any));
-    await this.kv.sadd('analytics:events:ids', event.id);
-    await this.kv.sadd(`analytics:sessions:${sessionId}:events`, event.id);
-    return event;
+    return { id: generateId(), sessionId, type, payload, createdAt: new Date() };
   }
 
   async getEventsBySession(sessionId: string): Promise<Event[]> {
-    await this.init();
-    const ids: string[] = await this.kv.smembers(`analytics:sessions:${sessionId}:events`);
-    return this.getByIds<Event>('events', ids || []);
+    return [];
   }
 
   async getAllEvents(): Promise<Event[]> {
-    await this.init();
-    const ids: string[] = await this.kv.smembers('analytics:events:ids');
-    return this.getByIds<Event>('events', ids || []);
+    return [];
   }
 
   async createGeneration(data: Omit<Generation, 'id' | 'createdAt'>): Promise<Generation> {
     await this.init();
     const generation: Generation = { ...data, id: generateId(), createdAt: new Date() };
-    await this.kv.hset(this.key('generations', generation.id), this.cleanObject(generation as any));
+    const key = this.key('generations', generation.id);
+    await this.kv.hset(key, this.cleanObject(generation as any));
     await this.kv.sadd('analytics:generations:ids', generation.id);
     await this.kv.sadd(`analytics:sessions:${generation.sessionId}:generations`, generation.id);
+    await this.kv.expire(key, KVStorageAdapter.TTL_SECONDS);
+    await this.kv.expire('analytics:generations:ids', KVStorageAdapter.TTL_SECONDS);
+    await this.kv.expire(`analytics:sessions:${generation.sessionId}:generations`, KVStorageAdapter.TTL_SECONDS);
     return generation;
   }
 
   async updateGeneration(id: string, updates: Partial<Generation>): Promise<void> {
     await this.init();
-    await this.kv.hset(this.key('generations', id), this.cleanObject(updates as any));
+    const key = this.key('generations', id);
+    await this.kv.hset(key, this.cleanObject(updates as any));
+    await this.kv.expire(key, KVStorageAdapter.TTL_SECONDS);
   }
 
   async getGenerationsBySession(sessionId: string): Promise<Generation[]> {
     await this.init();
-    const ids: string[] = await this.kv.smembers(`analytics:sessions:${sessionId}:generations`);
-    return this.getByIds<Generation>('generations', ids || []);
+    const setKey = `analytics:sessions:${sessionId}:generations`;
+    const ids: string[] = await this.kv.smembers(setKey);
+    return this.getByIds<Generation>('generations', ids || [], setKey);
   }
 
   async getAllGenerations(): Promise<Generation[]> {
     await this.init();
     const ids: string[] = await this.kv.smembers('analytics:generations:ids');
-    return this.getByIds<Generation>('generations', ids || []);
+    return this.getByIds<Generation>('generations', ids || [], 'analytics:generations:ids');
+  }
+
+  async cleanupFailedGenerations(): Promise<void> {
+    await this.init();
+    const ids: string[] = await this.kv.smembers('analytics:generations:ids');
+    for (const id of ids) {
+      const data = await this.kv.hgetall(this.key('generations', id));
+      if (data && data.status === 'failed') {
+        await this.kv.del(this.key('generations', id));
+        await this.kv.srem('analytics:generations:ids', id);
+        const sessionId = data.sessionId;
+        if (sessionId) {
+          await this.kv.srem(`analytics:sessions:${sessionId}:generations`, id);
+        }
+      }
+    }
+  }
+
+  async cleanupOldGenerations(days: number): Promise<void> {
+    await this.init();
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const ids: string[] = await this.kv.smembers('analytics:generations:ids');
+    for (const id of ids) {
+      const data = await this.kv.hgetall(this.key('generations', id));
+      if (data && data.createdAt) {
+        const createdAt = new Date(data.createdAt).getTime();
+        if (createdAt < cutoff) {
+          await this.kv.del(this.key('generations', id));
+          await this.kv.srem('analytics:generations:ids', id);
+          const sessionId = data.sessionId;
+          if (sessionId) {
+            await this.kv.srem(`analytics:sessions:${sessionId}:generations`, id);
+          }
+        }
+      }
+    }
   }
 
   async createFeedback(data: Omit<Feedback, 'id' | 'createdAt'>): Promise<Feedback> {
-    await this.init();
-    const feedback: Feedback = { ...data, id: generateId(), createdAt: new Date() };
-    await this.kv.hset(this.key('feedbacks', feedback.id), this.cleanObject(feedback as any));
-    await this.kv.sadd('analytics:feedbacks:ids', feedback.id);
-    await this.kv.sadd(`analytics:sessions:${feedback.sessionId}:feedbacks`, feedback.id);
-    return feedback;
+    return { ...data, id: generateId(), createdAt: new Date() };
   }
 
   async getFeedbacksBySession(sessionId: string): Promise<Feedback[]> {
-    await this.init();
-    const ids: string[] = await this.kv.smembers(`analytics:sessions:${sessionId}:feedbacks`);
-    return this.getByIds<Feedback>('feedbacks', ids || []);
+    return [];
   }
 
   async getAllFeedbacks(): Promise<Feedback[]> {
-    await this.init();
-    const ids: string[] = await this.kv.smembers('analytics:feedbacks:ids');
-    return this.getByIds<Feedback>('feedbacks', ids || []);
+    return [];
   }
 
   async createMessage(data: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
-    await this.init();
-    const message: Message = { ...data, id: generateId(), createdAt: new Date() };
-    await this.kv.hset(this.key('messages', message.id), this.cleanObject(message as any));
-    await this.kv.sadd('analytics:messages:ids', message.id);
-    await this.kv.sadd(`analytics:sessions:${message.sessionId}:messages`, message.id);
-    return message;
+    return { ...data, id: generateId(), createdAt: new Date() };
   }
 
   async getMessagesBySession(sessionId: string): Promise<Message[]> {
-    await this.init();
-    const ids: string[] = await this.kv.smembers(`analytics:sessions:${sessionId}:messages`);
-    return this.getByIds<Message>('messages', ids || []);
+    return [];
   }
 
   async getAllMessages(): Promise<Message[]> {
-    await this.init();
-    const ids: string[] = await this.kv.smembers('analytics:messages:ids');
-    return this.getByIds<Message>('messages', ids || []);
+    return [];
   }
 
   async createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'createdAt' | 'likes'>): Promise<PromptTemplate> {
     await this.init();
     const template: PromptTemplate = { ...data, id: generateId(), likes: 0, createdAt: new Date() };
-    await this.kv.hset(this.key('prompt-templates', template.id), this.cleanObject(template as any));
+    const key = this.key('prompt-templates', template.id);
+    await this.kv.hset(key, this.cleanObject(template as any));
     await this.kv.sadd('analytics:prompt-templates:ids', template.id);
+    await this.kv.expire(key, KVStorageAdapter.TTL_SECONDS);
+    await this.kv.expire('analytics:prompt-templates:ids', KVStorageAdapter.TTL_SECONDS);
     return template;
   }
 
   async getAllPromptTemplates(): Promise<PromptTemplate[]> {
     await this.init();
     const ids: string[] = await this.kv.smembers('analytics:prompt-templates:ids');
-    const templates = await this.getByIds<PromptTemplate>('prompt-templates', ids || []);
+    const templates = await this.getByIds<PromptTemplate>('prompt-templates', ids || [], 'analytics:prompt-templates:ids');
     return templates.sort((a, b) => b.likes - a.likes);
   }
 
@@ -476,6 +512,22 @@ export async function createPromptTemplate(data: Omit<PromptTemplate, 'id' | 'cr
 export async function getAllPromptTemplates(): Promise<PromptTemplate[]> { return getStorage().getAllPromptTemplates(); }
 export async function likePromptTemplate(id: string): Promise<void> { return getStorage().likePromptTemplate(id); }
 export async function deletePromptTemplate(id: string): Promise<void> { return getStorage().deletePromptTemplate(id); }
+
+export async function cleanupFailedGenerations(): Promise<void> { 
+  return getStorage().cleanupFailedGenerations(); 
+}
+
+export async function cleanupOldGenerations(days: number): Promise<void> { 
+  return getStorage().cleanupOldGenerations(days); 
+}
+
+export async function cleanupGenerations(options: { deleteFailed?: boolean; maxAgeDays?: number } = {}): Promise<void> {
+  const { deleteFailed = false, maxAgeDays = 30 } = options;
+  if (deleteFailed) {
+    await getStorage().cleanupFailedGenerations();
+  }
+  await getStorage().cleanupOldGenerations(maxAgeDays);
+}
 
 function inRange<T extends { createdAt: Date }>(items: T[], startDate?: Date, endDate?: Date): T[] {
   return items.filter((i) => {

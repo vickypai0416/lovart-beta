@@ -150,13 +150,14 @@ const scenes = [
 ];
 
 const imageTypes = [
-  { index: 1, type: 'main', label: '主图', description: '白底高清，产品居中，突出定制区域' },
-  { index: 2, type: 'customization', label: '定制说明', description: '定制区域突出展示，包含可定制标识' },
-  { index: 3, type: 'emotional', label: '情绪场景', description: '人物互动，温暖氛围' },
-  { index: 4, type: 'detail', label: '细节图', description: '展示产品细节 + Made in USA' },
-  { index: 5, type: 'gift', label: '送礼图', description: '送礼场景，无包装' },
-  { index: 6, type: 'closing', label: '收尾图', description: '情绪收尾，引发购买冲动' },
+  { index: 1, type: 'main', label: '主图', description: '亚马逊主图风格，白底合规，产品居中，主体清晰' },
+  { index: 2, type: 'customization', label: '定制展示', description: '定制区域作为视觉中心，强调可定制属性' },
+  { index: 3, type: 'emotional', label: '使用场景', description: '真实生活场景，人物辅助叙事，产品始终是主角' },
+  { index: 4, type: 'detail', label: '细节信任图', description: '展示材质工艺、产品细节与品质信任感' },
+  { index: 5, type: 'gift', label: '送礼图', description: '真实送礼互动场景，禁止礼盒/礼袋/包装道具' },
+  { index: 6, type: 'lifestyle', label: '情绪收尾图', description: '情绪化生活方式收尾，强化购买欲望与礼品感' },
 ];
+
 
 const defaultVariants: VariantOption[] = [
   { id: '1', name: '经典黑', color: '#1a1a1a' },

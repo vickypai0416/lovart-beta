@@ -23,12 +23,13 @@ export async function POST(request: NextRequest) {
       }
 
       case 'track_generation': {
-        const { sessionId, prompt, size, quality, model, count, displayPrompt } = body;
+        const { sessionId, prompt, size, quality, model, count, displayPrompt, clientRequestId } = body;
         if (!sessionId || !prompt || !size || !quality || !model || count === undefined) {
           return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
         }
         const generation = await createGeneration({
           sessionId,
+          clientRequestId,
           prompt,
           displayPrompt,
           size,

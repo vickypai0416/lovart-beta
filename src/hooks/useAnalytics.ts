@@ -24,6 +24,25 @@ async function waitForSessionId(setSessionId: (sessionId: string) => void): Prom
   });
 }
 
+async function ensureSessionId(currentSessionId: string | null, setSessionId: (sessionId: string) => void): Promise<string | null> {
+  if (currentSessionId) {
+    return currentSessionId;
+  }
+
+  return new Promise((resolve) => {
+    const existing = localStorage.getItem(Analytics.SESSION_ID);
+    if (existing) {
+      setSessionId(existing);
+      resolve(existing);
+      return;
+    }
+
+    const created = getSessionIdClient();
+    setSessionId(created);
+    resolve(created);
+  });
+}
+
 export function useAnalytics() {
   // 使用 useState 初始化，但使用 useEffect 确保只在客户端执行
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -42,7 +61,8 @@ export function useAnalytics() {
 
   // 追踪事件
   const trackEvent = useCallback(async (type: string, payload: Record<string, unknown> = {}) => {
-    if (!sessionId) {
+    const resolvedSessionId = await ensureSessionId(sessionId, setSessionId);
+    if (!resolvedSessionId) {
       console.warn('[Analytics] trackEvent: sessionId not available');
       return;
     }
@@ -55,7 +75,7 @@ export function useAnalytics() {
         },
         body: JSON.stringify({
           action: 'track_event',
-          sessionId,
+          sessionId: resolvedSessionId,
           type,
           payload,
         }),
@@ -81,29 +101,13 @@ export function useAnalytics() {
     imageCount?: number;
   }) => {
     console.log('[Analytics] trackMessage called with data:', data);
-    
-    // 如果 sessionId 还未初始化，等待初始化完成
-    if (!sessionId) {
-      console.log('[Analytics] trackMessage: sessionId not available, waiting...');
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          const id = localStorage.getItem(Analytics.SESSION_ID);
-          if (id) {
-            console.log('[Analytics] trackMessage: got sessionId from localStorage:', id);
-            clearInterval(interval);
-            setSessionId(id);
-            resolve(id);
-          }
-        }, 50);
-      });
-    }
-    
-    if (!sessionId) {
+    const resolvedSessionId = await ensureSessionId(sessionId, setSessionId);
+    if (!resolvedSessionId) {
       console.error('[Analytics] trackMessage: sessionId still not available after waiting');
       return null;
     }
 
-    console.log('[Analytics] trackMessage: sending to API, sessionId:', sessionId);
+    console.log('[Analytics] trackMessage: sending to API, sessionId:', resolvedSessionId);
 
     try {
       const response = await fetch('/api/track', {
@@ -113,7 +117,7 @@ export function useAnalytics() {
         },
         body: JSON.stringify({
           action: 'track_message',
-          sessionId,
+          sessionId: resolvedSessionId,
           ...data,
         }),
       });
@@ -139,32 +143,16 @@ export function useAnalytics() {
     quality: string;
     model: string;
     count: number;
+    clientRequestId?: string;
   }) => {
     console.log('[Analytics] trackGeneration called with data:', data);
-    
-    // 如果 sessionId 还未初始化，等待初始化完成
-    if (!sessionId) {
-      console.log('[Analytics] trackGeneration: sessionId not available, waiting...');
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          const id = localStorage.getItem(Analytics.SESSION_ID);
-          if (id) {
-            console.log('[Analytics] trackGeneration: got sessionId from localStorage:', id);
-            clearInterval(interval);
-            setSessionId(id);
-            resolve(id);
-          }
-        }, 50);
-      });
-    }
-    
-    // 再次检查 sessionId
-    if (!sessionId) {
+    const resolvedSessionId = await ensureSessionId(sessionId, setSessionId);
+    if (!resolvedSessionId) {
       console.error('[Analytics] trackGeneration: sessionId not available');
       return null;
     }
 
-    console.log('[Analytics] trackGeneration: sending to API, sessionId:', sessionId);
+    console.log('[Analytics] trackGeneration: sending to API, sessionId:', resolvedSessionId);
 
     try {
       const response = await fetch('/api/track', {
@@ -174,7 +162,7 @@ export function useAnalytics() {
         },
         body: JSON.stringify({
           action: 'track_generation',
-          sessionId,
+          sessionId: resolvedSessionId,
           ...data,
         }),
       });
@@ -225,7 +213,8 @@ export function useAnalytics() {
     rating?: number;
     comment?: string;
   }) => {
-    if (!sessionId) {
+    const resolvedSessionId = await ensureSessionId(sessionId, setSessionId);
+    if (!resolvedSessionId) {
       console.warn('[Analytics] submitFeedback: sessionId not available');
       return;
     }
@@ -238,7 +227,7 @@ export function useAnalytics() {
         },
         body: JSON.stringify({
           action: 'track_feedback',
-          sessionId,
+          sessionId: resolvedSessionId,
           ...data,
         }),
       });

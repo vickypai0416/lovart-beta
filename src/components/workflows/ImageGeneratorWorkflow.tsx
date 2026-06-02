@@ -59,7 +59,7 @@ export default function ImageGeneratorWorkflow() {
   const [selectedSize, setSelectedSize] = useState('1024x1024');
   const [selectedQuality, setSelectedQuality] = useState('high');
   const [selectedCount, setSelectedCount] = useState(1);
-  const [selectedModel, setSelectedModel] = useState('gpt-image-2-all');
+  const [selectedModel, setSelectedModel] = useState('gpt-image-2');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
@@ -89,14 +89,14 @@ export default function ImageGeneratorWorkflow() {
         try {
           const state = JSON.parse(savedState);
           if (state.prompt) setPrompt(state.prompt);
-          if (state.referenceImages) setReferenceImages(state.referenceImages);
           if (state.englishPrompt) setEnglishPrompt(state.englishPrompt);
           if (state.selectedSize) setSelectedSize(state.selectedSize);
           if (state.selectedQuality) setSelectedQuality(state.selectedQuality);
           if (state.selectedCount) setSelectedCount(state.selectedCount);
-          if (state.selectedModel) setSelectedModel(state.selectedModel);
+          if (state.selectedModel) setSelectedModel('gpt-image-2');
         } catch (e) {
           console.warn('恢复图片生成状态失败:', e);
+          localStorage.removeItem('imageGeneratorState');
         }
       }
     }
@@ -113,14 +113,18 @@ export default function ImageGeneratorWorkflow() {
     if (typeof window !== 'undefined') {
       const state = {
         prompt,
-        referenceImages,
         englishPrompt,
         selectedSize,
         selectedQuality,
         selectedCount,
         selectedModel,
       };
-      localStorage.setItem('imageGeneratorState', JSON.stringify(state));
+      try {
+        localStorage.setItem('imageGeneratorState', JSON.stringify(state));
+      } catch (e) {
+        console.warn('保存图片生成状态失败:', e);
+        localStorage.removeItem('imageGeneratorState');
+      }
     }
   }, [prompt, referenceImages, englishPrompt, selectedSize, selectedQuality, selectedCount, selectedModel]);
 
@@ -170,7 +174,7 @@ export default function ImageGeneratorWorkflow() {
   };
 
   const models = [
-    { value: 'gpt-image-2-all', label: 'GPT Image 2 All' },
+    { value: 'gpt-image-2', label: 'GPT Image 2' },
   ];
 
   const sizes = [
@@ -294,15 +298,18 @@ export default function ImageGeneratorWorkflow() {
 
     if (!isInitialized) {
       console.log('[Generate] Waiting for analytics initialization...');
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          const id = localStorage.getItem('analytics_session_id');
-          if (id) {
-            clearInterval(interval);
-            resolve(id);
-          }
-        }, 50);
-      });
+      await Promise.race([
+        new Promise((resolve) => {
+          const interval = setInterval(() => {
+            const id = localStorage.getItem('analytics_session_id');
+            if (id) {
+              clearInterval(interval);
+              resolve(id);
+            }
+          }, 50);
+        }),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
     }
 
     console.log('[Generate] Calling trackGeneration...');
@@ -343,6 +350,7 @@ export default function ImageGeneratorWorkflow() {
           referenceImageCount: referenceImages.length,
         });
 
+        console.log('[Generate] fetch /api/generate start');
         const response = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

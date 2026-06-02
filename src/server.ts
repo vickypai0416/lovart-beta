@@ -11,7 +11,14 @@ config({ path: resolve(process.cwd(), '.env.local'), override: true });
 
 const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || 'localhost';
-const port = parseInt(process.env.PORT || '5000', 10);
+
+let port = parseInt(process.env.PORT || '5000', 10);
+
+const args = process.argv.slice(2);
+const portIndex = args.indexOf('--port');
+if (portIndex !== -1 && args[portIndex + 1]) {
+  port = parseInt(args[portIndex + 1], 10);
+}
 
 // Create Next.js app
 const app = next({ dev, hostname, port });
