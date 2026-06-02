@@ -251,7 +251,7 @@ class FileStorageAdapter implements StorageAdapter {
 class KVStorageAdapter implements StorageAdapter {
   private kv: any;
   private initialized = false;
-  private static readonly TTL_SECONDS = 6 * 60 * 60;
+  private static readonly TTL_SECONDS = 1 * 60 * 60;
 
   private async init(): Promise<void> {
     if (this.initialized) return;
