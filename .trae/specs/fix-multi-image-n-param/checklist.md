@@ -1,0 +1,8 @@
+- [x] `generateImageDirectly` 中有 `n` 参数值的日志输出
+- [x] `generateWithGPTImage2Edit` 中有 `n` 参数值的日志输出
+- [x] 响应解析后有 `data.data.length` 和 `urls.length` 的日志输出
+- [x] 前端多个 `type: 'image'` SSE 事件都能正确追加到 `imageUrls` 数组
+- [x] `isGenerating` 只在最后一张图片后才设为 `false`
+- [x] `/api/generate/route.ts` 文生图模式传递 `n` 参数
+- [x] `/api/generate/route.ts` 编辑模式传递 `n` 参数
+- [x] 选择 n=4 时，聊天助手正确显示4张图片

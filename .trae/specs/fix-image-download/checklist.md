@@ -1,0 +1,8 @@
+- [x] `src/lib/download.ts` 已创建，包含 `downloadImageByUrl` 和 `downloadMultipleImages` 函数
+- [x] `downloadImageByUrl` 使用 fetch + blob + Object URL 方式，对 data URL 直接转换无需网络请求
+- [x] `downloadImageByUrl` 在 fetch 失败时回退到直接 a.href 方式
+- [x] 下载完成后调用 `URL.revokeObjectURL` 释放 Object URL 内存
+- [x] ImageGeneratorWorkflow.tsx 的 `downloadImage` 和 `downloadAllImages` 已改用公共函数
+- [x] EcommerceWorkflow.tsx 所有下载入口已改用公共函数（downloadAll、Step5、历史记录、预览弹窗）
+- [x] page.tsx 聊天图片历史下载已改用公共函数
+- [x] 点击下载按钮后浏览器直接下载图片文件，不再打开新页面

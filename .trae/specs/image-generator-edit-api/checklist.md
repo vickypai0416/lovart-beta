@@ -1,0 +1,5 @@
+- [x] Checkpoint 1: referenceImage状态在组件中正确初始化和更新
+- [x] Checkpoint 2: generateImage函数中正确检测referenceImage的存在
+- [x] Checkpoint 3: API调用时正确传递referenceImage参数
+- [ ] Checkpoint 4: 控制台日志显示正确的API调用信息
+- [ ] Checkpoint 5: 上传图片并生成后，图片能正确显示

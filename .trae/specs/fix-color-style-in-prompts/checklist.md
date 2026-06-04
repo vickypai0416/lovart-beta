@@ -1,0 +1,6 @@
+- [x] 同时选择配色方案和视觉风格时，moodKeyword 被合并而非覆盖
+- [x] 选择蓝色系配色后，提示词中包含明确的蓝色色板指令（如 "Use blue color palette: deep navy #1B3A5C..."）
+- [x] 选择简约风格后，提示词中包含明确的风格指令（如 "Apply minimalist clean design style"）
+- [x] Step4 提示词预览页面顶部显示当前配色方案名称和色块预览
+- [x] Step4 提示词预览页面顶部显示当前视觉风格名称和描述
+- [x] 选择"自动"时行为与修改前完全一致（向后兼容）

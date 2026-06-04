@@ -1,0 +1,14 @@
+- [x] history-manager.ts 中新增 ImgGenHistoryItem 接口，包含 id, url, prompt, size, model, timestamp 字段
+- [x] saveImgGenHistory 函数正确保存记录到 localStorage 并持久化 Blob 到 IndexedDB
+- [x] getImgGenHistory 函数正确读取 localStorage 中的历史元数据
+- [x] getImgGenHistoryWithUrls 函数返回含持久化 URL 的历史记录
+- [x] deleteImgGenImage 函数正确删除单条记录及 Blob
+- [x] clearImgGenHistory 函数正确清空所有记录及 Blob
+- [x] ImageGeneratorWorkflow 组件头部有标签页切换按钮（图片生成 / 图片历史）
+- [x] 页面加载时自动从持久化存储恢复历史记录
+- [x] 生成图片成功后自动保存到持久化历史
+- [x] 旧的内存 history 状态已移除
+- [x] 图片历史标签页展示网格视图，悬停显示删除按钮
+- [x] 点击历史图片可切换到大图查看并跳转到生成器标签页
+- [x] 清空全部功能正常工作
+- [x] 不影响其他组件（对话助手、电商套图）的功能

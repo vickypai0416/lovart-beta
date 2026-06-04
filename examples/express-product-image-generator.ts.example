@@ -1,0 +1,60 @@
+/**
+ * Express 版本商品图生成器（参考代码）
+ * 
+ * 功能：接收商品名和场景，用模板生成提示词，调用 OpenAI 图片生成 API
+ * 
+ * 对比说明：
+ * - 交互方式：表单提交（商品+场景）vs 对话式自然语言
+ * - 意图理解：直接接收参数 vs LLM 自动提取
+ * - 模板管理：硬编码 3 个模板 vs LLM 动态生成
+ * - 场景灵活性：仅支持预定义场景 vs 支持任意场景
+ * - API：OpenAI GPT-Image vs 豆包 SeedDream
+ */
+
+import express from "express";
+import cors from "cors";
+import OpenAI from "openai";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const openai = new OpenAI({
+  apiKey: "YOUR_API_KEY" // ⚠️ 实际使用时应改为环境变量：process.env.OPENAI_API_KEY
+});
+
+// 模板库
+const templates = {
+  "父亲节": "A premium Father's Day product poster featuring {product}, warm lighting, emotional gift scene, masculine style, cinematic lighting, high-end advertising",
+  "夏日": "A refreshing summer advertisement featuring {product}, bright lighting, splashing water, ice cubes, energetic vibe, vibrant colors",
+  "高端": "Luxury commercial product photography of {product}, dark background, spotlight, premium branding, ultra realistic, 4k"
+};
+
+// 核心接口
+app.post("/generate", async (req, res) => {
+  try {
+    const { product, scene } = req.body;
+
+    const template = templates[scene] || templates["高端"];
+
+    const prompt = template.replace("{product}", product);
+
+    const result = await openai.images.generate({
+      model: "gpt-image-1",
+      prompt: prompt,
+      size: "1024x1024"
+    });
+
+    res.json({
+      image_url: result.data[0].url
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "生成失败" });
+  }
+});
+
+app.listen(3000, () => {
+  console.log("Server running on http://localhost:3000");
+});
