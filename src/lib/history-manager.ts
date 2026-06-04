@@ -276,7 +276,12 @@ export function getChatHistory(): ChatImageHistoryItem[] {
     return [];
   }
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    // 确保返回的是数组
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
   } catch {
     return [];
   }
@@ -284,23 +289,49 @@ export function getChatHistory(): ChatImageHistoryItem[] {
 
 export async function getChatHistoryWithUrls(): Promise<ChatImageHistoryItem[]> {
   const history = getChatHistory();
-  return Promise.all(history.map(async (img) => {
-    const url = await getImageUrl(img.id, img.url || '');
-    return { ...img, url };
-  }));
+  // 确保 history 是数组
+  if (!Array.isArray(history) || history.length === 0) {
+    return [];
+  }
+  const results = await Promise.all(
+    history.filter(img => img && img.id).map(async (img) => {
+      try {
+        const url = await getImageUrl(img.id, img.url || '');
+        return { ...img, url };
+      } catch {
+        // 如果获取 URL 失败，返回原始数据
+        return img;
+      }
+    })
+  );
+  return results;
 }
 
 export async function deleteChatImage(imageId: string): Promise<void> {
+  if (!imageId) return;
   const history = getChatHistory();
-  const filtered = history.filter(img => img.id !== imageId);
+  // 确保 history 是数组
+  if (!Array.isArray(history)) {
+    localStorage.removeItem(ImageHistory.CHAT);
+    return;
+  }
+  const filtered = history.filter(img => img && img.id !== imageId);
   safeSetChatHistory(filtered);
   await idbDeleteImageBlob(imageId).catch(() => {});
 }
 
 export async function clearChatHistory(): Promise<void> {
   const history = getChatHistory();
+  // 确保 history 是数组
+  if (!Array.isArray(history)) {
+    localStorage.removeItem(ImageHistory.CHAT);
+    return;
+  }
   for (const img of history) {
-    await idbDeleteImageBlob(img.id).catch(() => {});
+    // 确保 img 和 img.id 存在
+    if (img && img.id) {
+      await idbDeleteImageBlob(img.id).catch(() => {});
+    }
   }
   localStorage.removeItem(ImageHistory.CHAT);
 }

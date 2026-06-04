@@ -155,14 +155,18 @@ export async function POST(request: NextRequest) {
     const imageCount = Math.min(Math.max(Number(requestN) || 1, 1), 4);
     const finalReferenceImages = referenceImages || (referenceImage ? [referenceImage] : []);
     let finalPrompt = prompt;
+    const skipTranslation = body.skipTranslation === true;
 
-    if (finalPrompt && containsChinese(finalPrompt)) {
+    // 只有不跳过翻译且不是亚马逊九宫格模板时才翻译
+    if (finalPrompt && containsChinese(finalPrompt) && !skipTranslation) {
       console.log('[Generate API] 检测到中文提示词，自动翻译为英文...');
       const translated = await translateToEnglish(finalPrompt);
       if (translated !== finalPrompt) {
         console.log('[Generate API] 翻译结果:', translated.substring(0, 100));
         finalPrompt = translated;
       }
+    } else if (skipTranslation && containsChinese(finalPrompt)) {
+      console.log('[Generate API] 跳过中文翻译（skipTranslation=true）');
     }
     
     if (!finalPrompt && product && scene) {

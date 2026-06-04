@@ -1,208 +1,144 @@
-export const AMAZON_9_GRID_PROMPT = `# 亚马逊美国站定制化产品 Listing 九宫格套图模板
+export const AMAZON_9_GRID_PROMPT = `Amazon Listing 九宫格套图通用导演级框架（优化版）
 
-## 输入变量
-适用产品：\`{PRODUCT_NAME}\`
-核心关键词：\`{PRODUCT_KEYWORD}\`
-目标用户：\`{TARGET_USER}\`
-使用场景：\`{USE_SCENE}\`
-节日/送礼场景：\`{HOLIDAY}\`
-主色调：\`{COLOR_SCHEME}\`
-真实材质：\`{MATERIAL}\`
-真实尺寸：\`{SIZE}\`
-真实卖点：\`{FEATURE_1}\` / \`{FEATURE_2}\` / \`{FEATURE_3}\` / \`{FEATURE_4}\`
-定制内容：\`{CUSTOM_TEXT_TYPE}\`
-产地/履约声明：\`{ORIGIN_CLAIM}\`
+总体原则
+Create a premium Amazon listing collage in a 3x3 grid layout.
 
----
+The uploaded product must remain exactly the same product throughout all panels.
+Do not redesign, replace, modify, or reinterpret the product.
 
-## 全局视觉风格控制
-- 高端商业摄影质感
-- 真实亚马逊产品图风格
-- 面向美国消费者审美
-- 温暖、干净、可信赖，兼具礼品感与高级感
-- 产品主体始终是视觉中心
-- 定制区域必须可见、可读、自然融入产品表面
-- 材质、边缘、纹理、厚度、立体感真实可信
-- 全套统一色彩逻辑
-- 光线柔和自然，层次分明，避免过曝、死白、灰脏、塑料感
-- 构图简洁但有层次，留白干净，避免画面拥挤
-- 整组图片保持统一品牌感、统一光影、统一背景审美
+Each panel represents a different Amazon listing image designed to maximize click-through rate, conversion rate, perceived value, and purchase intent.
 
-## 全局版式排版规则
-- 所有带标题的图片统一采用成熟亚马逊品牌图排版风格
-- 标题字号明显大于副标题，信息层级清晰
-- 文案区域保持稳定留白，不贴边、不拥挤、不压住产品主体
-- 图标、尺寸线、流程模块、卖点模块保持统一风格与统一间距
-- 整套 9 图的字体、字号比例、边距、文字颜色逻辑尽量一致
+Every panel must contain a professionally designed Amazon-style headline.
+Every panel except Panel 1 must contain supporting marketing copy.
+Headline length: 3-8 words.
+Supporting copy: 1-2 short benefit-focused sentences.
+Typography must resemble premium Amazon best-seller listing images.
 
-## 全局高级感增强
-- 优先呈现 premium lifestyle commercial photography
-- 画面要有电商广告级完成度，而不是普通 AI 拼贴感
-- 背景道具只能辅助氛围，不能抢走产品主体
-- 人物如出现，只能辅助产品叙事，不能压过产品
-- 标题与副标题如出现，需简洁、规整、具有品牌排版感
-- 套图的字体风格必须统一
-- 标题大于副标题，排版整洁，信息层级明确
+Panel 1 - Hero Image
+Pure white background.
+Product centered.
+Amazon compliant main image.
+Luxury commercial photography.
 
-## 全局合规控制
-- 不得生成产品不存在的配件、包装、认证或功能
-- 不得虚构材质、尺寸、结构、卖点
-- 禁止遮挡定制区域
-- 不得生成乱码文字、错误 Logo、亚马逊 Logo
-- 不使用 Best / No.1 / Guaranteed / Certified 等高风险词，除非有真实依据
-- \`Made in USA\` 仅在真实符合要求时使用，否则优先使用更安全表达
-- 禁止礼盒、礼袋、卡片、蝴蝶结等元素
+Panel 2 - Core Feature Highlight
+Focus on the most important selling point.
+Close-up perspective.
+Premium lighting.
+Bold headline + supporting copy.
 
-## 全局稳定性控制
-- 产品外观、颜色、比例、材质、尺寸在 9 张图中必须一致
-- 不出现畸形手、多余手指、错误透视
-- 不出现明显 AI 痕迹、廉价滤镜、过强锐化、失真文字
-- 每张图只突出一个核心任务，但整体系列要有完整营销逻辑
+Panel 3 - Lifestyle Environment
+Premium real-life usage environment.
+Demonstrate product integration into daily life.
+Bold headline + supporting copy.
 
----
+Panel 4 - Gift Recipient Scenario
+Show emotional gifting moment.
+Focus on recipient reaction.
+No gift boxes.
+No ribbons.
+No wrapping paper.
+No packaging.
+No shopping bags.
+No greeting cards.
+Bold headline + supporting copy.
 
-# Image 1 - 白底主图
-用途：提升点击率，合规展示完整产品形态
-关键要求：
-- 纯白背景 RGB 255,255,255
-- 产品居中，主体占画面约 80%-85%
-- 展示完整产品形态，边缘干净，轮廓清楚
-- 棚拍商业主图构图，比例真实，形态稳定
-- 无人物、无道具、无装饰、无标题、无徽章、无水印
+Panel 5 - Personalization / Feature Expansion
+Show customization options if applicable.
+Otherwise show additional functions or variations.
+Bold headline + supporting copy.
 
-# Image 2 - 定制效果展示图
-标题文案：\`Customized Just for You\`
-副标题文案：\`Add {CUSTOM_TEXT_TYPE} to Make It Personal\`
-用途：快速传达“这是可定制产品”
-关键要求：
-- 产品为主体，占画面 55%-70%
-- 定制区域清晰可见，可加入局部放大或标注线
-- 背景为干净温暖的浅色生活场景或高端摄影棚背景
-- 构图要让用户第一眼看到“可定制区域”
-视觉增强：
-- 中近景商业镜头
-- 背景虚实适中，突出主体
-- 光线温暖自然，强调定制细节与表面质感
+Panel 6 - Material & Craftsmanship
+Macro photography.
+Highlight texture, quality, precision, craftsmanship.
+Bold headline + supporting copy.
 
-# Image 3 - 定制流程说明图
-标题文案：\`Easy to Personalize\`
-副标题文案：\`Create Your Custom Gift in Minutes\`
-用途：降低下单门槛，说明定制流程
-关键要求：
-- 4 步流程：
-  1. \`Click Customize Now\`
-  2. \`Enter Your {CUSTOM_TEXT_TYPE}\`
-  3. \`Preview Your Design\`
-  4. \`We Make It for You\`
-- 左侧或中央产品，右侧流程说明
-- 信息层级清晰，排版整洁，阅读轻松
-视觉增强：
-- 轻信息图风格，但保持商业摄影感
-- 背景干净，产品仍然是视觉核心
-- 小图标简洁统一，不过度抢眼
+Panel 7 - Real Usage Demonstration
+Show target customer actively using product.
+Natural interaction.
+Authentic lifestyle photography.
+Bold headline + supporting copy.
 
-# Image 4 - 尺寸与比例展示图
-标题文案：\`Perfect Size for Everyday Display\`
-副标题文案：\`Designed to Fit Beautifully in Your Space\`
-用途：解决尺寸和摆放疑虑
-关键要求：
-- 展示真实尺寸 \`{SIZE}\`
-- 使用清晰尺寸线或比例参考
-- 可加入桌面、墙面、手持、空间比例参考
-- 背景为简洁真实生活空间
-视觉增强：
-- 正面镜头
-- 让产品在空间中显得协调、自然、高级
-- 尺寸信息清楚但不过度技术化
+Panel 8 - Emotional Benefit
+Focus on emotional outcome.
+Human-centered storytelling.
+Bold headline + supporting copy.
 
-# Image 5 - 产品实际场景应用图
-标题文案：\`Used in Real Life\`
-副标题文案：\`Designed for Everyday Moments\`
-用途：展示产品在真实生活中人物使用的真实应用效果，增强代入感与购买欲望
-关键要求：
-- 产品出现在真实使用场景中
-- 明确展示产品的实际用途和摆放/使用方式
-- 产品仍然是画面主体，场景只做辅助
-- 可结合 \`{USE_SCENE}\` 展示自然生活化应用
-- 如出现人物，必须是自然使用产品或与产品真实互动，而不是面对镜头举着产品摆拍
-视觉增强：
-- lifestyle commercial photography
-- 自然中景或近中景镜头
-- 柔和自然光，画面温暖真实，有生活氛围
-- 强调真实使用状态，而不是产品说明书式展示
+Panel 9 - Premium Brand Presentation
+Luxury advertising composition.
+Clean modern design.
+Strong purchase motivation.
+Bold headline + supporting copy.
 
-# Image 6 - 真实卖点说明图
-标题文案：\`Premium Features\`
-副标题文案：\`Quality You Can See and Feel\`
-用途：解释为什么值得购买
-关键要求：
-- 左侧产品，右侧 3-4 个真实卖点
-- 卖点仅限：
-  \`{FEATURE_1}\`
-  \`{FEATURE_2}\`
-  \`{FEATURE_3}\`
-  \`{FEATURE_4}\`
-- 每个卖点配简洁统一图标
-视觉增强：
-- 产品展示要大气清楚
-- 信息布局整齐，像成熟亚马逊品牌信息图
-- 清楚但不生硬，兼顾美感与可读性
+Visual Consistency
+Maintain consistent product appearance.
+Consistent scale.
+Consistent lighting direction.
+Consistent color accuracy.
 
-# Image 7 - 真实生活使用场景图
-标题文案：\`Made for Meaningful Moments\`
-副标题文案：\`Perfect for {USE_SCENE}\`
-用途：让买家想象真实使用效果
-关键要求：
-- 产品融入 \`{USE_SCENE}\` 场景
-- 产品必须是视觉焦点
-- 场景有生活感，但保持干净、高级、温暖
-- 可出现人物使用产品，但必须自然、不过度、且突出产品，不遮挡产品的定制区域
-视觉增强：
-- lifestyle commercial photography
-- 中景镜头
-- 环境有真实生活气息，但不过度拥挤
-- 用光温暖自然，营造情绪价值
+Photography Style
+Ultra realistic.
+Commercial photography.
+Luxury advertising.
+Amazon best-seller style.
+Cinematic composition.
+Professional studio lighting.
+Natural shadows.
+High-end retail catalog quality.
 
-# Image 8 - 送礼情绪场景图
-标题文案：\`A Thoughtful Gift for {TARGET_USER}\`
-副标题文案：\`Perfect for {HOLIDAY}\`
-用途：强化送礼属性和情绪价值
-关键要求：
-- 真实送礼或收礼瞬间
-- 产品清晰可见且仍是主体
-- 轻度节日氛围，情绪自然，画面温馨
-- 人物互动要像真实送礼瞬间，而不是站着对镜头展示产品
-视觉增强：
-- 中景或中近景镜头
-- 更强调礼品感、陪伴感、纪念感
-- 节日元素柔和点缀，不可喧宾夺主
-- 捕捉自然表情、眼神交流、递送动作或收礼后的真实反应
+Amazon Infographic Rules
+Panel 2-9 must include:
+- Bold headline
+- Supporting benefit statement
+- Clear visual hierarchy
+- Mobile-friendly readability
+- Premium typography
+- No spelling errors
+- No placeholder text
 
-# Image 9 - 定向送礼真实场景图
-标题文案：\`A Gift for Someone Special\`
-副标题文案：\`Made for {TARGET_USER}\`
-用途：根据用户输入的送礼对象，展示更精准的真实送礼场景，强化代入感与购买动机
-关键要求：
-- 根据 \`{TARGET_USER}\` 判断送礼对象，只展示与该对象匹配的真实场景
-- 产品必须清晰可见且仍是主体
-- 场景自然温暖，有真实人物关系和送礼氛围
-- 人物互动要服务于“送给谁”这一主题，而不是泛泛展示多人群
-- 人物必须与产品产生真实情境联系，如赠送、接收、摆放、使用后的自然互动
-视觉增强：
-- emotional lifestyle commercial photography
-- 中景或中近景生活化镜头
-- 用光柔和自然，突出陪伴感、纪念感与礼品属性
-- 更强调对象身份感，而不是简单合照感
----
+Anti-Failure Rules
+The uploaded product is the only product allowed.
 
-## 推荐最终 9 图顺序
-1. 白底主图
-2. 定制效果展示
-3. 定制流程说明
-4. 尺寸与比例展示
-5. 产品实际场景应用
-6. 真实卖点说明
-7. 真实生活使用场景
-8. 送礼情绪场景
-9. 定向送礼真实场景
+PRODUCT IDENTITY LOCK
+
+The uploaded product is the absolute source of truth.
+
+Every panel must depict the exact same product.
+
+No redesigns.
+No alternative versions.
+No additional engravings.
+No new personalization.
+No decorative variations.
+No added accessories.
+No geometry changes.
+No shape changes.
+No dimension changes.
+No thickness changes.
+No edge profile changes.
+The product shown in every panel must be visually identical to the uploaded product.
+
+No alternative versions.
+No redesigned variants.
+No additional accessories.
+No packaging concepts.
+No fictional upgrades.
+No added features not visible in the uploaded image.
+
+No AI artifacts.
+No geometry distortion.
+No duplicated products.
+No floating objects.
+No unrealistic hands.
+No malformed fingers.
+No incorrect text rendering.
+No cheap stock photo appearance.
+
+Amazon Conversion Layer
+Listing images must resemble top-performing Amazon US premium category listings.
+
+Each panel should communicate a unique selling proposition.
+
+Avoid repeating the same message across multiple panels.
+
+Each image must immediately communicate value within 2 seconds of viewing.
 `;

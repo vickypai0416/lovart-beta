@@ -65,6 +65,11 @@ type ChatAction =
   | { type: 'DELETE_SESSION'; sessionId: string }
   | { type: 'UPDATE_SESSION'; sessionId: string; updatedSession: Session };
 
+function areSessionMessagesEqual(a: Session['messages'], b: Session['messages']): boolean {
+  if (a.length !== b.length) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'INIT_SESSIONS':
@@ -80,11 +85,21 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         : state.currentSessionId;
       return { sessions: updatedSessions, currentSessionId: newCurrentId };
     }
-    case 'UPDATE_SESSION':
+    case 'UPDATE_SESSION': {
+      const existingSession = state.sessions.find(s => s.id === action.sessionId);
+      if (
+        existingSession &&
+        existingSession.title === action.updatedSession.title &&
+        areSessionMessagesEqual(existingSession.messages, action.updatedSession.messages)
+      ) {
+        return state;
+      }
+
       return {
         ...state,
         sessions: state.sessions.map(s => s.id === action.sessionId ? action.updatedSession : s),
       };
+    }
     default:
       return state;
   }
@@ -141,11 +156,22 @@ export default function Home() {
   const [autoGenerate, setAutoGenerate] = useState(false);
   const [showImageHistory, setShowImageHistory] = useState(false);
   const [imageMode, setImageMode] = useState<ImageMode>('generate');
+  const [confirmingClearHistory, setConfirmingClearHistory] = useState(false);
   const [chatImageHistory, setChatImageHistory] = useState<ChatImageHistoryItem[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<string>('amazon-expert');
+  // 多模板管理状态
+  const [gridTemplates, setGridTemplates] = useState<Array<{ key: string; name: string; content: string; description?: string }>>([
+    { key: 'default', name: '默认模板', content: AMAZON_9_GRID_PROMPT, description: 'Amazon Listing 九宫格套图通用导演级框架' }
+  ]);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState<string>('default');
   const [amazonGridTemplate, setAmazonGridTemplate] = useState<string>(AMAZON_9_GRID_PROMPT);
   const [showTemplateEditor, setShowTemplateEditor] = useState<boolean>(false);
+  const [showTemplateManager, setShowTemplateManager] = useState<boolean>(false);
+  const [newTemplateName, setNewTemplateName] = useState<string>('');
+  const [newTemplateContent, setNewTemplateContent] = useState<string>('');
+  const [templateMessage, setTemplateMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [confirmingDeleteTemplateKey, setConfirmingDeleteTemplateKey] = useState<string | null>(null);
   const scrollPositionRef = useRef(0);
   const [chatState, dispatchChat] = useReducer(chatReducer, { sessions: [], currentSessionId: null });
   const { sessions, currentSessionId } = chatState;
@@ -156,6 +182,7 @@ export default function Home() {
   const currentSessionIdRef = useRef<string | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const userImagesRef = useRef<string[]>([]);
+  const amazonGridTemplateRef = useRef<string>(AMAZON_9_GRID_PROMPT);
   
   // 组件挂载状态，用于防止卸载后更新状态
   const isMounted = useRef(true);
@@ -163,14 +190,81 @@ export default function Home() {
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
-  
+
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
-  const { trackGeneration, updateGeneration, trackMessage, isInitialized } = useAnalytics();
+
   useEffect(() => {
-  userImagesRef.current = userImages;
-}, [userImages]);
+    userImagesRef.current = userImages;
+  }, [userImages]);
+
+  // 从服务器获取所有模板预设
+  useEffect(() => {
+    const fetchServerTemplates = async () => {
+      try {
+        const response = await fetch('/api/grid-template');
+        const data = await response.json();
+
+        if (data.success && data.presets && data.presets.length > 0) {
+          console.log('[AmazonGridTemplate] Loaded templates from server:', data.presets.length);
+          const templates = data.presets.map((p: { key: string; name: string; content: string; description?: string }) => ({
+            key: p.key,
+            name: p.name,
+            content: p.content,
+            description: p.description,
+          }));
+          setGridTemplates(templates);
+
+          // 设置当前选中的模板
+          const defaultTemplate = templates.find((t: { key: string }) => t.key === 'default') || templates[0];
+          setSelectedTemplateKey(defaultTemplate.key);
+          setAmazonGridTemplate(defaultTemplate.content);
+        } else {
+          console.log('[AmazonGridTemplate] Using built-in default template');
+        }
+      } catch (error) {
+        console.error('[AmazonGridTemplate] Failed to load from server:', error);
+      }
+    };
+
+    fetchServerTemplates();
+  }, []);
+
+  // 当选择不同模板时更新当前模板内容
+  useEffect(() => {
+    const selected = gridTemplates.find(t => t.key === selectedTemplateKey);
+    if (selected) {
+      setAmazonGridTemplate(selected.content);
+    }
+  }, [selectedTemplateKey, gridTemplates]);
+
+  useEffect(() => {
+    amazonGridTemplateRef.current = amazonGridTemplate;
+    console.log('[AmazonGridTemplate] Updated:', {
+      length: amazonGridTemplate.length,
+      isDefault: amazonGridTemplate === AMAZON_9_GRID_PROMPT,
+      preview: amazonGridTemplate.substring(0, 100) + '...',
+    });
+  }, [amazonGridTemplate]);
+
+  useEffect(() => {
+    if (!templateMessage) return;
+    const timeoutId = setTimeout(() => {
+      setTemplateMessage(null);
+    }, 3000);
+    return () => clearTimeout(timeoutId);
+  }, [templateMessage]);
+
+  useEffect(() => {
+    if (!confirmingDeleteTemplateKey) return;
+    const timeoutId = setTimeout(() => {
+      setConfirmingDeleteTemplateKey(null);
+    }, 3000);
+    return () => clearTimeout(timeoutId);
+  }, [confirmingDeleteTemplateKey]);
+
+  const { trackGeneration, updateGeneration, trackMessage, isInitialized } = useAnalytics();
   const generationIdRef = useRef<string | null>(null);
   const requestStartTimeRef = useRef<number>(0);
 
@@ -322,7 +416,7 @@ export default function Home() {
     
     const currentSessions = sessionsRef.current;
     if (currentSessions.length <= 1) {
-      alert('至少需要保留一个会话');
+      console.warn('至少需要保留一个会话');
       return;
     }
     
@@ -354,41 +448,43 @@ export default function Home() {
     }, 0);
   }, []);
 
-  const updateCurrentSession = () => {
-    if (currentSessionId) {
-      const session = sessions.find(s => s.id === currentSessionId);
-      if (session) {
-        const userMessages = messages.filter(m => m.id !== 'welcome');
-        const updatedSession = {
-          ...session,
-          messages: userMessages,
-          title: userMessages.length > 0 
-            ? userMessages[0].content.substring(0, 30) + (userMessages[0].content.length > 30 ? '...' : '')
-            : '新会话',
-        };
-        saveSession(updatedSession);
-        dispatchChat({ type: 'UPDATE_SESSION', sessionId: currentSessionId, updatedSession });
-      }
+  const updateCurrentSession = useCallback(() => {
+    const sessionId = currentSessionIdRef.current;
+    if (!sessionId) return;
+
+    const session = sessionsRef.current.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const userMessages = messagesRef.current.filter(m => m.id !== 'welcome');
+    const title = userMessages.length > 0
+      ? userMessages[0].content.substring(0, 30) + (userMessages[0].content.length > 30 ? '...' : '')
+      : '新会话';
+
+    if (session.title === title && areSessionMessagesEqual(session.messages, userMessages)) {
+      return;
     }
-  };
+
+    const updatedSession = {
+      ...session,
+      messages: userMessages,
+      title,
+    };
+    saveSession(updatedSession);
+    dispatchChat({ type: 'UPDATE_SESSION', sessionId, updatedSession });
+  }, []);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (currentSessionId && sessions.some(s => s.id === currentSessionId)) {
+      if (currentSessionIdRef.current && sessionsRef.current.some(s => s.id === currentSessionIdRef.current)) {
         updateCurrentSession();
       }
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [messages]);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (currentSessionId && sessions.some(s => s.id === currentSessionId)) {
-        saveChatMessages(messages);
-      }
-    }, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [messages]);
+  }, [messages, updateCurrentSession]);
 
   const handleSaveChatImage = async (url: string, prompt: string, messageId?: string) => {
     try {
@@ -469,10 +565,29 @@ export default function Home() {
     setChatImageHistory(updated);
   };
 
+  useEffect(() => {
+    if (!confirmingClearHistory) return;
+    const timeoutId = setTimeout(() => {
+      setConfirmingClearHistory(false);
+    }, 3000);
+    return () => clearTimeout(timeoutId);
+  }, [confirmingClearHistory]);
+
   const handleClearChatHistory = async () => {
-    if (confirm('确定要清空所有图片历史记录吗？')) {
+    if (!confirmingClearHistory) {
+      setConfirmingClearHistory(true);
+      return;
+    }
+
+    try {
       await clearChatHistory();
       setChatImageHistory([]);
+    } catch (error) {
+      console.error('[handleClearChatHistory] Error:', error);
+      // 即使出错也清空本地状态
+      setChatImageHistory([]);
+    } finally {
+      setConfirmingClearHistory(false);
     }
   };
 
@@ -651,9 +766,31 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       throw new Error('gpt-image-2 编辑接口需要上传至少一张产品图，请先上传产品图后再生成亚马逊套图');
     }
 
-    const basePrompt = amazonGridTemplate;
-    const gridPrompt = userContent ? `${basePrompt}，${userContent}` : basePrompt;
+    // 使用 ref 获取最新的模板值，避免闭包问题
+    const basePrompt = amazonGridTemplateRef.current;
     
+    // 检查模板是否为空或过短
+    if (!basePrompt || basePrompt.length < 100) {
+      throw new Error('模板内容太短或为空，请检查模板编辑器中的内容');
+    }
+    
+    const gridPrompt = userContent ? `${basePrompt}\n\n用户补充：${userContent}` : basePrompt;
+    
+    // 检查最终 prompt 长度
+    const MAX_PROMPT_LENGTH = 15000; // API 通常有长度限制
+    if (gridPrompt.length > MAX_PROMPT_LENGTH) {
+      throw new Error(`提示词太长 (${gridPrompt.length} 字符)，超过限制 ${MAX_PROMPT_LENGTH} 字符。请精简模板内容。`);
+    }
+
+    // 调试日志：确认使用的模板
+    console.log('[Amazon Grid Generation] Template check:', {
+      isDefaultTemplate: basePrompt === AMAZON_9_GRID_PROMPT,
+      templateLength: basePrompt.length,
+      defaultTemplateLength: AMAZON_9_GRID_PROMPT.length,
+      userContent: userContent || '(none)',
+      finalPromptLength: gridPrompt.length,
+    });
+
     const requestBody: Record<string, unknown> = {
       clientRequestId,
       prompt: gridPrompt,
@@ -662,8 +799,9 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       n: 1,
       model: 'gpt-image-2-all',
       referenceImage,
+      skipTranslation: true, // 亚马逊九宫格模板包含大量中文说明，跳过翻译以保持模板结构
     };
-    
+
     console.log('[Amazon Grid Generation] Requesting /api/generate', {
       model: requestBody.model,
       size: requestBody.size,
@@ -690,7 +828,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     const rawText = await gridResponse.text().catch(() => null);
     console.log('[Amazon Grid Generation] Response body (first 500 chars):', rawText?.substring(0, 500));
     
-    let gridData: any = null;
+    let gridData: { error?: string; message?: string; url?: string; urls?: string[]; images?: string[] } | null = null;
     if (rawText) {
       try {
         gridData = JSON.parse(rawText);
@@ -1250,6 +1388,11 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
     console.log('[SendMessage] Content:', effectiveContent);
     console.log('[SendMessage] Images:', currentImages.length);
     console.log('[SendMessage] Selected persona:', selectedPersona);
+    console.log('[SendMessage] Template state:', {
+      stateLength: amazonGridTemplate.length,
+      refLength: amazonGridTemplateRef.current.length,
+      isDefault: amazonGridTemplate === AMAZON_9_GRID_PROMPT,
+    });
     
     // 亚马逊专家模式：直接生成九宫格图片
     if (selectedPersona === 'amazon-expert' && (currentImages.length > 0 || effectiveContent.trim().length > 0)) {
@@ -2102,6 +2245,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                   if (scrollRef.current) {
                     scrollPositionRef.current = scrollRef.current.scrollTop;
                   }
+                  setConfirmingClearHistory(false);
                   setShowImageHistory(false);
                 }}
                 className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
@@ -2115,6 +2259,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                 if (scrollRef.current) {
                   scrollPositionRef.current = scrollRef.current.scrollTop;
                 }
+                setConfirmingClearHistory(false);
                 setShowImageHistory(true);
               }}
               className={`flex-1 px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
@@ -2139,38 +2284,238 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
           
           {showTemplateEditor && selectedPersona === 'amazon-expert' ? (
             <div className="flex-1 overflow-y-auto p-4 bg-amber-50/30">
+              {/* 模板选择器 */}
               <div className="flex justify-between items-center mb-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800">九宫格套图模板编辑器</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">修改后的模板将直接用于生成图片</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    共 {gridTemplates.length} 个模板可用
+                    {gridTemplates.filter(t => t.key !== 'default').length > 0 &&
+                      ` (${gridTemplates.filter(t => t.key !== 'default').length} 个用户上传模板)`
+                    }
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setAmazonGridTemplate(AMAZON_9_GRID_PROMPT)}
-                    className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors flex items-center gap-1"
+                  <select
+                    value={selectedTemplateKey}
+                    onChange={(e) => setSelectedTemplateKey(e.target.value)}
+                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-300"
                   >
-                    <RefreshCw className="w-3 h-3" />
-                    重置默认
+                    {gridTemplates.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.key === 'default' ? '📋 ' : '👤 '}{t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={async () => {
+                      // 手动刷新模板列表
+                      try {
+                        const response = await fetch('/api/grid-template');
+                        const data = await response.json();
+                        if (data.success && data.presets) {
+                          const templates = data.presets.map((p: { key: string; name: string; content: string; description?: string }) => ({
+                            key: p.key,
+                            name: p.name,
+                            content: p.content,
+                            description: p.description,
+                          }));
+                          setGridTemplates(templates);
+                          console.log('[AmazonGridTemplate] Refreshed templates:', templates.length);
+                        }
+                      } catch (error) {
+                        console.error('[AmazonGridTemplate] Failed to refresh:', error);
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded-md transition-colors"
+                    title="刷新模板列表"
+                  >
+                    🔄
+                  </button>
+                  <button
+                    onClick={() => setShowTemplateManager(!showTemplateManager)}
+                    className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md transition-colors"
+                  >
+                    管理模板
                   </button>
                   <button
                     onClick={() => setShowTemplateEditor(false)}
                     className="px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-colors"
                   >
-                    完成编辑
+                    完成
                   </button>
                 </div>
+              </div>
+
+              {/* 模板管理面板 */}
+              {showTemplateManager && (
+                <div className="mb-4 p-3 bg-white border border-amber-200 rounded-lg">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2">上传新模板</h4>
+                  {templateMessage && (
+                    <div className={`mb-2 rounded-md px-3 py-2 text-xs ${
+                      templateMessage.type === 'success'
+                        ? 'bg-green-50 text-green-700 border border-green-200'
+                        : templateMessage.type === 'error'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                    }`}>
+                      {templateMessage.text}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder="模板名称"
+                      className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    />
+                  </div>
+                  <textarea
+                    value={newTemplateContent}
+                    onChange={(e) => setNewTemplateContent(e.target.value)}
+                    placeholder="粘贴模板内容..."
+                    className="w-full h-24 p-2 text-xs font-mono border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 mb-2"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!newTemplateName.trim() || !newTemplateContent.trim()) {
+                          setTemplateMessage({ type: 'error', text: '请输入模板名称和内容' });
+                          return;
+                        }
+                        const key = `custom-${Date.now()}`;
+                        try {
+                          const response = await fetch('/api/grid-template', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              key,
+                              name: newTemplateName.trim(),
+                              content: newTemplateContent.trim(),
+                              description: '用户自定义模板',
+                              isDefault: false,
+                            }),
+                          });
+                          const data = await response.json();
+                          if (data.success) {
+                            setGridTemplates([...gridTemplates, { key, name: newTemplateName.trim(), content: newTemplateContent.trim() }]);
+                            setNewTemplateName('');
+                            setNewTemplateContent('');
+                            setTemplateMessage({ type: 'success', text: '模板上传成功' });
+                          }
+                        } catch (error) {
+                          console.error('上传模板失败:', error);
+                          setTemplateMessage({ type: 'error', text: '上传失败，请检查模板内容或稍后重试' });
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                    >
+                      上传模板
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNewTemplateName('');
+                        setNewTemplateContent('');
+                      }}
+                      className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                    >
+                      清空
+                    </button>
+                  </div>
+
+                  {/* 删除模板 */}
+                  {gridTemplates.length > 1 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <h4 className="text-xs font-semibold text-gray-700 mb-2">删除模板</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {gridTemplates.filter(t => t.key !== 'default').map((t) => (
+                          <button
+                            key={t.key}
+                            onClick={async () => {
+                              if (confirmingDeleteTemplateKey !== t.key) {
+                                setConfirmingDeleteTemplateKey(t.key);
+                                setTemplateMessage({ type: 'info', text: `再次点击“删除 ${t.name}”确认删除` });
+                                return;
+                              }
+
+                              try {
+                                await fetch(`/api/grid-template?key=${t.key}`, { method: 'DELETE' });
+                                setGridTemplates(gridTemplates.filter(template => template.key !== t.key));
+                                setConfirmingDeleteTemplateKey(null);
+                                setTemplateMessage({ type: 'success', text: `已删除模板：${t.name}` });
+                                if (selectedTemplateKey === t.key) {
+                                  setSelectedTemplateKey('default');
+                                }
+                              } catch (error) {
+                                console.error('删除模板失败:', error);
+                                setTemplateMessage({ type: 'error', text: '删除模板失败' });
+                              }
+                            }}
+                            className={`px-2 py-1 text-xs rounded border transition-colors ${
+                              confirmingDeleteTemplateKey === t.key
+                                ? 'bg-red-500 text-white border-red-500 hover:bg-red-600'
+                                : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                            }`}
+                          >
+                            {confirmingDeleteTemplateKey === t.key ? `确认删除 ${t.name}` : `删除 ${t.name}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 当前模板编辑器 */}
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs text-gray-600">当前编辑: {gridTemplates.find(t => t.key === selectedTemplateKey)?.name}</span>
+                <button
+                  onClick={async () => {
+                    // 保存当前模板到服务器
+                    const currentTemplate = gridTemplates.find(t => t.key === selectedTemplateKey);
+                    if (!currentTemplate) return;
+                    try {
+                      const response = await fetch('/api/grid-template', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          key: selectedTemplateKey,
+                          name: currentTemplate.name,
+                          content: amazonGridTemplate,
+                          description: currentTemplate.description || '自定义模板',
+                          isDefault: selectedTemplateKey === 'default',
+                        }),
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        // 更新本地模板列表
+                        setGridTemplates(gridTemplates.map(t =>
+                          t.key === selectedTemplateKey ? { ...t, content: amazonGridTemplate } : t
+                        ));
+                        setTemplateMessage({ type: 'success', text: '模板保存成功' });
+                      }
+                    } catch (error) {
+                      console.error('保存模板失败:', error);
+                      setTemplateMessage({ type: 'error', text: '保存失败，请稍后重试' });
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-colors"
+                >
+                  保存修改
+                </button>
               </div>
               <textarea
                 value={amazonGridTemplate}
                 onChange={(e) => setAmazonGridTemplate(e.target.value)}
-                className="w-full h-[calc(100%-80px)] p-4 text-xs font-mono bg-white border border-amber-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 leading-relaxed"
+                className="w-full h-[calc(100%-200px)] p-4 text-xs font-mono bg-white border border-amber-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 leading-relaxed"
                 placeholder="在此编辑九宫格套图模板..."
                 spellCheck={false}
               />
               <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                 <span>当前模板长度: {amazonGridTemplate.length} 字符</span>
-                <span className={amazonGridTemplate === AMAZON_9_GRID_PROMPT ? 'text-green-600' : 'text-amber-600'}>
-                  {amazonGridTemplate === AMAZON_9_GRID_PROMPT ? '✓ 使用默认模板' : '⚠ 已自定义模板'}
+                <span className={selectedTemplateKey === 'default' ? 'text-green-600' : 'text-amber-600'}>
+                  {selectedTemplateKey === 'default' ? '✓ 使用默认模板' : `⚠ 使用自定义模板: ${gridTemplates.find(t => t.key === selectedTemplateKey)?.name}`}
                 </span>
               </div>
             </div>
@@ -2188,15 +2533,19 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                     <span className="text-sm text-gray-600">共 {chatImageHistory.length} 张图片</span>
                     <button
                       onClick={handleClearChatHistory}
-                      className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1"
+                      className={`text-sm flex items-center gap-1 ${
+                        confirmingClearHistory
+                          ? 'text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded'
+                          : 'text-red-500 hover:text-red-600'
+                      }`}
                     >
                       <Trash2 className="w-3 h-3" />
-                      清空全部
+                      {confirmingClearHistory ? '再次点击确认清空' : '清空全部'}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {chatImageHistory.map((item) => {
-                      if (!item.url || item.url.trim().length === 0) return null;
+                    {chatImageHistory.filter(Boolean).map((item) => {
+                      if (!item || !item.id || !item.url || item.url.trim().length === 0) return null;
                       return (
                       <div
                         key={item.id}

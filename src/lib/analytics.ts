@@ -60,6 +60,17 @@ export interface PromptTemplate {
   createdAt: Date;
 }
 
+export interface GridTemplatePreset {
+  id: string;
+  key: string; // 唯一标识符，如 'amazon-9-grid-default'
+  name: string; // 显示名称
+  content: string; // 模板内容
+  description?: string; // 描述
+  isDefault: boolean; // 是否为默认模板
+  updatedAt: Date;
+  updatedBy?: string;
+}
+
 interface StorageAdapter {
   createSession(userId?: string): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
@@ -83,6 +94,11 @@ interface StorageAdapter {
   getAllPromptTemplates(): Promise<PromptTemplate[]>;
   likePromptTemplate(id: string): Promise<void>;
   deletePromptTemplate(id: string): Promise<void>;
+  // Grid Template Preset methods
+  getGridTemplatePreset(key: string): Promise<GridTemplatePreset | undefined>;
+  getAllGridTemplatePresets(): Promise<GridTemplatePreset[]>;
+  saveGridTemplatePreset(data: Omit<GridTemplatePreset, 'id' | 'updatedAt'>): Promise<GridTemplatePreset>;
+  deleteGridTemplatePreset(key: string): Promise<void>;
 }
 
 function generateId(): string {
@@ -245,6 +261,47 @@ class FileStorageAdapter implements StorageAdapter {
   async deletePromptTemplate(id: string): Promise<void> {
     const list = this.readData<PromptTemplate>('prompt-templates').filter(t => t.id !== id);
     this.writeData('prompt-templates', list);
+  }
+
+  // Grid Template Preset implementations for FileStorageAdapter
+  async getGridTemplatePreset(key: string): Promise<GridTemplatePreset | undefined> {
+    const list = this.readData<GridTemplatePreset>('grid-template-presets');
+    return list.find(t => t.key === key);
+  }
+
+  async getAllGridTemplatePresets(): Promise<GridTemplatePreset[]> {
+    return this.readData<GridTemplatePreset>('grid-template-presets');
+  }
+
+  async saveGridTemplatePreset(data: Omit<GridTemplatePreset, 'id' | 'updatedAt'>): Promise<GridTemplatePreset> {
+    const list = this.readData<GridTemplatePreset>('grid-template-presets');
+    const existingIndex = list.findIndex(t => t.key === data.key);
+
+    if (existingIndex !== -1) {
+      // Update existing
+      list[existingIndex] = {
+        ...list[existingIndex],
+        ...data,
+        updatedAt: new Date(),
+      };
+      this.writeData('grid-template-presets', list);
+      return list[existingIndex];
+    } else {
+      // Create new
+      const preset: GridTemplatePreset = {
+        ...data,
+        id: generateId(),
+        updatedAt: new Date(),
+      };
+      list.push(preset);
+      this.writeData('grid-template-presets', list);
+      return preset;
+    }
+  }
+
+  async deleteGridTemplatePreset(key: string): Promise<void> {
+    const list = this.readData<GridTemplatePreset>('grid-template-presets').filter(t => t.key !== key);
+    this.writeData('grid-template-presets', list);
   }
 }
 
@@ -470,6 +527,55 @@ class KVStorageAdapter implements StorageAdapter {
     await this.kv.del(this.key('prompt-templates', id));
     await this.kv.srem('analytics:prompt-templates:ids', id);
   }
+
+  // Grid Template Preset implementations for KVStorageAdapter
+  async getGridTemplatePreset(key: string): Promise<GridTemplatePreset | undefined> {
+    await this.init();
+    const data = await this.kv.hgetall(this.key('grid-template-presets', key));
+    if (!data || Object.keys(data).length === 0) return undefined;
+    return this.normalize(data as GridTemplatePreset);
+  }
+
+  async getAllGridTemplatePresets(): Promise<GridTemplatePreset[]> {
+    await this.init();
+    const keys: string[] = await this.kv.smembers('analytics:grid-template-presets:keys');
+    if (!keys || keys.length === 0) return [];
+
+    const presets: GridTemplatePreset[] = [];
+    for (const key of keys) {
+      const data = await this.kv.hgetall(this.key('grid-template-presets', key));
+      if (data && Object.keys(data).length > 0) {
+        presets.push(this.normalize(data as GridTemplatePreset));
+      }
+    }
+    return presets;
+  }
+
+  async saveGridTemplatePreset(data: Omit<GridTemplatePreset, 'id' | 'updatedAt'>): Promise<GridTemplatePreset> {
+    await this.init();
+
+    // Check if exists
+    const existing = await this.getGridTemplatePreset(data.key);
+    const preset: GridTemplatePreset = {
+      ...data,
+      id: existing?.id || generateId(),
+      updatedAt: new Date(),
+    };
+
+    const key = this.key('grid-template-presets', preset.key);
+    await this.kv.hset(key, this.cleanObject(preset as any));
+    await this.kv.sadd('analytics:grid-template-presets:keys', preset.key);
+    await this.kv.expire(key, KVStorageAdapter.TTL_SECONDS);
+    await this.kv.expire('analytics:grid-template-presets:keys', KVStorageAdapter.TTL_SECONDS);
+
+    return preset;
+  }
+
+  async deleteGridTemplatePreset(key: string): Promise<void> {
+    await this.init();
+    await this.kv.del(this.key('grid-template-presets', key));
+    await this.kv.srem('analytics:grid-template-presets:keys', key);
+  }
 }
 
 let storageInstance: StorageAdapter | null = null;
@@ -513,8 +619,14 @@ export async function getAllPromptTemplates(): Promise<PromptTemplate[]> { retur
 export async function likePromptTemplate(id: string): Promise<void> { return getStorage().likePromptTemplate(id); }
 export async function deletePromptTemplate(id: string): Promise<void> { return getStorage().deletePromptTemplate(id); }
 
-export async function cleanupFailedGenerations(): Promise<void> { 
-  return getStorage().cleanupFailedGenerations(); 
+// Grid Template Preset exports
+export async function getGridTemplatePreset(key: string): Promise<GridTemplatePreset | undefined> { return getStorage().getGridTemplatePreset(key); }
+export async function getAllGridTemplatePresets(): Promise<GridTemplatePreset[]> { return getStorage().getAllGridTemplatePresets(); }
+export async function saveGridTemplatePreset(data: Omit<GridTemplatePreset, 'id' | 'updatedAt'>): Promise<GridTemplatePreset> { return getStorage().saveGridTemplatePreset(data); }
+export async function deleteGridTemplatePreset(key: string): Promise<void> { return getStorage().deleteGridTemplatePreset(key); }
+
+export async function cleanupFailedGenerations(): Promise<void> {
+  return getStorage().cleanupFailedGenerations();
 }
 
 export async function cleanupOldGenerations(days: number): Promise<void> { 
