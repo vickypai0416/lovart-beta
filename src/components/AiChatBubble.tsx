@@ -554,37 +554,40 @@ export default function AiChatBubble() {
           {/* 消息区域 */}
           {!isMinimized && (
             <>
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-4">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
+              <div className="flex-1 overflow-hidden relative">
+                <ScrollArea className="h-full p-4">
+                  <div className="space-y-4 min-h-0">
+                    {messages.map((message) => (
                       <div
-                        className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm leading-relaxed ${
-                          message.role === 'user'
-                            ? 'bg-blue-500 text-white rounded-br-md'
-                            : 'bg-gray-100 text-gray-800 rounded-bl-md'
-                        }`}
+                        key={message.id}
+                        className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
-                        {message.imageUrl && (
-                          <img
-                            src={message.imageUrl}
-                            alt="用户上传的图片"
-                            className="max-w-full max-h-32 rounded-lg mb-2 object-contain"
-                          />
-                        )}
-                        {message.content}
-                        {message.isStreaming && (
-                          <span className="inline-block w-1.5 h-3 ml-1 bg-current animate-pulse" />
-                        )}
+                        <div
+                          className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm leading-relaxed overflow-wrap-anywhere ${
+                            message.role === 'user'
+                              ? 'bg-blue-500 text-white rounded-br-md'
+                              : 'bg-gray-100 text-gray-800 rounded-bl-md'
+                          }`}
+                          style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                        >
+                          {message.imageUrl && (
+                            <img
+                              src={message.imageUrl}
+                              alt="用户上传的图片"
+                              className="max-w-full max-h-32 rounded-lg mb-2 object-contain"
+                            />
+                          )}
+                          {message.content}
+                          {message.isStreaming && (
+                            <span className="inline-block w-1.5 h-3 ml-1 bg-current animate-pulse" />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                </ScrollArea>
+              </div>
 
               {/* 输入区域 */}
               <div className="p-4 border-t border-gray-100">
