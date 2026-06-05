@@ -25,6 +25,7 @@ interface Size {
 }
 
 export default function AiChatBubble() {
+  const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -42,10 +43,7 @@ export default function AiChatBubble() {
   const dropZoneRef = useRef<HTMLDivElement>(null);
   
   // 悬浮球位置
-  const [bubblePosition, setBubblePosition] = useState<Position>({
-    x: typeof window !== 'undefined' ? window.innerWidth - 80 : 0,
-    y: typeof window !== 'undefined' ? window.innerHeight - 100 : 0,
-  });
+  const [bubblePosition, setBubblePosition] = useState<Position>({ x: 0, y: 0 });
   
   // 对话框位置和大小
   const [chatPosition, setChatPosition] = useState<Position>({ x: 0, y: 0 });
@@ -60,12 +58,11 @@ export default function AiChatBubble() {
 
   // 初始化悬浮球位置（右下角）
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setBubblePosition({
-        x: window.innerWidth - 80,
-        y: window.innerHeight - 100,
-      });
-    }
+    setBubblePosition({
+      x: window.innerWidth - 80,
+      y: window.innerHeight - 100,
+    });
+    setIsMounted(true);
   }, []);
 
   // 自动滚动到底部
@@ -483,6 +480,10 @@ export default function AiChatBubble() {
     return () => window.removeEventListener('paste', handleGlobalPaste);
   }, [isOpen, isMinimized, processImageFile]);
 
+  if (!isMounted) {
+    return null;
+  }
+
   return (
     <>
       {/* 悬浮球 */}
@@ -490,7 +491,7 @@ export default function AiChatBubble() {
         <div
           ref={bubbleRef}
           onMouseDown={handleBubbleMouseDown}
-          onClick={(e) => {
+          onClick={() => {
             // 只有在没有拖动的情况下才打开对话框
             if (!dragRef.current?.hasMoved) {
               handleOpen();

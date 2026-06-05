@@ -17,6 +17,8 @@ interface CanvasElement {
   rotation?: number;
   scaleX?: number;
   scaleY?: number;
+  fontWeight?: string;
+  textAlign?: 'left' | 'center' | 'right';
 }
 
 export async function POST(request: NextRequest) {

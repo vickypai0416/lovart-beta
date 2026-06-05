@@ -19,7 +19,7 @@ import { PERSONAS, PersonaConfig } from '@/lib/persona';
 import { AMAZON_9_GRID_PROMPT } from '@/lib/amazon/grid-prompt';
 
 import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflow';
-import EcommerceWorkflow from '@/components/workflows/EcommerceWorkflow';
+import DeepEcommerceWorkflow from '@/components/deep-workflow/DeepEcommerceWorkflow';
 import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
 import { downloadImageByUrl } from '@/lib/download';
 import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
@@ -2097,10 +2097,10 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         <div className="p-3 border-b border-gray-100">
           <div className="flex flex-col gap-1">
             {[
-              { id: 'chat', name: '对话助手', icon: Bot },
+              { id: 'chat', name: '快速九宫格', icon: Bot },
               { id: 'image-generator', name: '图片生成', icon: Sparkles },
               { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
-              { id: 'ecommerce', name: '电商套图', icon: LayoutGrid },
+              { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
               { id: 'apiplus', name: 'APIPLUS', icon: Gem },
             ].map((workflow) => {
               const Icon = workflow.icon;
@@ -2216,8 +2216,8 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         <div style={{ display: currentWorkflow === 'prompt-analyzer' ? 'flex' : 'none' }} className="h-full">
           <PromptAnalyzerWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'ecommerce' ? 'flex' : 'none' }} className="h-full">
-          <EcommerceWorkflow />
+        <div style={{ display: currentWorkflow === 'ecommerce' ? 'block' : 'none' }} className="h-full overflow-y-auto">
+          <DeepEcommerceWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'apiplus' ? 'flex' : 'none' }} className="h-full bg-white">
           <iframe
@@ -2791,7 +2791,7 @@ function WorkflowTabs({ currentWorkflow, onWorkflowChange }: WorkflowTabsProps) 
   const workflows = [
     { id: 'chat', name: '对话助手', icon: Bot },
     { id: 'image-generator', name: '图片生成', icon: Sparkles },
-    { id: 'ecommerce', name: '电商套图', icon: LayoutGrid },
+    { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
   ];
 
   return (

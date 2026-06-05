@@ -1,155 +1,21 @@
 import { NextResponse } from 'next/server';
 
-interface StyleAnchor {
-  colorPalette: string;
-  lightingStyle: string;
-  visualStyle: string;
-  moodKeyword: string;
-}
-
-const sceneNames: Record<string, string> = {
-  'everyday': '日常使用',
-  'father': '父亲节',
-  'mother': '母亲节',
-  'christmas': '圣诞节',
-  'birthday': '生日',
-  'wedding': '婚礼',
-  'valentine': '情人节',
-  'graduation': '毕业季',
+// 场景文案映射
+const sceneTextMap: Record<string, { headline: string; subheadline: string; tagline: string; recipient: string }> = {
+  'father': { headline: 'Happy Father\'s Day', subheadline: 'A Gift He\'ll Treasure', tagline: 'For the Best Dad', recipient: 'Dad' },
+  'mother': { headline: 'Happy Mother\'s Day', subheadline: 'A Gift She\'ll Treasure', tagline: 'For the Best Mom', recipient: 'Mom' },
+  'christmas': { headline: 'Merry Christmas', subheadline: 'The Perfect Holiday Gift', tagline: 'Season of Giving', recipient: 'Loved Ones' },
+  'birthday': { headline: 'Happy Birthday', subheadline: 'Make Their Day Special', tagline: 'Celebrate in Style', recipient: 'Birthday Star' },
+  'valentine': { headline: 'Be My Valentine', subheadline: 'A Gift from the Heart', tagline: 'Love & Appreciation', recipient: 'Valentine' },
+  'wedding': { headline: 'Congratulations', subheadline: 'A Gift for the Newlyweds', tagline: 'Happily Ever After', recipient: 'Newlyweds' },
+  'graduation': { headline: 'Congrats Graduate', subheadline: 'Celebrate Achievement', tagline: 'The Future is Yours', recipient: 'Graduate' },
+  'everyday': { headline: 'Thoughtfully Made', subheadline: 'A Beautiful Gift', tagline: 'For Someone Special', recipient: 'Someone Special' },
 };
-
-const sceneStyleAnchors: Record<string, StyleAnchor> = {
-  'everyday': {
-    colorPalette: 'warm earth tones: cream white #FFF8F0, soft gold #D4A574, deep brown #5C3A21',
-    lightingStyle: 'soft natural window lighting, golden hour warmth, gentle shadows',
-    visualStyle: 'minimalist luxury, clean composition, premium commercial photography',
-    moodKeyword: 'warm, elegant, heartfelt',
-  },
-  'father': {
-    colorPalette: 'masculine warm tones: deep navy #1B2A4A, rich mahogany #6B3A2A, warm amber #C8963E',
-    lightingStyle: 'strong directional lighting, warm amber glow, defined shadows',
-    visualStyle: 'classic masculinity, bold composition, premium editorial photography',
-    moodKeyword: 'strong, grateful, dignified',
-  },
-  'mother': {
-    colorPalette: 'soft feminine tones: blush pink #F5D5CC, rose gold #B76E79, ivory white #FFFFF0',
-    lightingStyle: 'soft diffused lighting, gentle morning glow, flattering warm light',
-    visualStyle: 'elegant femininity, graceful composition, soft focus commercial photography',
-    moodKeyword: 'tender, loving, graceful',
-  },
-  'christmas': {
-    colorPalette: 'festive holiday tones: deep red #8B1A1A, forest green #2D5A27, gold #D4AF37',
-    lightingStyle: 'warm candlelight glow, twinkling fairy light bokeh, cozy ambient lighting',
-    visualStyle: 'festive luxury, rich layered composition, holiday editorial photography',
-    moodKeyword: 'joyful, magical, cozy',
-  },
-  'birthday': {
-    colorPalette: 'celebratory vibrant tones: confetti pink #FF69B4, sunshine yellow #FFD700, sky blue #87CEEB',
-    lightingStyle: 'bright cheerful lighting, colorful ambient glow, playful sparkles',
-    visualStyle: 'festive celebration, dynamic composition, vibrant commercial photography',
-    moodKeyword: 'cheerful, exciting, celebratory',
-  },
-  'wedding': {
-    colorPalette: 'romantic elegant tones: champagne gold #F7E7CE, pearl white #FDEEF4, sage green #9DC183',
-    lightingStyle: 'soft romantic backlighting, dreamy golden hour, ethereal glow',
-    visualStyle: 'timeless romance, symmetrical composition, luxury wedding photography',
-    moodKeyword: 'romantic, elegant, eternal',
-  },
-  'valentine': {
-    colorPalette: 'passionate romantic tones: rose red #C41E3A, soft pink #FFB6C1, blush cream #FFF0F5',
-    lightingStyle: 'warm intimate lighting, soft candlelight glow, romantic haze',
-    visualStyle: 'intimate romance, dreamy composition, luxury lifestyle photography',
-    moodKeyword: 'passionate, tender, devoted',
-  },
-  'graduation': {
-    colorPalette: 'hopeful bright tones: royal blue #4169E1, bright gold #FFD700, crisp white #FFFFFF',
-    lightingStyle: 'bright optimistic lighting, natural sunlight, clear open sky feel',
-    visualStyle: 'aspirational achievement, balanced composition, editorial portrait photography',
-    moodKeyword: 'proud, hopeful, accomplished',
-  },
-};
-
-const colorSchemeAnchors: Record<string, Partial<StyleAnchor>> = {
-  'blue': {
-    colorPalette: 'cool blue tones: deep navy #1B3A5C, sky blue #4A90D9, ice white #E8F1FA',
-    lightingStyle: 'cool blue-tinted lighting, crisp and clean illumination, subtle blue reflections',
-    moodKeyword: 'calm, professional, trustworthy',
-  },
-  'warm': {
-    colorPalette: 'warm earth tones: rich amber #C8963E, soft gold #D4A574, cream white #FFF8F0',
-    lightingStyle: 'warm golden hour lighting, soft amber glow, inviting warmth',
-    moodKeyword: 'warm, inviting, cozy',
-  },
-  'green': {
-    colorPalette: 'natural green tones: forest green #2D5A27, sage green #9DC183, mint white #F0F7EC',
-    lightingStyle: 'natural daylight, fresh green-tinted ambient, organic illumination',
-    moodKeyword: 'fresh, natural, organic',
-  },
-  'red': {
-    colorPalette: 'bold red tones: deep crimson #8B1A1A, vibrant red #C41E3A, soft blush #FFF0F0',
-    lightingStyle: 'dramatic warm lighting, rich red ambient glow, passionate illumination',
-    moodKeyword: 'bold, passionate, energetic',
-  },
-  'purple': {
-    colorPalette: 'elegant purple tones: deep violet #4A1A6B, soft lavender #9B59B6, lilac white #F5E6FF',
-    lightingStyle: 'mysterious purple-tinted lighting, soft violet glow, ethereal illumination',
-    moodKeyword: 'elegant, mysterious, sophisticated',
-  },
-  'monochrome': {
-    colorPalette: 'monochrome tones: deep black #1A1A1A, medium gray #808080, pure white #F5F5F5',
-    lightingStyle: 'dramatic high-contrast lighting, sharp shadows, studio spotlight',
-    moodKeyword: 'minimalist, premium, sophisticated',
-  },
-  'pink': {
-    colorPalette: 'soft pink tones: rose pink #C41E5A, blush pink #FFB6C1, petal white #FFF0F5',
-    lightingStyle: 'soft rosy lighting, gentle pink ambient, flattering warm glow',
-    moodKeyword: 'romantic, delicate, feminine',
-  },
-};
-
-const visualStyleAnchors: Record<string, Partial<StyleAnchor>> = {
-  'minimalist': {
-    visualStyle: 'minimalist clean design, generous white space, simple composition, uncluttered',
-    moodKeyword: 'clean, simple, refined',
-  },
-  'luxury': {
-    visualStyle: 'luxury premium aesthetic, gold accents, rich textures, opulent details',
-    moodKeyword: 'premium, exclusive, lavish',
-  },
-  'natural': {
-    visualStyle: 'natural authentic style, organic elements, real-life setting, unposed',
-    moodKeyword: 'authentic, genuine, organic',
-  },
-  'vibrant': {
-    visualStyle: 'vibrant energetic style, bold colors, dynamic angles, eye-catching',
-    moodKeyword: 'energetic, exciting, bold',
-  },
-  'retro': {
-    visualStyle: 'retro vintage aesthetic, nostalgic tones, classic composition, timeless appeal',
-    moodKeyword: 'nostalgic, classic, timeless',
-  },
-  'modern': {
-    visualStyle: 'modern contemporary style, geometric elements, sleek lines, futuristic touches',
-    moodKeyword: 'contemporary, sleek, innovative',
-  },
-  'dreamy': {
-    visualStyle: 'dreamy ethereal style, soft focus, light flares, romantic haze, bokeh',
-    moodKeyword: 'dreamy, ethereal, enchanting',
-  },
-};
-
-function getStyleAnchor(scene: string): StyleAnchor {
-  return sceneStyleAnchors[scene] || sceneStyleAnchors['everyday'];
-}
-
-function appendStyleAnchor(prompt: string, anchor: StyleAnchor, stylePrefix: string = ''): string {
-  return `${stylePrefix}${prompt}, Style consistency: ${anchor.colorPalette}, ${anchor.lightingStyle}, ${anchor.visualStyle}, ${anchor.moodKeyword}`;
-}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { analysis, platform, scene, variants, colorScheme = 'auto', visualStyle = 'auto' } = body;
+    const { analysis, platform, scene, variants, colorScheme, visualStyle } = body;
 
     if (!analysis || !platform || !scene) {
       return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
@@ -158,152 +24,242 @@ export async function POST(request: Request) {
     const productName = analysis.productName || '产品';
     const keyFeatures = analysis.keyFeatures?.slice(0, 3) || ['高品质', '精美设计'];
     const featureStr = keyFeatures.join(', ');
-    const sceneLabel = sceneNames[scene] || scene;
 
-    let styleAnchor = getStyleAnchor(scene);
+    // 获取场景文案
+    const sceneText = sceneTextMap[scene] || sceneTextMap['everyday'];
 
-    if (colorScheme !== 'auto' && colorSchemeAnchors[colorScheme]) {
-      const colorOverride = colorSchemeAnchors[colorScheme];
-      styleAnchor = {
-        ...styleAnchor,
-        colorPalette: colorOverride.colorPalette || styleAnchor.colorPalette,
-        lightingStyle: colorOverride.lightingStyle || styleAnchor.lightingStyle,
-        moodKeyword: colorOverride.moodKeyword
-          ? `${styleAnchor.moodKeyword}, ${colorOverride.moodKeyword}`
-          : styleAnchor.moodKeyword,
-      };
-    }
+    // 配色方案映射 - 用于背景和装饰元素
+    const colorSchemeMap: Record<string, { name: string; bg: string; accent: string; text: string; desc: string }> = {
+      'blue': { 
+        name: 'blue palette', 
+        bg: 'soft blue gradient background', 
+        accent: 'navy blue and sky blue accents',
+        text: 'dark blue or white text',
+        desc: 'calm professional blue tones #1B3A5C #4A90D9 #E8F1FA'
+      },
+      'warm': { 
+        name: 'warm palette', 
+        bg: 'warm beige gradient background', 
+        accent: 'golden tan and cream accents',
+        text: 'dark brown or cream text',
+        desc: 'warm inviting tones #C8963E #D4A574 #FFF8F0'
+      },
+      'green': { 
+        name: 'green palette', 
+        bg: 'soft sage green background', 
+        accent: 'forest green and mint accents',
+        text: 'dark green or white text',
+        desc: 'natural fresh tones #2D5A27 #9DC183 #F0F7EC'
+      },
+      'red': { 
+        name: 'red palette', 
+        bg: 'soft burgundy gradient background', 
+        accent: 'crimson and soft pink accents',
+        text: 'dark red or white text',
+        desc: 'passionate energetic tones #8B1A1A #C41E3A #FFF0F0'
+      },
+      'purple': { 
+        name: 'purple palette', 
+        bg: 'soft lavender background', 
+        accent: 'deep purple and light lilac accents',
+        text: 'dark purple or white text',
+        desc: 'elegant mysterious tones #4A1A6B #9B59B6 #F5E6FF'
+      },
+      'monochrome': { 
+        name: 'monochrome palette', 
+        bg: 'clean light gray gradient background', 
+        accent: 'black, white and gray accents',
+        text: 'black or dark gray text on light background',
+        desc: 'minimalist sophisticated monochrome #1A1A1A #808080 #F5F5F5'
+      },
+      'pink': { 
+        name: 'pink palette', 
+        bg: 'soft blush pink background', 
+        accent: 'rose and soft pink accents',
+        text: 'dark rose or white text',
+        desc: 'soft romantic tones #C41E5A #FFB6C1 #FFF0F5'
+      },
+    };
 
-    if (visualStyle !== 'auto' && visualStyleAnchors[visualStyle]) {
-      const styleOverride = visualStyleAnchors[visualStyle];
-      styleAnchor = {
-        ...styleAnchor,
-        visualStyle: styleOverride.visualStyle || styleAnchor.visualStyle,
-        moodKeyword: styleOverride.moodKeyword
-          ? `${styleAnchor.moodKeyword}, ${styleOverride.moodKeyword}`
-          : styleAnchor.moodKeyword,
-      };
-    }
+    // 获取配色描述
+    const colorInfo = colorScheme && colorScheme !== 'auto' ? colorSchemeMap[colorScheme] : colorSchemeMap['warm'];
 
-    let stylePrefix = '';
-    if (colorScheme !== 'auto' && colorSchemeAnchors[colorScheme]) {
-      stylePrefix += `Color directive: Use ${colorSchemeAnchors[colorScheme].colorPalette}. `;
-    }
-    if (visualStyle !== 'auto' && visualStyleAnchors[visualStyle]) {
-      stylePrefix += `Style directive: Apply ${visualStyleAnchors[visualStyle].visualStyle}. `;
-    }
+    // 统一字体指令
+    const unifiedFont = 'Use CONSISTENT typography across ALL images: modern sans-serif font family (like Helvetica, Arial, or similar clean sans-serif), bold weight for headlines, regular weight for body text. NEVER use decorative, script, or cursive fonts. NEVER use different font styles in different images.';
+
+    // 统一风格锚定
+    const styleAnchor = `CONSISTENT BRAND STYLE across all 10 images: ${colorInfo.desc}. ${unifiedFont}. Professional Amazon listing photography style. Clean, minimal, product-focused composition.`;
+
+    // 禁止元素指令
+    const noElements = 'NO gift boxes, NO gift packaging, NO ribbons, NO bows, NO wrapping paper, NO decorative gift elements. Product should be shown alone or in real usage context only.';
 
     const prompts = [
       {
         index: 1,
         type: 'main',
         purpose: '主图 - Amazon listing 主图，纯白背景，产品主体清晰居中',
-        displayPrompt: `亚马逊主图风格，${productName}，${featureStr}，纯白背景，产品居中占画面约85%，边缘清晰，商业棚拍光线，禁止任何道具或文字叠加`,
-        prompt: appendStyleAnchor(`Professional Amazon listing main image of ${productName}, ${featureStr}, pure white background RGB 255 255 255, centered composition, product occupies about 85 percent of the frame, sharp edges, realistic proportions, soft studio lighting, premium commercial ecommerce photography, product only, no text overlay, no badges, no props, no extra accessories, product remains the sole visual focus`, styleAnchor, stylePrefix),
+        displayPrompt: `亚马逊主图风格，${productName}，纯白背景，产品居中占画面约85%`,
+        prompt: `${styleAnchor}. Amazon US marketplace professional product photography MAIN IMAGE. ${productName}, ${featureStr}. CRITICAL: Pure white background RGB 255,255,255 ONLY. Product centered, occupies 85% of frame. Soft commercial studio lighting. NO text, NO badges, NO props, NO decorative elements. Clean e-commerce product shot. High-end retail catalog quality.`,
       },
       {
         index: 2,
-        type: 'customization',
-        purpose: '定制展示 - 定制区域清晰可见，突出 personalized 属性',
-        displayPrompt: `${productName}定制展示，${featureStr}，定制区域作为视觉焦点，可用简洁标注强调可定制位置，背景干净温暖，产品主体清晰`,
-        prompt: appendStyleAnchor(`${productName} customization showcase, ${featureStr}, customization area as the clear focal point, personalized product presentation, subtle callout or zoom detail highlighting the editable area, clean warm background, premium Amazon listing photography, product remains the hero, customization text must look naturally printed or engraved on the product surface, no floating advertising text, no clutter around the product`, styleAnchor, stylePrefix),
+        type: 'feature',
+        purpose: '核心卖点图 - 突出最重要卖点，带大标题',
+        displayPrompt: `${productName}核心卖点展示，大标题"${sceneText.headline}"`,
+        prompt: `${styleAnchor}. Amazon listing FEATURE HIGHLIGHT image for ${productName}. ${colorInfo.bg}. ${colorInfo.text}. Large bold headline at top: "${sceneText.headline}". Smaller subheadline: "${sceneText.subheadline}". Product is hero, clearly visible and prominent. Simple minimal composition. ${noElements}. ${unifiedFont}. Clean professional Amazon infographic style.`,
       },
       {
         index: 3,
-        type: 'emotional',
-        purpose: '使用场景 - 真实生活环境，产品清楚可见，增强代入感',
-        displayPrompt: `真实生活使用场景，${productName}作为主体清晰可见，${featureStr}，自然家居/办公环境，人物仅辅助叙事，温暖真实氛围`,
-        prompt: appendStyleAnchor(`Realistic lifestyle scene featuring ${productName} as the visual center, ${featureStr}, authentic home or everyday environment, warm natural lighting, cinematic commercial photography, natural human presence only as a supporting element, product clearly visible and larger than surrounding scene elements, no pure scenery shot, no pure portrait shot, product must remain the hero`, styleAnchor, stylePrefix),
+        type: 'detail',
+        purpose: '细节特写图 - 展示工艺材质',
+        displayPrompt: `${productName}工艺细节特写，展示品质`,
+        prompt: `${styleAnchor}. Amazon listing DETAIL CLOSE-UP image for ${productName}. Macro photography showing craftsmanship, texture, material quality. Product detail fills frame. ${colorInfo.bg}. Simple headline: "Premium Quality". ${noElements}. ${unifiedFont}. Professional product photography.`,
       },
       {
         index: 4,
-        type: 'detail',
-        purpose: '细节信任图 - 展示材质、工艺、纹理与品质感',
-        displayPrompt: `${productName}细节与工艺展示，${featureStr}，突出材质纹理、边缘和做工，构图干净，强调品质信任感`,
-        prompt: appendStyleAnchor(`Detailed feature and craftsmanship shot of ${productName}, ${featureStr}, focus on material texture, edge finish, surface detail and premium build quality, close-up commercial product photography, clean composition, soft directional lighting, realistic texture rendering, trust-building ecommerce image, no distortion, no fake materials, no distracting props`, styleAnchor, stylePrefix),
+        type: 'lifestyle',
+        purpose: '使用场景图 - 真实生活场景',
+        displayPrompt: `真实生活场景，${productName}作为主体`,
+        prompt: `${styleAnchor}. Amazon listing LIFESTYLE image for ${productName}. Real authentic home setting. Product is visual center, larger than surroundings. Natural everyday usage context. ${colorInfo.accent} in scene. ${noElements}. NO text overlay on this image. Clean composition, product-focused.`,
       },
       {
         index: 5,
         type: 'gift',
-        purpose: '送礼图 - 真实送礼互动场景，无虚构包装元素',
-        displayPrompt: `真实送礼瞬间，${productName}清晰可见且仍是主体，人物情绪自然，节日氛围轻柔，不出现礼盒礼袋卡片蝴蝶结等包装元素`,
-        prompt: appendStyleAnchor(`Authentic gift giving moment featuring ${productName}, ${featureStr}, natural human interaction, warm grateful expressions, cozy indoor setting matching ${sceneLabel}, product clearly visible and still the main subject, emotional lifestyle commercial photography, no gift box, no gift bag, no wrapping paper, no ribbon, no bow, no greeting card, no packaging props unless actually included with the product, gift emotion must come from human interaction, lighting and environment, not from fake packaging`, styleAnchor, stylePrefix),
+        purpose: '送礼场景图 - 产品作为礼物展示',
+        displayPrompt: `送礼场景，${productName}作为礼物`,
+        prompt: `${styleAnchor}. Amazon listing GIFT SCENE image for ${productName}. Product elegantly placed as a gift presentation. ${colorInfo.bg}. Headline: "${sceneText.tagline}". Simple elegant composition showing product ready to gift. ${noElements}. NO actual gift boxes or wrapping. ${unifiedFont}. Product remains hero.`,
       },
       {
         index: 6,
-        type: 'lifestyle',
-        purpose: '情绪收尾图 - 强化礼品感与购买欲望',
-        displayPrompt: `高端生活方式收尾图，${productName}主体清晰，${featureStr}，真实温暖场景，营造高级感、礼品感和购买冲动`,
-        prompt: appendStyleAnchor(`Premium closing lifestyle image of ${productName}, ${featureStr}, emotionally resonant real-life setting, warm elegant atmosphere, product clearly visible as the hero, high-end Amazon listing photography, strong giftable appeal, refined composition, clean background hierarchy, natural lighting, premium brand feel, human presence may support the story but must never overpower the product`, styleAnchor, stylePrefix),
+        type: 'info',
+        purpose: '信息图表 - 尺寸标注',
+        displayPrompt: `${productName}尺寸信息图`,
+        prompt: `${styleAnchor}. Amazon listing DIMENSIONS infographic for ${productName}. Clean layout showing product with measurement lines and numbers. ${colorInfo.bg}. ${colorInfo.text}. Simple headline: "Perfect Size". Clean icon-style graphics. NO feature list, NO bullet points about product benefits. ${noElements}. ${unifiedFont}.`,
+      },
+      {
+        index: 7,
+        type: 'craftsmanship',
+        purpose: '工艺细节图 - 材质特写',
+        displayPrompt: `${productName}材质工艺展示`,
+        prompt: `${styleAnchor}. Amazon listing CRAFTSMANSHIP image for ${productName}. Close-up showing material quality, texture, finish details. ${colorInfo.bg}. Simple headline: "Expert Craftsmanship". Detail-focused composition. ${noElements}. ${unifiedFont}. Professional macro photography.`,
+      },
+      {
+        index: 8,
+        type: 'emotional',
+        purpose: '情感场景图 - 人物互动',
+        displayPrompt: `温馨情感场景，${sceneText.recipient}收到礼物`,
+        prompt: `${styleAnchor}. Amazon listing EMOTIONAL lifestyle image for ${productName}. Warm authentic scene with person naturally interacting with product. ${colorInfo.accent} in setting. Headline: "Made for ${sceneText.recipient}". Genuine emotion, authentic moment. Product clearly visible. ${noElements}. ${unifiedFont}. Natural lighting.`,
+      },
+      {
+        index: 9,
+        type: 'versatility',
+        purpose: '多功能展示 - 展示产品用途',
+        displayPrompt: `${productName}多功能用途展示`,
+        prompt: `${styleAnchor}. Amazon listing VERSATILITY image for ${productName}. 2-3 panel layout showing different uses/contexts. ${colorInfo.bg}. Headline: "Endless Possibilities". Each panel shows product in different real usage scenario. ${noElements}. ${unifiedFont}. Clean layout with subtle panel borders.`,
+      },
+      {
+        index: 10,
+        type: 'brand',
+        purpose: '品牌收尾图 - 产品+品牌信息',
+        displayPrompt: `品牌展示收尾图，${sceneText.headline}`,
+        prompt: `${styleAnchor}. Amazon listing BRAND CLOSING image for ${productName}. Elegant product composition. ${colorInfo.bg}. Large headline: "${sceneText.headline}". Tagline: "${sceneText.subheadline}". Refined, gift-worthy presentation. ${noElements}. ${unifiedFont}. Product remains hero. Clean minimal composition.`,
       },
     ];
 
+    console.log(`[Generate Prompts] 生成了 ${prompts.length} 个Amazon风格提示词`, { productName, scene, colorScheme });
 
-    console.log(`[Generate Prompts] 生成了 ${prompts.length} 个提示词`, { productName, scene: sceneLabel });
-
-    return NextResponse.json({ success: true, prompts, styleAnchor, colorScheme, visualStyle });
+    return NextResponse.json({ 
+      success: true, 
+      prompts,
+      styleAnchor: {
+        colorPalette: colorInfo.desc,
+        fontStyle: 'Modern sans-serif, consistent across all images',
+        scene: scene,
+      }
+    });
 
   } catch (error: any) {
     console.error('生成提示词失败:', error.message);
     
-    const body = await request.json().catch(() => ({ analysis: {}, scene: 'everyday' }));
+    const body = await request.json().catch(() => ({ analysis: {} }));
     const productName = body.analysis?.productName || '产品';
     const keyFeatures = body.analysis?.keyFeatures?.slice(0, 3) || ['高品质', '精美设计'];
-    const scene = body.scene || 'everyday';
+    const featureStr = keyFeatures.join(', ');
     
-    return generateFallbackPrompts(productName, keyFeatures, scene);
+    // 降级提示词
+    const prompts = [
+      {
+        index: 1,
+        type: 'main',
+        purpose: '主图',
+        displayPrompt: `亚马逊主图风格，${productName}，纯白背景`,
+        prompt: `Amazon main image, ${productName}, ${featureStr}, pure white background #FFFFFF, no text, no decorative elements, professional product photography`,
+      },
+      {
+        index: 2,
+        type: 'feature',
+        purpose: '卖点图',
+        displayPrompt: `${productName}卖点展示`,
+        prompt: `Amazon feature image, ${productName}, ${featureStr}, clean background, bold headline text, professional typography, product is hero`,
+      },
+      {
+        index: 3,
+        type: 'detail',
+        purpose: '细节图',
+        displayPrompt: `${productName}细节特写`,
+        prompt: `Amazon detail image, ${productName}, ${featureStr}, close-up craftsmanship, clean background, professional photography`,
+      },
+      {
+        index: 4,
+        type: 'lifestyle',
+        purpose: '场景图',
+        displayPrompt: `生活场景，${productName}`,
+        prompt: `Amazon lifestyle image, ${productName}, ${featureStr}, real home setting, product is hero, natural lighting`,
+      },
+      {
+        index: 5,
+        type: 'gift',
+        purpose: '送礼图',
+        displayPrompt: `送礼场景`,
+        prompt: `Amazon gift scene image, ${productName}, ${featureStr}, elegant presentation, no gift boxes, product-focused`,
+      },
+      {
+        index: 6,
+        type: 'info',
+        purpose: '信息图',
+        displayPrompt: `尺寸信息图`,
+        prompt: `Amazon infographic, ${productName}, ${featureStr}, dimensions and measurements, clean layout, professional design`,
+      },
+      {
+        index: 7,
+        type: 'craftsmanship',
+        purpose: '工艺图',
+        displayPrompt: `材质工艺展示`,
+        prompt: `Amazon craftsmanship image, ${productName}, ${featureStr}, close-up detail, material quality, professional photography`,
+      },
+      {
+        index: 8,
+        type: 'emotional',
+        purpose: '情感图',
+        displayPrompt: `情感场景`,
+        prompt: `Amazon emotional image, ${productName}, ${featureStr}, natural human interaction, authentic moment, product visible`,
+      },
+      {
+        index: 9,
+        type: 'versatility',
+        purpose: '多功能图',
+        displayPrompt: `多功能展示`,
+        prompt: `Amazon versatility image, ${productName}, ${featureStr}, multi-panel showing uses, clean layout`,
+      },
+      {
+        index: 10,
+        type: 'brand',
+        purpose: '品牌图',
+        displayPrompt: `品牌展示收尾图`,
+        prompt: `Amazon brand image, ${productName}, ${featureStr}, elegant composition, headline text, refined presentation`,
+      },
+    ];
+
+    return NextResponse.json({ success: true, prompts });
   }
-}
-
-function generateFallbackPrompts(productName: string, keyFeatures: string[], scene: string) {
-  const featureStr = keyFeatures.join(', ');
-  const styleAnchor = getStyleAnchor(scene);
-  
-  const prompts = [
-    {
-      index: 1,
-      type: 'main',
-      purpose: '主图',
-      displayPrompt: `亚马逊主图风格，${productName}，${featureStr}，纯白背景，产品主体清晰居中`,
-      prompt: appendStyleAnchor(`Professional Amazon listing main image of ${productName}, ${featureStr}, pure white background, centered composition, soft studio lighting, realistic proportions, premium ecommerce photography, product only, no text overlay, no props, no extra accessories`, styleAnchor),
-    },
-    {
-      index: 2,
-      type: 'customization',
-      purpose: '定制展示',
-      displayPrompt: `${productName}定制展示，定制区域清晰可见，背景干净`,
-      prompt: appendStyleAnchor(`${productName} customization showcase, customization area clearly visible, premium product presentation, clean warm background, no floating ad text, product remains the hero`, styleAnchor),
-    },
-    {
-      index: 3,
-      type: 'emotional',
-      purpose: '使用场景',
-      displayPrompt: `真实使用场景，${productName}主体清晰，生活氛围自然`,
-      prompt: appendStyleAnchor(`Realistic lifestyle scene with ${productName} as the central focus, authentic everyday environment, natural human presence only as support, product clearly visible`, styleAnchor),
-    },
-    {
-      index: 4,
-      type: 'detail',
-      purpose: '细节信任图',
-      displayPrompt: `${productName}细节工艺展示，突出材质纹理和品质感`,
-      prompt: appendStyleAnchor(`Detailed craftsmanship shot of ${productName}, focus on material texture, edge finish and build quality, clean composition, premium trust-building ecommerce image`, styleAnchor),
-    },
-    {
-      index: 5,
-      type: 'gift',
-      purpose: '送礼场景',
-      displayPrompt: `真实送礼瞬间，${productName}清晰可见，无虚构包装`,
-      prompt: appendStyleAnchor(`Authentic gift giving moment with ${productName}, natural human interaction, product clearly visible and still the main subject, no gift box, no gift bag, no wrapping paper, no ribbon, no greeting card, no fake packaging props`, styleAnchor),
-    },
-    {
-      index: 6,
-      type: 'lifestyle',
-      purpose: '情绪收尾图',
-      displayPrompt: `${productName}高端生活方式收尾图，强化礼品感与购买欲望`,
-      prompt: appendStyleAnchor(`Premium closing lifestyle image of ${productName}, emotionally resonant real-life setting, refined composition, strong giftable appeal, product clearly visible as the hero`, styleAnchor),
-    },
-  ];
-
-
-  return NextResponse.json({ success: true, prompts, styleAnchor });
 }
