@@ -310,6 +310,13 @@ export default function DeepEcommerceWorkflow() {
       selectedAudiences: [],
       visualStyle: 'modern_premium',
       colorScheme: 'warm_beige',
+      customColors: {
+        primary: '#F5F1E8',
+        secondary: '#D4C4A8',
+        accent: '#8B7355',
+        background: '#FFFFFF',
+        text: '#333333',
+      },
       emotion: 'heartwarming',
     },
     designBible: null,
@@ -373,6 +380,7 @@ export default function DeepEcommerceWorkflow() {
           selectedAudiences: state.userPreferences.selectedAudiences,
           visualStyle: state.userPreferences.visualStyle,
           colorScheme: state.userPreferences.colorScheme,
+          customColors: state.userPreferences.colorScheme === 'custom' ? state.userPreferences.customColors : undefined,
           emotion: state.userPreferences.emotion,
         }),
       });
@@ -515,11 +523,25 @@ export default function DeepEcommerceWorkflow() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label>产品类型</Label>
-                        <Input value={state.analysis.product_type} readOnly />
+                        <Input
+                          value={state.analysis.product_type}
+                          onChange={(e) => setState(prev => ({
+                            ...prev,
+                            analysis: prev.analysis ? { ...prev.analysis, product_type: e.target.value } : null
+                          }))}
+                          placeholder="如: Personalized Cutting Board"
+                        />
                       </div>
                       <div>
                         <Label>材质</Label>
-                        <Input value={state.analysis.material} readOnly />
+                        <Input
+                          value={state.analysis.material}
+                          onChange={(e) => setState(prev => ({
+                            ...prev,
+                            analysis: prev.analysis ? { ...prev.analysis, material: e.target.value } : null
+                          }))}
+                          placeholder="如: Wood, Leather, Metal"
+                        />
                       </div>
                     </div>
                     <div>
@@ -544,6 +566,102 @@ export default function DeepEcommerceWorkflow() {
                         {state.analysis.recommended_holidays.map((holiday, i) => (
                           <Badge key={i} className="bg-blue-100 text-blue-800">{holiday}</Badge>
                         ))}
+                      </div>
+                    </div>
+                    
+                    {/* Product Dimensions */}
+                    <div className="border-t pt-4 mt-4">
+                      <Label className="flex items-center gap-2 mb-3">
+                        <span className="text-sm font-medium">产品尺寸（可选）</span>
+                        <span className="text-xs text-gray-400">用于更准确地展示产品大小</span>
+                      </Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs text-gray-500">长度</Label>
+                          <Input
+                            placeholder="如: 20cm"
+                            value={state.analysis.dimensions?.length || ''}
+                            onChange={(e) => setState(prev => ({
+                              ...prev,
+                              analysis: prev.analysis ? {
+                                ...prev.analysis,
+                                dimensions: { ...prev.analysis.dimensions, length: e.target.value }
+                              } : null
+                            }))}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">宽度</Label>
+                          <Input
+                            placeholder="如: 15cm"
+                            value={state.analysis.dimensions?.width || ''}
+                            onChange={(e) => setState(prev => ({
+                              ...prev,
+                              analysis: prev.analysis ? {
+                                ...prev.analysis,
+                                dimensions: { ...prev.analysis.dimensions, width: e.target.value }
+                              } : null
+                            }))}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">高度</Label>
+                          <Input
+                            placeholder="如: 10cm"
+                            value={state.analysis.dimensions?.height || ''}
+                            onChange={(e) => setState(prev => ({
+                              ...prev,
+                              analysis: prev.analysis ? {
+                                ...prev.analysis,
+                                dimensions: { ...prev.analysis.dimensions, height: e.target.value }
+                              } : null
+                            }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                          <Label className="text-xs text-gray-500">直径（如适用）</Label>
+                          <Input
+                            placeholder="如: 8cm"
+                            value={state.analysis.dimensions?.diameter || ''}
+                            onChange={(e) => setState(prev => ({
+                              ...prev,
+                              analysis: prev.analysis ? {
+                                ...prev.analysis,
+                                dimensions: { ...prev.analysis.dimensions, diameter: e.target.value }
+                              } : null
+                            }))}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">重量</Label>
+                          <Input
+                            placeholder="如: 500g"
+                            value={state.analysis.dimensions?.weight || ''}
+                            onChange={(e) => setState(prev => ({
+                              ...prev,
+                              analysis: prev.analysis ? {
+                                ...prev.analysis,
+                                dimensions: { ...prev.analysis.dimensions, weight: e.target.value }
+                              } : null
+                            }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <Label className="text-xs text-gray-500">其他尺寸说明</Label>
+                        <Input
+                          placeholder="如: 适合A4纸大小、可容纳15英寸笔记本等"
+                          value={state.analysis.dimensions?.custom_size || ''}
+                          onChange={(e) => setState(prev => ({
+                            ...prev,
+                            analysis: prev.analysis ? {
+                              ...prev.analysis,
+                              dimensions: { ...prev.analysis.dimensions, custom_size: e.target.value }
+                            } : null
+                          }))}
+                        />
                       </div>
                     </div>
                   </CardContent>
@@ -687,7 +805,7 @@ export default function DeepEcommerceWorkflow() {
                       <SelectItem key={s.value} value={s.value}>
                         <div className="flex flex-col">
                           <span>{s.label}</span>
-                          <span className="text-xs text-gray-400">{s.description}</span>
+                          <span className="text-xs text-gray-400">{s.description} · {s.impact}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -713,18 +831,62 @@ export default function DeepEcommerceWorkflow() {
                       }))}
                     >
                       <div className="flex gap-1 mb-2">
-                        {scheme.colors.map((color, i) => (
-                          <div
-                            key={i}
-                            className="w-6 h-6 rounded-full border border-gray-200"
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
+                        {scheme.isCustom ? (
+                          <div className="w-6 h-6 rounded-full border border-gray-200 bg-gradient-to-br from-red-400 via-green-400 to-blue-400" />
+                        ) : (
+                          scheme.colors.map((color, i) => (
+                            <div
+                              key={i}
+                              className="w-6 h-6 rounded-full border border-gray-200"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))
+                        )}
                       </div>
                       <p className="text-xs font-medium">{scheme.label}</p>
                     </div>
                   ))}
                 </div>
+                
+                {/* Custom Color Picker */}
+                {state.userPreferences.colorScheme === 'custom' && (
+                  <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+                    <Label className="mb-3 block">自定义颜色</Label>
+                    <div className="grid grid-cols-5 gap-3">
+                      {[
+                        { key: 'primary', label: '主色' },
+                        { key: 'secondary', label: '辅色' },
+                        { key: 'accent', label: '强调色' },
+                        { key: 'background', label: '背景色' },
+                        { key: 'text', label: '文字色' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="flex flex-col items-center gap-2">
+                          <div className="relative">
+                            <input
+                              type="color"
+                              value={state.userPreferences.customColors?.[key as keyof typeof state.userPreferences.customColors] || '#FFFFFF'}
+                              onChange={(e) => setState(prev => ({
+                                ...prev,
+                                userPreferences: {
+                                  ...prev.userPreferences,
+                                  customColors: {
+                                    ...prev.userPreferences.customColors,
+                                    [key]: e.target.value,
+                                  }
+                                }
+                              }))}
+                              className="w-12 h-12 rounded-lg cursor-pointer border-2 border-gray-200"
+                            />
+                          </div>
+                          <span className="text-xs text-gray-600">{label}</span>
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            {state.userPreferences.customColors?.[key as keyof typeof state.userPreferences.customColors] || '#FFFFFF'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Emotion */}
@@ -745,7 +907,7 @@ export default function DeepEcommerceWorkflow() {
                       <SelectItem key={e.value} value={e.value}>
                         <div className="flex flex-col">
                           <span>{e.label}</span>
-                          <span className="text-xs text-gray-400">{e.description}</span>
+                          <span className="text-xs text-gray-400">{e.description} · {e.impact}</span>
                         </div>
                       </SelectItem>
                     ))}

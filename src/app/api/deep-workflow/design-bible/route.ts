@@ -32,6 +32,13 @@ export interface DesignBibleRequest {
   selectedAudiences: string[];
   visualStyle: string;
   colorScheme: string;
+  customColors?: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    text: string;
+  };
   emotion: string;
 }
 
@@ -106,16 +113,39 @@ const COLOR_SCHEMES: Record<string, { primary: string; secondary: string; accent
 export async function POST(request: Request) {
   try {
     const body: DesignBibleRequest = await request.json();
-    const { analysis, platform, selectedHolidays, selectedAudiences, visualStyle, colorScheme, emotion } = body;
+    const { analysis, platform, selectedHolidays, selectedAudiences, visualStyle, colorScheme, customColors, emotion } = body;
 
     if (!analysis) {
       return NextResponse.json({ success: false, error: '缺少产品分析数据' }, { status: 400 });
     }
 
-    // Get predefined color scheme or use default
-    const selectedScheme = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES['warm_beige'];
+    // Get color scheme - use custom colors if provided, otherwise use predefined
+    let selectedScheme;
+    if (colorScheme === 'custom' && customColors) {
+      selectedScheme = {
+        primary: customColors.primary,
+        secondary: customColors.secondary,
+        accent: customColors.accent,
+        background: customColors.background,
+        text: customColors.text,
+        desc: `Custom color theme: Primary (${customColors.primary}), Secondary (${customColors.secondary}), Accent (${customColors.accent}), Background (${customColors.background}), Text (${customColors.text})`
+      };
+    } else {
+      selectedScheme = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES['warm_beige'];
+    }
 
     const model = getTextModelFallback();
+
+    // Build dimensions info if available
+    const dimensionsInfo = analysis.dimensions ? `
+Product Dimensions:
+${analysis.dimensions.length ? `- Length: ${analysis.dimensions.length}` : ''}
+${analysis.dimensions.width ? `- Width: ${analysis.dimensions.width}` : ''}
+${analysis.dimensions.height ? `- Height: ${analysis.dimensions.height}` : ''}
+${analysis.dimensions.diameter ? `- Diameter: ${analysis.dimensions.diameter}` : ''}
+${analysis.dimensions.weight ? `- Weight: ${analysis.dimensions.weight}` : ''}
+${analysis.dimensions.custom_size ? `- Size Notes: ${analysis.dimensions.custom_size}` : ''}
+IMPORTANT: Use these dimensions to accurately show product scale in images.` : '';
 
     const designPrompt = `Create a comprehensive Design Bible for Amazon Listing images.
 
@@ -126,6 +156,7 @@ Product Information:
 - Selling Points: ${analysis.selling_points.join(', ')}
 - Target Audience: ${selectedAudiences.join(', ') || analysis.target_audience.join(', ')}
 - Holidays: ${selectedHolidays.join(', ') || analysis.recommended_holidays.join(', ')}
+${dimensionsInfo}
 
 User Preferences:
 - Platform: ${platform}

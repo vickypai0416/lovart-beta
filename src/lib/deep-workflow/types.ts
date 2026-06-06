@@ -12,6 +12,14 @@ export interface ProductAnalysis {
   recommended_holidays: string[];
   estimated_price_range: string;
   gift_suitable: boolean;
+  dimensions?: {
+    length?: string;
+    width?: string;
+    height?: string;
+    diameter?: string;
+    weight?: string;
+    custom_size?: string;
+  };
 }
 
 export interface ColorPalette {
@@ -125,6 +133,7 @@ export interface DeepWorkflowState {
     selectedAudiences: string[];
     visualStyle: string;
     colorScheme: string;
+    customColors?: CustomColorPalette;
     emotion: string;
   };
   designBible: DesignBible | null;
@@ -169,16 +178,64 @@ export const AUDIENCES = [
   { value: 'friend', label: 'Friend', description: '朋友' },
 ];
 
-// Visual Style options
+// Visual Style options with detailed explanations
 export const VISUAL_STYLES = [
-  { value: 'modern_premium', label: 'Modern Premium', description: '现代高端' },
-  { value: 'luxury_gift', label: 'Luxury Gift', description: '奢华礼品' },
-  { value: 'minimalist', label: 'Minimalist', description: '极简主义' },
-  { value: 'rustic', label: 'Rustic', description: '乡村风格' },
-  { value: 'farmhouse', label: 'Farmhouse', description: '农舍风格' },
-  { value: 'lifestyle_commercial', label: 'Lifestyle Commercial', description: '生活方式商业' },
-  { value: 'magazine_editorial', label: 'Magazine Editorial', description: '杂志编辑' },
-  { value: 'etsy_handmade', label: 'Etsy Handmade', description: 'Etsy手工' },
+  { 
+    value: 'modern_premium', 
+    label: 'Modern Premium', 
+    description: '现代高端',
+    impact: '简洁线条、高品质感、专业灯光、中性色调、精致细节',
+    bestFor: '电子产品、现代家居、商务礼品'
+  },
+  { 
+    value: 'luxury_gift', 
+    label: 'Luxury Gift', 
+    description: '奢华礼品',
+    impact: '金色点缀、丝绒质感、礼盒元素、高端氛围、精致包装',
+    bestFor: '高端定制礼品、珠宝首饰、奢侈品'
+  },
+  { 
+    value: 'minimalist', 
+    label: 'Minimalist', 
+    description: '极简主义',
+    impact: '大量留白、单一焦点、纯净背景、简单构图、克制色彩',
+    bestFor: '设计感强的产品、艺术品、现代装饰品'
+  },
+  { 
+    value: 'rustic', 
+    label: 'Rustic', 
+    description: '乡村风格',
+    impact: '木质纹理、自然光线、复古质感、手工感、温暖色调',
+    bestFor: '木质产品、手工制品、复古风格商品'
+  },
+  { 
+    value: 'farmhouse', 
+    label: 'Farmhouse', 
+    description: '农舍风格',
+    impact: '舒适温馨、家庭感、柔和色彩、实用美学、亲切氛围',
+    bestFor: '家居用品、厨房用品、家庭装饰品'
+  },
+  { 
+    value: 'lifestyle_commercial', 
+    label: 'Lifestyle Commercial', 
+    description: '生活方式商业',
+    impact: '真实场景、人物互动、自然光线、生活化、情感连接',
+    bestFor: '日常用品、服装配饰、生活用品'
+  },
+  { 
+    value: 'magazine_editorial', 
+    label: 'Magazine Editorial', 
+    description: '杂志编辑',
+    impact: '时尚前卫、艺术构图、大胆配色、高级感、视觉冲击力',
+    bestFor: '时尚产品、创意商品、艺术类产品'
+  },
+  { 
+    value: 'etsy_handmade', 
+    label: 'Etsy Handmade', 
+    description: 'Etsy手工',
+    impact: '手工质感、温暖光线、个性化、匠心细节、故事感',
+    bestFor: '手工定制产品、个性化礼品、创意手作'
+  },
 ];
 
 // Color Scheme options
@@ -191,18 +248,76 @@ export const COLOR_SCHEMES = [
   { value: 'pastel_pink', label: 'Pastel Pink', description: '淡粉色', colors: ['#FFB6C1', '#FFC0CB', '#FFF0F5'] },
   { value: 'ocean_blue', label: 'Ocean Blue', description: '海洋蓝', colors: ['#4682B4', '#87CEEB', '#F0F8FF'] },
   { value: 'monochrome', label: 'Monochrome', description: '黑白灰', colors: ['#000000', '#808080', '#FFFFFF'] },
+  { value: 'custom', label: 'Custom Colors', description: '自定义颜色', colors: [], isCustom: true },
 ];
 
-// Emotion options
+// Custom color palette interface
+export interface CustomColorPalette {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  text: string;
+}
+
+// Emotion options with detailed explanations
 export const EMOTIONS = [
-  { value: 'heartwarming', label: 'Heartwarming', description: '温馨感人' },
-  { value: 'elegant', label: 'Elegant', description: '优雅高贵' },
-  { value: 'romantic', label: 'Romantic', description: '浪漫' },
-  { value: 'family_bond', label: 'Family Bond', description: '家庭纽带' },
-  { value: 'sentimental', label: 'Sentimental', description: ' sentimental' },
-  { value: 'funny', label: 'Funny', description: '有趣' },
-  { value: 'celebratory', label: 'Celebratory', description: '庆祝' },
-  { value: 'cozy', label: 'Cozy', description: '舒适' },
+  { 
+    value: 'heartwarming', 
+    label: 'Heartwarming', 
+    description: '温馨感人',
+    impact: '温暖光线、柔和色调、亲密互动、情感表达、幸福氛围',
+    bestFor: '家庭礼品、亲情礼物、纪念日礼物'
+  },
+  { 
+    value: 'elegant', 
+    label: 'Elegant', 
+    description: '优雅高贵',
+    impact: '精致构图、高级质感、克制色彩、品味展现、典雅氛围',
+    bestFor: '高端礼品、商务礼品、成熟受众'
+  },
+  { 
+    value: 'romantic', 
+    label: 'Romantic', 
+    description: '浪漫',
+    impact: '柔和光线、梦幻色调、亲密姿态、浪漫场景、甜蜜氛围',
+    bestFor: '情人节礼物、情侣礼品、爱情主题'
+  },
+  { 
+    value: 'family_bond', 
+    label: 'Family Bond', 
+    description: '家庭纽带',
+    impact: '家庭场景、代际互动、温暖色调、亲情表达、团聚氛围',
+    bestFor: '父母礼物、家庭礼品、亲情主题'
+  },
+  { 
+    value: 'sentimental', 
+    label: 'Sentimental', 
+    description: ' sentimental',
+    impact: '怀旧色调、情感深度、回忆元素、感动瞬间、珍藏感',
+    bestFor: '纪念礼物、怀旧礼品、情感价值高的产品'
+  },
+  { 
+    value: 'funny', 
+    label: 'Funny', 
+    description: '有趣',
+    impact: '活泼色彩、轻松姿态、趣味元素、幽默氛围、愉悦感',
+    bestFor: '趣味礼品、朋友礼物、轻松场合'
+  },
+  { 
+    value: 'celebratory', 
+    label: 'Celebratory', 
+    description: '庆祝',
+    impact: '明亮色彩、欢快氛围、庆祝元素、喜悦表达、节日感',
+    bestFor: '生日礼物、节日礼品、庆祝场合'
+  },
+  { 
+    value: 'cozy', 
+    label: 'Cozy', 
+    description: '舒适',
+    impact: '温暖色调、舒适场景、放松姿态、居家感、惬意氛围',
+    bestFor: '家居用品、放松类产品、日常礼品'
+  },
 ];
 
 // Storyline templates by product type

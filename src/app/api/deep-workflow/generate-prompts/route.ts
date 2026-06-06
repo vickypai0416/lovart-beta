@@ -124,98 +124,98 @@ function generateImageBlueprint(
   holidayText: { headline: string; subheadline: string; cta: string }
 ): ImageBlueprint {
   const blueprints: Record<string, ImageBlueprint> = {
-    // Image 1: 商品白底主图
+    // Image 1: 商品白底主图 - 突出定制区域
     hero: {
       index: 1,
       type: '主图 - 白底展示',
-      goal: '纯白背景展示产品全貌，符合Amazon主图规范',
+      goal: '纯白背景展示产品全貌，突出定制区域细节，强调个性化特征',
       headline: analysis.product_name,
       subheadline: analysis.selling_points[0] || 'Premium Quality',
-      scene: 'Pure white background RGB 255,255,255, professional studio',
-      camera: 'Front-facing, eye-level angle, product fills 85% of frame',
-      lighting: 'Soft even studio lighting, minimal shadows',
-      emotion: 'Clean, professional, high-end retail quality',
-      composition: 'Product centered, pure white background only',
-      elements: ['Product only', 'Pure white background', 'No props', 'No text overlay'],
+      scene: 'Pure white background RGB 255,255,255, professional studio, product with visible personalization details prominently featured',
+      camera: 'Front-facing with close-up detail shot of customization area, product fills 85% of frame',
+      lighting: 'Soft even studio lighting highlighting personalization details, minimal shadows',
+      emotion: 'Clean, professional, high-end retail quality with emphasis on unique personalization',
+      composition: 'Product centered with clear view of customized elements (engraving, monogram, or personalized design)',
+      elements: ['Product with visible personalization', 'Pure white background', 'Close-up of customization detail', 'Unique design elements highlighted'],
       text_content: { headline: '', subheadline: '' }
     },
-    // Image 2: 人物手执产品展示、介绍定制流程
+    // Image 2: 定制流程展示 - 人物手持产品展示定制细节
     customization: {
       index: 2,
       type: '定制流程展示',
-      goal: '展示人物手持产品，介绍定制流程和工艺',
+      goal: '展示人物手持产品，展示定制流程和工艺',
       headline: 'Personalized Just for You',
       subheadline: 'Easy Customization Process',
-      scene: 'Person holding the product, showing customization details',
-      camera: 'Medium shot showing hands and product clearly',
+      scene: 'Person holding the product, showing customization details and craftsmanship, clear view of personalized elements like engraving or monogram',
+      camera: 'Medium shot showing hands holding product with clear view of customization details',
       lighting: designBible.lighting_style,
-      emotion: 'Personal, thoughtful, handcrafted care',
-      composition: 'Hands holding product, customization visible',
-      elements: ['Person hands', 'Product', 'Customization detail', 'Process visualization'],
+      emotion: 'Personal, thoughtful, handcrafted care with emphasis on personalization',
+      composition: 'Hands holding product prominently, customization details clearly visible, process of personalization demonstrated',
+      elements: ['Person hands holding product', 'Visible customization details', 'Personalization craftsmanship', 'Clear view of engraving/monogram', 'Process visualization'],
       text_content: { headline: 'Easy to Customize', subheadline: 'Make It Yours' }
     },
-    // Image 3: 情感价值、以人物使用产品为主的故事讲述
+    // Image 3: 情感故事 - 强调"为谁定制"的专属感
     story: {
       index: 3,
       type: '情感故事',
-      goal: '讲述人物使用产品的温馨故事，传递情感价值',
-      headline: 'Made with Love',
-      subheadline: 'A Story Worth Sharing',
-      scene: 'Person actively using the product in meaningful moment',
-      camera: 'Environmental portrait showing emotional connection',
-      lighting: 'Warm, natural lighting for emotional impact',
-      emotion: 'Heartwarming, meaningful, cherished moments',
-      composition: 'Person using product, emotional storytelling focus',
-      elements: ['Person using product', 'Emotional moment', 'Story context', 'Warm atmosphere'],
-      text_content: { headline: 'Create Memories', subheadline: 'Cherish Every Moment' }
+      goal: '讲述专属定制故事，强调"这是为谁定制的"以及背后的情感意义',
+      headline: 'Made for Someone Special',
+      subheadline: 'A Gift with Meaning',
+      scene: 'Person emotionally connecting with personalized product, showing their name, date, or special message engraved/printed on it, intimate storytelling moment',
+      camera: 'Environmental portrait with focus on personalized details and emotional reaction',
+      lighting: 'Warm, intimate lighting highlighting both the person and the customization details',
+      emotion: 'Deeply personal, emotionally meaningful, treasured keepsake, showing the bond between giver and receiver',
+      composition: 'Person with product showing visible personalization (name, date, message), emotional storytelling with context of who it is for',
+      elements: ['Person with emotional connection', 'Visible personalization (name/date/message)', 'Story context', 'Intimate atmosphere', 'Meaningful moment'],
+      text_content: { headline: 'One of a Kind', subheadline: 'Made Just for You' }
     },
-    // Image 4: 真实的人物送礼场景
+    // Image 4: 节日送礼场景 - 强调收礼人情感反应和独特性
     gifting: {
       index: 4,
       type: '节日送礼场景',
-      goal: '展示真实的节日送礼场景（父亲节/母亲节/情人节/圣诞节等）',
+      goal: '展示真实的节日送礼场景，突出收礼人看到定制内容时的情感反应和礼物的独特性',
       headline: holidayText.headline,
       subheadline: holidayText.subheadline,
-      scene: `${holidayText.headline} celebration scene with people exchanging the product`,
-      camera: 'Candid moment capture, natural interaction',
-      lighting: 'Warm, festive lighting matching holiday mood',
-      emotion: `Joyful ${holidayText.headline.toLowerCase()} celebration, love and appreciation`,
-      composition: 'People exchanging product, emotional connection visible',
-      elements: ['People giving/receiving', 'Product as centerpiece', 'Holiday atmosphere', 'Emotional exchange'],
-      text_content: { headline: holidayText.headline, subheadline: holidayText.subheadline }
+      scene: `${holidayText.headline} celebration moment, recipient's emotional reaction upon seeing the personalized product with their name or special message, genuine surprise and joy`,
+      camera: 'Candid moment focusing on recipient\'s face and the personalized product, capturing genuine emotional reaction',
+      lighting: 'Warm, festive lighting highlighting the emotional moment and personalization details',
+      emotion: `Joyful ${holidayText.headline.toLowerCase()} celebration, genuine surprise and delight at seeing personalized gift, love and appreciation for the thoughtfulness`,
+      composition: 'Recipient holding product with visible personalization, emotional reaction clearly shown, giver watching with love, emphasizing the uniqueness of the gift',
+      elements: ['Recipient emotional reaction', 'Visible personalization on product', 'Genuine surprise and joy', 'Holiday atmosphere', 'Thoughtful gift exchange'],
+      text_content: { headline: holidayText.headline, subheadline: `A Personalized ${holidayText.headline} Gift` }
     },
-    // Image 5: 产品特点、4个和产品有关的特点配上图片
+    // Image 5: 产品特点展示 - 结合定制元素
     features: {
       index: 5,
       type: '产品特点展示',
-      goal: '展示4个核心产品特点，图文结合',
+      goal: '展示4个核心产品特点，同时突出定制选项和个性化可能性',
       headline: 'Why You\'ll Love It',
-      subheadline: 'Quality You Can See',
-      scene: 'Product with 4 feature highlights arranged visually',
-      camera: 'Styled shot with space for feature callouts',
+      subheadline: 'Personalized Perfection',
+      scene: 'Product with visible personalization alongside 4 key features, showing both quality and customization options, examples of different personalization styles',
+      camera: 'Styled shot showcasing product features with clear view of customization examples',
       lighting: designBible.lighting_style,
-      emotion: 'Informative, trustworthy, quality-focused',
-      composition: 'Product centered with 4 feature icons/badges around it',
-      elements: ['Product', '4 feature highlights', 'Visual icons', 'Clean layout'],
+      emotion: 'Informative, trustworthy, quality-focused with emphasis on personalization options',
+      composition: 'Product centered with 4 feature highlights and customization examples arranged around it, showing variety of personalization possibilities',
+      elements: ['Product with personalization', '4 feature highlights', 'Customization examples', 'Personalization options', 'Quality craftsmanship'],
       text_content: { 
-        headline: 'Key Features', 
-        subheadline: analysis.selling_points.slice(0, 4).join(' • ') || 'Premium Quality' 
+        headline: 'Personalized Quality', 
+        subheadline: analysis.selling_points.slice(0, 4).join(' • ') || 'Premium Personalized Quality' 
       }
     },
-    // Image 6: 产品的生活方式使用图、以产品为主体，展示具体使用方式
+    // Image 6: 生活方式展示 - 强调定制内容的生活意义
     lifestyle: {
       index: 6,
       type: '生活方式展示',
-      goal: '展示产品在真实生活场景中的具体使用方式，产品为主体',
-      headline: 'Perfect for Your Life',
-      subheadline: 'Everyday Elegance',
-      scene: getProductUsageScene(analysis.product_type, analysis.product_name),
-      camera: 'Lifestyle shot with product as clear focal point, showing actual usage',
-      lighting: 'Natural, authentic lifestyle lighting',
-      emotion: 'Aspirational yet achievable, everyday luxury',
-      composition: 'Product prominently featured in active usage setting',
-      elements: ['Product in use', 'Active usage demonstration', 'Natural setting', 'Functional display'],
-      text_content: { headline: 'Made for Life', subheadline: 'Your Perfect Companion' }
+      goal: '展示个性化产品在真实生活中的意义和使用场景，强调定制内容如何融入日常生活',
+      headline: 'Part of Your Story',
+      subheadline: 'Personalized for Everyday',
+      scene: `${getProductUsageScene(analysis.product_type, analysis.product_name)}, with visible personalization (name, initials, or custom design) clearly integrated into daily life, showing how the customized element makes it special`,
+      camera: 'Lifestyle shot emphasizing the personalized product in authentic daily use, close-up of customization detail within the scene',
+      lighting: 'Natural, authentic lifestyle lighting highlighting the personalization',
+      emotion: 'Aspirational yet personal, showing how customization adds meaning to everyday moments, treasured personal item',
+      composition: 'Product with visible personalization prominently featured in active usage setting, showing the emotional connection to the customized element',
+      elements: ['Product with visible personalization in use', 'Daily life context', 'Personal meaning demonstrated', 'Natural setting', 'Emotional connection to customized item'],
+      text_content: { headline: 'Your Personal Touch', subheadline: 'Made for Your Life' }
     },
   };
 
@@ -231,6 +231,17 @@ function generateImagePrompt(
 ): string {
   const palette = designBible.color_palette;
   
+  // Build dimensions info if available
+  const dimensionsInfo = analysis.dimensions ? `
+PRODUCT DIMENSIONS (for accurate scale representation):
+${analysis.dimensions.length ? `- Length: ${analysis.dimensions.length}` : ''}
+${analysis.dimensions.width ? `- Width: ${analysis.dimensions.width}` : ''}
+${analysis.dimensions.height ? `- Height: ${analysis.dimensions.height}` : ''}
+${analysis.dimensions.diameter ? `- Diameter: ${analysis.dimensions.diameter}` : ''}
+${analysis.dimensions.weight ? `- Weight: ${analysis.dimensions.weight}` : ''}
+${analysis.dimensions.custom_size ? `- Size Context: ${analysis.dimensions.custom_size}` : ''}
+CRITICAL: Show product at accurate scale relative to hands, objects, or environment. Use appropriate camera distance and framing to convey true size.` : '';
+  
   const basePrompt = `Amazon listing product photography. ${analysis.product_name}. 
 
 DESIGN BIBLE (apply to ALL images):
@@ -241,6 +252,7 @@ DESIGN BIBLE (apply to ALL images):
 - Font: ${designBible.font_style.family}, Headlines ${designBible.font_style.headline_weight}, Body ${designBible.font_style.body_weight}
 - Composition: ${designBible.composition_style}
 - Emotion: ${designBible.emotion_style}
+${dimensionsInfo}
 
 IMAGE ${blueprint.index} - ${blueprint.type.toUpperCase()}:
 Goal: ${blueprint.goal}
@@ -260,7 +272,8 @@ REQUIREMENTS:
 - Product is ALWAYS the hero
 - NO packaging elements, NO decorative ribbons, NO wrapping materials
 - Clean, professional Amazon listing quality
-- Consistent with all other images in the set`;
+- Consistent with all other images in the set
+${analysis.dimensions ? '- Show product at accurate scale and proportion' : ''}`;
 
   return basePrompt;
 }
