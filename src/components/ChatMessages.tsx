@@ -137,8 +137,19 @@ function ChatMessageImage({
   );
 }
 
-function shouldRenderAmazonPlanButton(content: string): boolean {
-  if (!content) return false;
+function safeMessageText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (content == null) return '';
+  if (typeof content === 'number' || typeof content === 'boolean') return String(content);
+  try {
+    return JSON.stringify(content, null, 2);
+  } catch {
+    return String(content);
+  }
+}
+
+function shouldRenderAmazonPlanButton(content: unknown): boolean {
+  if (typeof content !== 'string' || !content) return false;
   const normalized = content.replace(/[-–—]/g, '-');
   const hasKeyword =
     normalized.includes('6图亚马逊视觉方案') ||
@@ -193,11 +204,12 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-6 pb-4">
         <div className="space-y-6">
           {messages.filter(m => m.id !== 'welcome').map((message) => {
+            const messageText = safeMessageText(message.content);
             const validUserImages = (message.userImages || []).filter((img) => typeof img === 'string' && img.trim().length > 0);
             const validGeneratedImages = (message.imageUrls || []).filter((img) => typeof img === 'string' && img.trim().length > 0);
             let validPlanImages = (message.planImages || []).filter((plan) => !!plan && typeof plan === 'object');
-            if (validPlanImages.length === 0 && message.role === 'assistant' && shouldRenderAmazonPlanButton(message.content)) {
-              validPlanImages = fallbackParseAmazonPlan(message.content);
+            if (validPlanImages.length === 0 && message.role === 'assistant' && shouldRenderAmazonPlanButton(messageText)) {
+              validPlanImages = fallbackParseAmazonPlan(messageText);
             }
 
             return (
@@ -242,11 +254,11 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                       )}
                     </div>
                   )}
-                  {message.content && (
+                  {messageText && (
                     <div className="flex items-start gap-2 group">
-                      <p className="flex-1 whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                      <p className="flex-1 whitespace-pre-wrap text-sm leading-relaxed">{messageText}</p>
                       <button
-                        onClick={() => onCopyContent(message.content)}
+                        onClick={() => onCopyContent(messageText)}
                         className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
                       >
                         <Copy className="w-4 h-4 text-gray-400" />
@@ -305,7 +317,7 @@ const ChatMessages = React.memo<ChatMessagesProps>(({
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         {validPlanImages.map((plan, idx) => (
-                          <div key={`${message.id}-plan-${plan.index}-${idx}`} className="relative aspect-square rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group">
+                          <div key={`${message.id}-plan-${plan.index ?? idx}-${idx}`} className="relative aspect-square rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group">
                             {plan.status === 'completed' && plan.imageUrl && plan.imageUrl.trim().length > 0 ? (
                               <ChatMessageImage
                                 src={plan.imageUrl}
