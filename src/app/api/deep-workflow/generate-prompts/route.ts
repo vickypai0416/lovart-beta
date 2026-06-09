@@ -192,12 +192,12 @@ function generateImageBlueprint(
       goal: '展示人物手持产品，展示定制流程和工艺，保持产品原有尺寸和比例',
       headline: 'Personalized Just for You',
       subheadline: 'Easy Customization Process',
-      scene: 'Person holding product with clear view of customizable area, showing how to add personalization like engraving or design. MAINTAIN exact product proportions, size, and scale as shown in reference image',
-      camera: 'Medium shot showing hands holding product with customization area highlighted, accurate scale representation',
+      scene: `Person holding product with clear view of customizable area, showing how to add personalization like engraving or design. ${analysis.dimensions ? `CRITICAL SIZE INFO: Product is ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Person should hold it in a way that clearly shows this true size - hands positioned to demonstrate scale, product should not appear larger or smaller than actual dimensions.` : 'MAINTAIN exact product proportions, size, and scale as shown in reference image'}`,
+      camera: 'Medium shot showing hands holding product with customization area highlighted, camera angle chosen to emphasize true product scale and size relative to hands, accurate scale representation',
       lighting: 'Clean studio lighting with focus on product details',
       emotion: 'Professional and informative, showcasing customization options clearly',
-      composition: 'Product centered with accurate size representation, customization area prominently displayed, maintain true-to-life proportions',
-      elements: ['Person holding product at accurate scale', 'Customization area highlighted', 'Clear view of personalization options', 'Professional presentation', 'True-to-life product size'],
+      composition: 'Product centered with accurate size representation, hands positioned to show true scale, customization area prominently displayed, maintain true-to-life proportions',
+      elements: ['Person holding product at accurate scale with hands showing size reference', 'Customization area highlighted', 'Clear view of personalization options', 'Professional presentation', 'True-to-life product size', 'Hand scale reference'],
       text_content: { headline: 'Easy to Customize', subheadline: 'Make It Yours' }
     },
     // Image 3: 情感故事 - 强调"为谁定制"的专属感
@@ -255,12 +255,12 @@ function generateImageBlueprint(
       goal: '展示个性化产品在真实生活中的意义和使用场景，强调定制内容如何融入日常生活，突出专属定制带来的独特生活体验，采用精美电商排版设计，保持产品原有尺寸和比例',
       headline: 'Part of Your Story',
       subheadline: 'Uniquely Yours',
-      scene: generateLifestyleScene(preferences.selectedAudiences),
-      camera: 'Professional lifestyle photography with artistic composition, product in use at accurate scale, beautiful text elements arranged artfully around the scene',
+      scene: `${generateLifestyleScene(preferences.selectedAudiences)}. ${analysis.dimensions ? `IMPORTANT: The product dimensions are ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Show the product at its TRUE SIZE - it should appear appropriately large/small relative to the person and surroundings.` : ''}`,
+      camera: 'Professional lifestyle photography with artistic composition, product in use at accurate scale, camera positioned to clearly show size relationship between product and person/environment, beautiful text elements arranged artfully around the scene',
       lighting: 'Soft natural lighting with warm golden tones, creating inviting atmosphere with gentle highlights on personalized details and text elements',
       emotion: 'Comforting familiarity with exclusive luxury touch, cherished daily ritual, seeing the product in real use brings emotional connection',
-      composition: 'Modern e-commerce layout with personalized product in use at accurate true-to-life size, person interacting with product naturally, elegant headline text at top or side, lifestyle elements framing the scene, clean visual hierarchy with decorative flourishes',
-      elements: ['Product in authentic use at accurate scale', 'Person naturally interacting with product', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Real lifestyle atmosphere'],
+      composition: 'Modern e-commerce layout with personalized product in use at accurate true-to-life size, person interacting with product naturally showing proper scale, elegant headline text at top or side, lifestyle elements framing the scene, clean visual hierarchy with decorative flourishes',
+      elements: ['Product in authentic use at accurate scale', 'Person naturally interacting with product showing true size', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Real lifestyle atmosphere', 'Clear size reference'],
       text_content: { headline: 'YOURS ONLY', subheadline: 'A Piece That Tells Your Story' }
     },
   };
@@ -279,14 +279,20 @@ function generateImagePrompt(
   
   // Build dimensions info if available
   const dimensionsInfo = analysis.dimensions ? `
-PRODUCT DIMENSIONS (for accurate scale representation):
+PRODUCT DIMENSIONS (CRITICAL - MUST SHOW ACCURATE SIZE):
 ${analysis.dimensions.length ? `- Length: ${analysis.dimensions.length}` : ''}
 ${analysis.dimensions.width ? `- Width: ${analysis.dimensions.width}` : ''}
 ${analysis.dimensions.height ? `- Height: ${analysis.dimensions.height}` : ''}
 ${analysis.dimensions.diameter ? `- Diameter: ${analysis.dimensions.diameter}` : ''}
 ${analysis.dimensions.weight ? `- Weight: ${analysis.dimensions.weight}` : ''}
 ${analysis.dimensions.custom_size ? `- Size Context: ${analysis.dimensions.custom_size}` : ''}
-CRITICAL: Show product at accurate scale relative to hands, objects, or environment. Use appropriate camera distance and framing to convey true size.` : '';
+
+SIZE VISUALIZATION GUIDE:
+- 60x80 inch blanket = Large throw blanket that covers most of a couch or bed
+- Person holding it should show the blanket draping significantly, not held like a small towel
+- The blanket should appear substantial and oversized when held
+- Camera should be positioned to show the full scale of the blanket relative to the person
+- If shown on furniture, it should drape over edges to show true dimensions` : '';
   
   const basePrompt = `Amazon listing product photography. ${analysis.product_name}. 
 
