@@ -65,9 +65,11 @@ const STEPS = [
 interface GeneratedImageCardProps {
   prompt: GeneratedPrompt;
   referenceImage: string | null;
+  productName: string;
+  designBibleId?: string;
 }
 
-function GeneratedImageCard({ prompt, referenceImage }: GeneratedImageCardProps) {
+function GeneratedImageCard({ prompt, referenceImage, productName, designBibleId }: GeneratedImageCardProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,25 +77,33 @@ function GeneratedImageCard({ prompt, referenceImage }: GeneratedImageCardProps)
 
   const generateImage = async () => {
     if (!referenceImage) return;
-    
+
     setIsGenerating(true);
     setError(null);
-    
+
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': `deep-ecommerce-${Date.now()}`,
+        },
         body: JSON.stringify({
           prompt: prompt.prompt,
           referenceImage: referenceImage,
           size: '1024x1024',
           quality: 'medium',
           n: 1,
+          // Deep workflow specific fields for analytics storage
+          workflow: 'deep-ecommerce',
+          listingIndex: prompt.index,
+          listingType: prompt.type,
+          designBibleId: designBibleId,
         }),
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success && result.url) {
         setGeneratedImage(result.url);
       } else {
@@ -1096,6 +1106,8 @@ export default function DeepEcommerceWorkflow() {
                   key={prompt.index}
                   prompt={prompt}
                   referenceImage={state.productImage}
+                  productName={state.analysis?.product_name || 'Unknown Product'}
+                  designBibleId={state.analysis?.product_name}
                 />
               ))}
             </div>

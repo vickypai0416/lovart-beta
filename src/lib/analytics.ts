@@ -31,6 +31,11 @@ export interface Generation {
   imageUrl?: string;
   error?: string;
   createdAt: Date;
+  // Deep workflow specific fields
+  workflow?: string;
+  listingIndex?: number;
+  listingType?: string;
+  designBibleId?: string;
 }
 
 export interface Feedback {

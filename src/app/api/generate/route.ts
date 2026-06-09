@@ -150,6 +150,11 @@ export async function POST(request: NextRequest) {
       model,
       quality = 'high',
       n: requestN,
+      // Deep workflow specific fields
+      workflow,
+      listingIndex,
+      listingType,
+      designBibleId,
     } = body;
 
     const imageCount = Math.min(Math.max(Number(requestN) || 1, 1), 4);
@@ -214,7 +219,7 @@ export async function POST(request: NextRequest) {
     }
 
     const generationModel = finalReferenceImages.length > 0 ? model : 'gpt-image-2-gen';
-    const generationPayload: Omit<Parameters<typeof createGeneration>[0], 'clientRequestId'> & { clientRequestId?: string } = {
+    const generationPayload: Omit<Parameters<typeof createGeneration>[0], 'clientRequestId'> & { clientRequestId?: string; workflow?: string; listingIndex?: number; listingType?: string; designBibleId?: string } = {
       sessionId,
       prompt: finalPrompt,
       size,
@@ -226,6 +231,14 @@ export async function POST(request: NextRequest) {
 
     if (requestClientId) {
       generationPayload.clientRequestId = requestClientId;
+    }
+
+    // Add deep workflow specific fields
+    if (workflow === 'deep-ecommerce') {
+      generationPayload.workflow = workflow;
+      generationPayload.listingIndex = listingIndex;
+      generationPayload.listingType = listingType;
+      generationPayload.designBibleId = designBibleId;
     }
 
     generationId = (await createGeneration(generationPayload)).id;
