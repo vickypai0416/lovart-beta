@@ -174,15 +174,15 @@ function generateImageBlueprint(
     hero: {
       index: 1,
       type: '主图 - 白底展示',
-      goal: '纯白背景展示产品全貌，突出定制区域细节，强调个性化特征',
+      goal: '纯白背景展示产品全貌，突出定制区域细节，强调个性化特征，保留参考图中现有的定制内容',
       headline: analysis.product_name,
       subheadline: analysis.selling_points[0] || 'Premium Quality',
-      scene: 'Pure white background RGB 255,255,255, professional studio lighting, product with exquisite visible personalization - elegant name engraving in beautiful script font, monogram initials with decorative border, or meaningful custom artwork that tells a personal story, making this piece truly one-of-a-kind',
+      scene: 'Pure white background RGB 255,255,255, professional studio lighting, product with EXACT same custom design/print as shown in reference image - preserve existing personalization perfectly without any changes',
       camera: 'Front-facing 3/4 angle with extreme close-up on customization area showing intricate details, product fills 85% of frame with dramatic lighting that makes personalized elements the undeniable focal point',
-      lighting: 'Soft diffused studio lighting with strategic spotlight on customization area, enhancing texture and making engraved letters or custom designs stand out sharply against the product surface',
+      lighting: 'Soft diffused studio lighting with strategic spotlight on customization area, enhancing texture and making custom designs stand out sharply against the product surface',
       emotion: 'Luxurious exclusivity, premium craftsmanship, emphasizing that this is a bespoke item made specifically for the customer',
-      composition: 'Product centered with visual hierarchy directing eye to personalized details - subtle shadowing creates depth while keeping focus on the unique customization',
-      elements: ['Exquisitely executed personalization', 'Sharp focus on engraved letters/details', 'Professional studio quality', 'Custom design as visual anchor', 'Premium bespoke presentation'],
+      composition: 'Product centered with visual hierarchy directing eye to personalized details - subtle shadowing creates depth while keeping focus on the unique customization, existing custom content preserved exactly as in reference',
+      elements: ['Existing personalization preserved exactly', 'Sharp focus on custom design details', 'Professional studio quality', 'Custom design as visual anchor', 'Premium bespoke presentation', 'Reference image customization maintained'],
       text_content: { headline: '', subheadline: '' }
     },
     // Image 2: 定制流程展示 - 人物手持产品展示定制细节
@@ -204,15 +204,15 @@ function generateImageBlueprint(
     story: {
       index: 3,
       type: '情感故事',
-      goal: '讲述专属定制故事，强调"这是为谁定制的"以及背后的情感意义，突出独一无二的专属感，采用精美电商排版设计',
+      goal: '讲述专属定制故事，强调"这是为谁定制的"以及背后的情感意义，突出独一无二的专属感，采用精美电商排版设计，保留产品上的现有定制内容',
       headline: 'Made for Someone Special',
       subheadline: 'One of a Kind',
-      scene: generateStoryScene(preferences.selectedAudiences),
-      camera: 'Professional product photography with artistic composition, product positioned strategically with beautiful text overlay elements',
+      scene: `${generateStoryScene(preferences.selectedAudiences)}. CRITICAL: The product shows the EXACT same custom design/print as the reference image - names, photos, artwork, or text must be preserved perfectly without any modification`,
+      camera: 'Professional product photography with artistic composition, product positioned strategically with existing custom design clearly visible and unchanged, beautiful text overlay elements',
       lighting: 'Soft studio lighting with warm golden tones, creating luxurious atmosphere with gentle highlights on personalized details',
       emotion: 'Deeply personal connection, overwhelming joy, feeling of being uniquely seen and cherished',
-      composition: 'Modern e-commerce layout with product as hero, elegant text elements arranged artfully around it, decorative flourishes and subtle background patterns that enhance visual appeal without distraction',
-      elements: ['Beautifully styled product', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Emotional visual storytelling'],
+      composition: 'Modern e-commerce layout with product as hero showing preserved custom design, elegant text elements arranged artfully around it, decorative flourishes and subtle background patterns that enhance visual appeal without distraction',
+      elements: ['Beautifully styled product with preserved customization', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Emotional visual storytelling', 'Existing custom design maintained exactly'],
       text_content: { headline: 'EXCLUSIVELY YOURS', subheadline: 'A Gift Made Just for You' }
     },
     // Image 4: 节日送礼场景 - 强调收礼人情感反应和独特性
@@ -252,15 +252,15 @@ function generateImageBlueprint(
     lifestyle: {
       index: 6,
       type: '生活方式展示',
-      goal: '展示个性化产品在真实生活中的意义和使用场景，强调定制内容如何融入日常生活，突出专属定制带来的独特生活体验，采用精美电商排版设计，保持产品原有尺寸和比例',
+      goal: '展示个性化产品在真实生活中的意义和使用场景，强调定制内容如何融入日常生活，突出专属定制带来的独特生活体验，采用精美电商排版设计，保持产品原有尺寸和比例，保留产品上的现有定制内容',
       headline: 'Part of Your Story',
       subheadline: 'Uniquely Yours',
-      scene: `${generateLifestyleScene(preferences.selectedAudiences)}. ${analysis.dimensions ? `IMPORTANT: The product dimensions are ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Show the product at its TRUE SIZE - it should appear appropriately large/small relative to the person and surroundings.` : ''}`,
-      camera: 'Professional lifestyle photography with artistic composition, product in use at accurate scale, camera positioned to clearly show size relationship between product and person/environment, beautiful text elements arranged artfully around the scene',
+      scene: `${generateLifestyleScene(preferences.selectedAudiences)}. ${analysis.dimensions ? `IMPORTANT: The product dimensions are ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Show the product at its TRUE SIZE - it should appear appropriately large/small relative to the person and surroundings.` : ''} CRITICAL: The product displays the EXACT same custom design/print as shown in the reference image - preserve all existing personalization (names, photos, text, artwork) perfectly without any changes`,
+      camera: 'Professional lifestyle photography with artistic composition, product in use at accurate scale with existing custom design clearly visible and unchanged, camera positioned to clearly show size relationship between product and person/environment, beautiful text elements arranged artfully around the scene',
       lighting: 'Soft natural lighting with warm golden tones, creating inviting atmosphere with gentle highlights on personalized details and text elements',
       emotion: 'Comforting familiarity with exclusive luxury touch, cherished daily ritual, seeing the product in real use brings emotional connection',
-      composition: 'Modern e-commerce layout with personalized product in use at accurate true-to-life size, person interacting with product naturally showing proper scale, elegant headline text at top or side, lifestyle elements framing the scene, clean visual hierarchy with decorative flourishes',
-      elements: ['Product in authentic use at accurate scale', 'Person naturally interacting with product showing true size', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Real lifestyle atmosphere', 'Clear size reference'],
+      composition: 'Modern e-commerce layout with personalized product in use at accurate true-to-life size showing preserved custom design, person interacting with product naturally showing proper scale, elegant headline text at top or side, lifestyle elements framing the scene, clean visual hierarchy with decorative flourishes',
+      elements: ['Product in authentic use at accurate scale with preserved customization', 'Person naturally interacting with product showing true size', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Real lifestyle atmosphere', 'Clear size reference', 'Existing custom design maintained exactly'],
       text_content: { headline: 'YOURS ONLY', subheadline: 'A Piece That Tells Your Story' }
     },
   };
@@ -278,21 +278,26 @@ function generateImagePrompt(
   const palette = designBible.color_palette;
   
   // Build dimensions info if available
-  const dimensionsInfo = analysis.dimensions ? `
-PRODUCT DIMENSIONS (CRITICAL - MUST SHOW ACCURATE SIZE):
-${analysis.dimensions.length ? `- Length: ${analysis.dimensions.length}` : ''}
-${analysis.dimensions.width ? `- Width: ${analysis.dimensions.width}` : ''}
-${analysis.dimensions.height ? `- Height: ${analysis.dimensions.height}` : ''}
-${analysis.dimensions.diameter ? `- Diameter: ${analysis.dimensions.diameter}` : ''}
-${analysis.dimensions.weight ? `- Weight: ${analysis.dimensions.weight}` : ''}
-${analysis.dimensions.custom_size ? `- Size Context: ${analysis.dimensions.custom_size}` : ''}
+  const dimensionLines = analysis.dimensions
+    ? [
+        'PRODUCT DIMENSIONS (CRITICAL - MUST SHOW ACCURATE SIZE):',
+        analysis.dimensions.length ? `- Length: ${analysis.dimensions.length}` : '',
+        analysis.dimensions.width ? `- Width: ${analysis.dimensions.width}` : '',
+        analysis.dimensions.height ? `- Height: ${analysis.dimensions.height}` : '',
+        analysis.dimensions.diameter ? `- Diameter: ${analysis.dimensions.diameter}` : '',
+        analysis.dimensions.weight ? `- Weight: ${analysis.dimensions.weight}` : '',
+        analysis.dimensions.custom_size ? `- Size Context: ${analysis.dimensions.custom_size}` : '',
+        '',
+        'SIZE VISUALIZATION GUIDE:',
+        '- 60x80 inch blanket = Large throw blanket that covers most of a couch or bed',
+        '- Person holding it should show the blanket draping significantly, not held like a small towel',
+        '- The blanket should appear substantial and oversized when held',
+        '- Camera should be positioned to show the full scale of the blanket relative to the person',
+        '- If shown on furniture, it should drape over edges to show true dimensions',
+      ].filter(Boolean)
+    : [];
 
-SIZE VISUALIZATION GUIDE:
-- 60x80 inch blanket = Large throw blanket that covers most of a couch or bed
-- Person holding it should show the blanket draping significantly, not held like a small towel
-- The blanket should appear substantial and oversized when held
-- Camera should be positioned to show the full scale of the blanket relative to the person
-- If shown on furniture, it should drape over edges to show true dimensions` : '';
+  const dimensionsInfo = dimensionLines.join('\n');
   
   const basePrompt = `Amazon listing product photography. ${analysis.product_name}. 
 
@@ -325,7 +330,8 @@ REQUIREMENTS:
 - NO packaging elements, NO decorative ribbons, NO wrapping materials
 - Clean, professional Amazon listing quality
 - Consistent with all other images in the set
-${analysis.dimensions ? '- Show product at accurate scale and proportion' : ''}`;
+${analysis.dimensions ? '- Show product at accurate scale and proportion' : ''}
+- CRITICAL: PRESERVE EXISTING CUSTOMIZATION - The reference image shows the product with existing custom design/print. You MUST maintain this exact customization in the generated image. Do NOT change, alter, or replace the existing personalized content (names, photos, text, artwork) shown on the product. Only change the background, lighting, composition, and presentation style while keeping the product's custom design identical to the reference.`;
 
   return basePrompt;
 }
