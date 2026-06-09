@@ -1,0 +1,6 @@
+- [x] `getImageUrl()` 返回 Base64 Data URL 而非 Object URL
+- [x] 对话助手图片刷新后仍可正常显示
+- [x] 电商套图图片刷新后仍可正常显示
+- [x] 图片生成器图片刷新后仍可正常显示
+- [x] IndexedDB 中无图片时降级使用原始外部 URL
+- [x] 构建无错误
