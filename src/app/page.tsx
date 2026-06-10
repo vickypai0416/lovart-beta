@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Wand2, Plus, Gem } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Wand2, Plus, Gem, Calculator } from 'lucide-react';
 import { saveChatImageToHistory, getChatHistory, getChatHistoryWithUrls, deleteChatImage, clearChatHistory, ChatImageHistoryItem, saveChatMessages, getChatMessages } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
 import { PERSONAS, PersonaConfig } from '@/lib/persona';
@@ -21,6 +21,7 @@ import { AMAZON_9_GRID_PROMPT } from '@/lib/amazon/grid-prompt';
 import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflow';
 import DeepEcommerceWorkflow from '@/components/deep-workflow/DeepEcommerceWorkflow';
 import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
+import ToolboxWorkflow from '@/components/workflows/ToolboxWorkflow';
 import { downloadImageByUrl } from '@/lib/download';
 import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -2101,6 +2102,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
               { id: 'image-generator', name: '图片生成', icon: Sparkles },
               { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
               { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
+              { id: 'toolbox', name: '工具箱', icon: Calculator },
               { id: 'apiplus', name: 'APIPLUS', icon: Gem },
             ].map((workflow) => {
               const Icon = workflow.icon;
@@ -2218,6 +2220,9 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         </div>
         <div style={{ display: currentWorkflow === 'ecommerce' ? 'block' : 'none' }} className="h-full overflow-y-auto">
           <DeepEcommerceWorkflow />
+        </div>
+        <div style={{ display: currentWorkflow === 'toolbox' ? 'flex' : 'none' }} className="h-full p-4">
+          <ToolboxWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'apiplus' ? 'flex' : 'none' }} className="h-full bg-white">
           <iframe
