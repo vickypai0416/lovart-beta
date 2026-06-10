@@ -22,6 +22,7 @@ import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflo
 import DeepEcommerceWorkflow from '@/components/deep-workflow/DeepEcommerceWorkflow';
 import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
 import ToolboxWorkflow from '@/components/workflows/ToolboxWorkflow';
+import AnnouncementBar from '@/components/AnnouncementBar';
 import { downloadImageByUrl } from '@/lib/download';
 import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -2211,20 +2212,23 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         </div>
       </aside>
 
-      <main className="flex-1 overflow-hidden h-screen">
-        <div style={{ display: currentWorkflow === 'image-generator' ? 'flex' : 'none' }} className="h-full">
+      <main className="flex-1 overflow-hidden h-screen flex flex-col">
+        {/* 公告栏 */}
+        <AnnouncementBar currentWorkflow={currentWorkflow} />
+        
+        <div style={{ display: currentWorkflow === 'image-generator' ? 'flex' : 'none' }} className="flex-1 overflow-hidden">
           <ImageGeneratorWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'prompt-analyzer' ? 'flex' : 'none' }} className="h-full">
+        <div style={{ display: currentWorkflow === 'prompt-analyzer' ? 'flex' : 'none' }} className="flex-1 overflow-hidden">
           <PromptAnalyzerWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'ecommerce' ? 'block' : 'none' }} className="h-full overflow-y-auto">
+        <div style={{ display: currentWorkflow === 'ecommerce' ? 'block' : 'none' }} className="flex-1 overflow-y-auto">
           <DeepEcommerceWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'toolbox' ? 'flex' : 'none' }} className="h-full p-4">
+        <div style={{ display: currentWorkflow === 'toolbox' ? 'flex' : 'none' }} className="flex-1 p-4">
           <ToolboxWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'apiplus' ? 'flex' : 'none' }} className="h-full bg-white">
+        <div style={{ display: currentWorkflow === 'apiplus' ? 'flex' : 'none' }} className="flex-1 bg-white">
           <iframe
             src="https://web.apiplus.org"
             title="APIPLUS"

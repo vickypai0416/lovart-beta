@@ -212,6 +212,7 @@ export default function ImageGeneratorWorkflow() {
     isGeneratingRef.current = true;
     setIsGenerating(true);
     setGenerationError(null);
+    setGeneratedImages([]); // 清空之前生成的图片
     const startTime = Date.now();
     const clientRequestId = `image-generator-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 

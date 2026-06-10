@@ -457,79 +457,111 @@ export async function POST(request: NextRequest) {
     const modelName = modelConfig.modelName || 'gpt-image-2';
 
     try {
-      const requestBody: Record<string, unknown> = {
-        model: modelName,
-        prompt: finalPrompt,
-        n: imageCount,
-        size: `${width}x${height}`,
-      };
+      // GPT Image 2 生成接口每次只返回一张图片，需要循环调用以生成多张
+      const allImageUrls: string[] = [];
+      const actualCount = Math.min(imageCount, 4); // 最多4张
 
-      if (quality) {
-        requestBody.quality = quality;
-      }
+      for (let i = 0; i < actualCount; i++) {
+        console.log(`[Generate API] 开始生成第 ${i + 1}/${actualCount} 张图片`);
 
-      console.log('[Generate API] 发送请求到:', genEndpoint);
-      console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100));
-      console.log('[Generate API] 模型:', modelName);
-      console.log('[Generate API] 尺寸:', `${width}x${height}`);
-      
-      const response = await fetch(genEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${modelConfig.apiKey}`,
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
+        const requestBody: Record<string, unknown> = {
+          model: modelName,
+          prompt: finalPrompt,
+          n: 1,
+          size: `${width}x${height}`,
+        };
 
-      console.log('[Generate API] HTTP状态码:', response.status);
-      
-      if (!response.ok) {
-        const text = await response.text();
-        const upstream = parseUpstreamApiError(response.status, text);
-        console.error('[Generate API] 生图失败 - 状态码:', response.status, 'requestId:', upstream.requestId);
-        console.error('[Generate API] 响应内容:', text.substring(0, 500));
-        return NextResponse.json(
-          {
-            success: false,
-            error: `图片生成失败：API 返回错误 ${response.status}，${upstream.message.substring(0, 200)}`,
-            requestId: upstream.requestId,
-            upstreamStatus: response.status,
+        if (quality) {
+          requestBody.quality = quality;
+        }
+
+        console.log('[Generate API] 发送请求到:', genEndpoint);
+        console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100));
+        console.log('[Generate API] 模型:', modelName);
+        console.log('[Generate API] 尺寸:', `${width}x${height}`);
+        
+        const response = await fetch(genEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${modelConfig.apiKey}`,
+            'Accept': 'application/json',
           },
-          { status: response.status === 429 ? 429 : 500 }
-        );
+          body: JSON.stringify(requestBody),
+        });
+
+        console.log('[Generate API] HTTP状态码:', response.status);
+        
+        if (!response.ok) {
+          const text = await response.text();
+          const upstream = parseUpstreamApiError(response.status, text);
+          console.error('[Generate API] 生图失败 - 状态码:', response.status, 'requestId:', upstream.requestId);
+          console.error('[Generate API] 响应内容:', text.substring(0, 500));
+
+          // 如果已经生成了一些图片，返回已生成的
+          if (allImageUrls.length > 0) {
+            console.log(`[Generate API] 部分成功，已生成 ${allImageUrls.length} 张图片`);
+            break;
+          }
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: `图片生成失败：API 返回错误 ${response.status}，${upstream.message.substring(0, 200)}`,
+              requestId: upstream.requestId,
+              upstreamStatus: response.status,
+            },
+            { status: response.status === 429 ? 429 : 500 }
+          );
+        }
+
+        const responseText = await response.text();
+        console.log('[Generate API] 响应内容:', responseText.substring(0, 500));
+        
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          console.error('[Generate API] 响应不是有效 JSON');
+          if (allImageUrls.length > 0) {
+            break;
+          }
+          return NextResponse.json(
+            { success: false, error: '图片生成失败：API 返回格式错误' },
+            { status: 500 }
+          );
+        }
+        
+        const imageUrls = extractImageUrls(data);
+        
+        if (imageUrls.length > 0) {
+          console.log(`[Generate API] 第 ${i + 1} 张图片生成成功`);
+          allImageUrls.push(imageUrls[0]);
+        } else {
+          console.error('[Generate API] 无法从响应中提取图片 URL');
+          if (allImageUrls.length > 0) {
+            break;
+          }
+          return NextResponse.json(
+            { success: false, error: '图片生成失败：无法获取图片 URL' },
+            { status: 500 }
+          );
+        }
       }
 
-      const responseText = await response.text();
-      console.log('[Generate API] 响应内容:', responseText.substring(0, 500));
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error('[Generate API] 响应不是有效 JSON');
-        return NextResponse.json(
-          { success: false, error: '图片生成失败：API 返回格式错误' },
-          { status: 500 }
-        );
-      }
-      
-      const imageUrls = extractImageUrls(data);
-      
-      if (imageUrls.length > 0) {
-        console.log(`[Generate API] 图片生成成功: ${imageUrls.length} 张`);
+      if (allImageUrls.length > 0) {
+        console.log(`[Generate API] 图片生成成功: ${allImageUrls.length} 张`);
         if (generationId) {
           await updateGeneration(generationId, {
             status: 'success',
-            imageUrl: imageUrls[0],
+            imageUrl: allImageUrls[0],
             duration: Date.now() - startTime,
           });
         }
         return NextResponse.json({
           success: true,
-          url: imageUrls[0],
-          urls: imageUrls,
+          url: allImageUrls[0],
+          urls: allImageUrls,
           size,
           specType,
           model: modelName,
