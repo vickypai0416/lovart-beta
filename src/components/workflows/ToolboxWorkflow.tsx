@@ -71,6 +71,8 @@ export default function ToolboxWorkflow() {
   const [productType, setProductType] = useState<string>('');
   // 是否保留人脸细节
   const [preserveFaces, setPreserveFaces] = useState<boolean>(false);
+  // 是否为镂空/铁艺设计
+  const [isHollowDesign, setIsHollowDesign] = useState<boolean>(false);
   // 生成结果
   const [results, setResults] = useState<GenerationResult[]>([]);
   // 是否正在生成
@@ -263,6 +265,16 @@ export default function ToolboxWorkflow() {
 - 禁止模糊、变形或修改人脸细节
 - 确保人脸在应用后仍然清晰可辨
 ` : '';
+
+    const hollowDesignText = isHollowDesign ? `
+【镂空/铁艺设计 - 重要】
+- 图2是镂空设计、铁艺字母、金属字或带有透明/镂空区域的图案
+- 必须精确识别图2的镂空部分（透明/空白区域）和实体部分
+- 镂空区域必须保持透明，显示图1的背景，禁止填充任何颜色或图案
+- 实体部分（文字、线条、边框）必须完整保留，禁止被遮挡或截断
+- 保持镂空设计的精细边缘和轮廓清晰度
+- 确保镂空部分与实体部分的边界清晰分明
+` : '';
     
     const template = `将图2的产品图案/设计应用到图1的样机产品上。
 
@@ -278,21 +290,21 @@ ${productTypeText}
 
 【图2分析 - 产品图案】
 - 图2是需要应用到产品上的图案/设计/印花
-- 提取图2的图案内容、颜色、纹理${preserveFaces ? '、人脸细节' : ''}
-${facePreservationText}
+- 提取图2的图案内容、颜色、纹理${preserveFaces ? '、人脸细节' : ''}${isHollowDesign ? '、镂空结构' : ''}
+${facePreservationText}${hollowDesignText}
 【核心指令 - 必须遵守】
 1. 产品识别：图1展示的是${productType || '一个产品'}，不要将其识别或改变为其他物品
 2. 图案替换：将图2的图案精确应用到图1产品的相应表面
 3. 贴合处理：根据图1产品的形状、褶皱、曲面进行透视变形，让图案自然贴合
 4. 光影保持：应用图1原有的光照、阴影、高光效果到图案上
-${preserveFaces ? '5. 人脸保护：人脸区域必须保持清晰，禁止模糊处理\n' : ''}5. 禁止事项：
+${preserveFaces ? '5. 人脸保护：人脸区域必须保持清晰，禁止模糊处理\n' : ''}${isHollowDesign ? '5. 镂空保护：镂空区域必须保持透明，显示背景，禁止填充\n' : ''}5. 禁止事项：
    - 绝对禁止将产品替换成其他物品
    - 禁止改变产品颜色（除非图案本身包含颜色）
    - 禁止添加或删除场景中的元素
    - 禁止改变相机角度或透视
-${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}
+${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHollowDesign ? '   - 绝对禁止遮挡镂空区域或填充透明部分\n' : ''}
 【输出要求】
-输出应该看起来像原始样机照片，但产品表面展示了图2的新图案，其他一切保持不变。${preserveFaces ? '人脸必须清晰可辨。' : ''}`;
+输出应该看起来像原始样机照片，但产品表面展示了图2的新图案，其他一切保持不变。${preserveFaces ? '人脸必须清晰可辨。' : ''}${isHollowDesign ? '镂空区域必须保持透明可见。' : ''}`;
     
     setPrompt(template);
   };
@@ -381,7 +393,7 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}
             referenceImages: [mockup.preview, product.preview],
             model: 'gpt-image-2-edit',
             size: '1024x1024',
-            quality: 'high',
+            quality: 'medium',
             n: 1,
           }),
           signal,
@@ -426,6 +438,66 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}
 
     setIsGenerating(false);
     abortControllerRef.current = null;
+  };
+
+  // 重新生成单个结果
+  const regenerateResult = async (resultId: string) => {
+    const result = results.find(r => r.id === resultId);
+    if (!result) return;
+    
+    const mockup = mockupFiles.find(m => m.id === result.mockupId);
+    const product = productFiles.find(p => p.id === result.productId);
+    
+    if (!mockup || !product) {
+      console.error('[Toolbox] 无法找到对应的样机图或产品图案');
+      return;
+    }
+
+    // 更新状态为生成中
+    setResults(prev => prev.map(r => 
+      r.id === resultId ? { ...r, status: 'generating', error: undefined } : r
+    ));
+
+    try {
+      // 构建提示词
+      const finalPrompt = prompt || `将图2印在图1的衣服上。图1是样机图，图2是需要应用的产品图案。保持图1的场景、光线和阴影不变，只将图2的图案应用到图1的产品上。`;
+      
+      // 调用 API 生成图片
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: finalPrompt,
+          referenceImages: [mockup.preview, product.preview],
+          model: 'gpt-image-2-edit',
+          size: '1024x1024',
+          quality: 'medium',
+          n: 1,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.url) {
+        setResults(prev => prev.map(r => 
+          r.id === resultId ? { ...r, status: 'completed', resultUrl: data.url } : r
+        ));
+      } else {
+        throw new Error(data.error || 'Generation failed');
+      }
+    } catch (error) {
+      setResults(prev => prev.map(r => 
+        r.id === resultId ? { 
+          ...r, 
+          status: 'failed', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        } : r
+      ));
+    }
   };
 
   // 中止生成
@@ -631,6 +703,25 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}
             </div>
           </div>
 
+          {/* 镂空/铁艺设计选项 */}
+          <div className="flex items-start gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <input
+              type="checkbox"
+              id="hollow-design"
+              checked={isHollowDesign}
+              onChange={(e) => setIsHollowDesign(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+            />
+            <div className="flex-1">
+              <label htmlFor="hollow-design" className="text-sm font-medium text-purple-800 cursor-pointer">
+                镂空/铁艺/金属字设计
+              </label>
+              <p className="text-xs text-purple-600 mt-0.5">
+                勾选后AI会保持镂空区域透明，避免字母被遮挡或填充
+              </p>
+            </div>
+          </div>
+
           {/* 提示词设置 */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -789,14 +880,28 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}
                           {result.status === 'failed' && '失败'}
                         </span>
                       </div>
-                      {result.status === 'completed' && result.resultUrl && (
-                        <button
-                          onClick={() => downloadResult(result.resultUrl!, `result-${result.id}.png`)}
-                          className="text-gray-400 hover:text-gray-600"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {/* 重新生成按钮 - 失败或已完成都可以重新生成 */}
+                        {(result.status === 'failed' || result.status === 'completed') && (
+                          <button
+                            onClick={() => regenerateResult(result.id)}
+                            disabled={result.status === 'generating'}
+                            className="p-1 text-gray-400 hover:text-blue-500 disabled:opacity-50"
+                            title="重新生成"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${result.status === 'generating' ? 'animate-spin' : ''}`} />
+                          </button>
+                        )}
+                        {result.status === 'completed' && result.resultUrl && (
+                          <button
+                            onClick={() => downloadResult(result.resultUrl!, `result-${result.id}.png`)}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                            title="下载"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* 图片预览 */}
