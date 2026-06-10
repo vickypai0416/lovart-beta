@@ -646,7 +646,7 @@ export default function ImageGeneratorWorkflow() {
           {generatedImages.length > 0 || isGenerating ? (
             <div className="space-y-6">
               {generatedImages.length > 0 && (
-                <div className="mt-3 pt-3">
+                  <div className="mt-3 pt-3">
                   {generatedImages.length === 1 ? (
                     <div className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer" onClick={() => setPreviewImage(generatedImages[0])}>
                       <img
@@ -676,7 +676,7 @@ export default function ImageGeneratorWorkflow() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className={`grid gap-3 ${generatedImages.length === 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
+                      <div className={`grid gap-3 ${generatedImages.length === 2 ? 'grid-cols-2' : generatedImages.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         {generatedImages.map((url, index) => (
                           <div key={index} className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer" onClick={() => setPreviewImage(url)}>
                             <img
