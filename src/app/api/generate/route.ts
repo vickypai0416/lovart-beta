@@ -12,7 +12,7 @@ const SUPPORTED_EDIT_SIZES = new Set([
   '1024x1024', '1024x1536', '1536x1024',
   '2048x2048', '2048x1536', '1536x2048', '2048x1152', '1152x2048',
   // 新增尺寸
-  '2880x2880', '2416x1008', '1664x1008', '1472x3040', '1088x3264',
+  '2880x2880', '2416x1008', '1664x1008', '1472x3040', '1088x3264', '1024x3840',
 ]);
 
 function normalizeEditSize(width: number, height: number): string {
@@ -320,9 +320,13 @@ export async function POST(request: NextRequest) {
           formData.append('prompt', promptForEdit);
           formData.append('model', modelName);
           formData.append('size', editSize);
+          if (quality) {
+            formData.append('quality', quality);
+          }
 
           console.log('[Generate API] 发送请求到:', endpoint, '(images/edits)');
           console.log('[Generate API] 参考图片数量:', imageBlobs.length);
+          console.log('[Generate API] 画质设置:', quality);
 
           const response = await fetch(endpoint, {
             method: 'POST',

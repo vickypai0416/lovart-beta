@@ -184,8 +184,8 @@ export default function ImageGeneratorWorkflow() {
     { value: '2880x2880', label: '1:1 大方形-九宫格用' },
     { value: '2416x1008', label: 'A+ 电脑端' },
     { value: '1664x1008', label: 'A+ 移动端' },
-    { value: '1472x3040', label: '电脑端长图' },
-    { value: '1088x3264', label: '移动端长图' },
+    { value: '1088x3264', label: '电脑端长图' },
+    { value: '1024x3840', label: '移动端长图' },
   ];
 
   const presetTemplates = [
