@@ -185,7 +185,7 @@ export default function ImageGeneratorWorkflow() {
     { value: '2416x1008', label: 'A+ 电脑端' },
     { value: '1664x1008', label: 'A+ 移动端' },
     { value: '1088x3264', label: '电脑端长图' },
-    { value: '1024x3840', label: '移动端长图' },
+    { value: '1024x3072', label: '移动端长图' },
   ];
 
   const presetTemplates = [
