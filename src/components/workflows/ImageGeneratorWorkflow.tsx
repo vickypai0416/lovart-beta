@@ -184,8 +184,8 @@ export default function ImageGeneratorWorkflow() {
     { value: '2880x2880', label: '1:1 大方形-九宫格用' },
     { value: '1024x1365', label: '4:3 竖版' },
     { value: '1365x1024', label: '4:3 横版' },
-    { value: '1024x576', label: '16:9 横版' },
-    { value: '576x1024', label: '16:9 竖版' },
+    { value: '1792x1008', label: '16:9 横版' },
+    { value: '1008x1792', label: '16:9 竖版' },
     { value: '1088x3264', label: '电脑端长图' },
     { value: '1024x3072', label: '移动端长图' },
   ];
@@ -217,8 +217,6 @@ export default function ImageGeneratorWorkflow() {
     setGeneratedImages([]); // 清空之前生成的图片
     const startTime = Date.now();
     const clientRequestId = `image-generator-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-    let shouldContinue = true;
 
     const cleanupAndExit = () => {
       console.log(`[Generate] 清理并退出，isGenerating: ${isGeneratingRef.current}`);
@@ -379,7 +377,14 @@ export default function ImageGeneratorWorkflow() {
 
         const rawText = await response.text();
         console.log(`[Generate] Response body (first 500 chars):`, rawText.substring(0, 500));
-        let result: any = null;
+        let result: {
+          success?: boolean;
+          status?: string;
+          url?: string;
+          urls?: string[];
+          error?: string;
+          message?: string;
+        } | null = null;
 
         try {
           result = rawText ? JSON.parse(rawText) : null;
@@ -406,7 +411,14 @@ export default function ImageGeneratorWorkflow() {
           break;
         }
 
-        console.log(`[Generate] Parsed result:`, JSON.stringify(result, null, 2).substring(0, 500));
+        console.log(`[Generate] Parsed result summary:`, {
+          success: result?.success,
+          status: result?.status,
+          hasUrl: Boolean(result?.url),
+          urlCount: Array.isArray(result?.urls) ? result.urls.length : 0,
+          error: result?.error,
+          message: result?.message,
+        });
 
         if (response.status === 202 && result?.status === 'pending') {
           console.log(`[Generate] 收到202响应，进入恢复轮询`);

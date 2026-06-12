@@ -3,6 +3,8 @@ import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/ima
 import { getImageEditModelConfig, getModelConfig } from '@/lib/image-models';
 import { createGeneration, getAllGenerationRecords, updateGeneration } from '@/lib/analytics';
 import { parseUpstreamApiError } from '@/lib/upstream-api-error';
+import { uploadImageToHost } from '@/lib/image-host';
+import { uploadImageToR2 } from '@/lib/r2-storage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -14,7 +16,7 @@ const SUPPORTED_EDIT_SIZES = new Set([
   // 新增尺寸
   '2880x2880', '1472x3040', '1088x3264', '1024x3072',
   // 比例尺寸
-  '1024x1365', '1365x1024', '1024x576', '576x1024',
+  '1024x1365', '1365x1024', '1792x1008', '1008x1792',
 ]);
 
 function normalizeEditSize(width: number, height: number): string {
@@ -81,15 +83,30 @@ function shouldKeepPendingForRecovery(error: unknown, clientRequestId?: string):
   return error.name === 'AbortError' || error.message === 'fetch failed';
 }
 
-function extractImageUrls(data: unknown): string[] {
+async function extractImageUrls(data: unknown): Promise<string[]> {
   const imageUrls: string[] = [];
   const payload = data as { data?: Array<{ b64_json?: string; url?: string }>; url?: string };
 
   if (payload.data && payload.data.length > 0) {
-    for (const item of payload.data) {
+    for (const [index, item] of payload.data.entries()) {
       if (item.b64_json) {
-        const b64 = item.b64_json;
-        imageUrls.push(b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`);
+        const b64 = item.b64_json.startsWith('data:') ? item.b64_json.split(',')[1] : item.b64_json;
+        const buffer = Buffer.from(b64, 'base64');
+        const filename = `generated-${Date.now()}-${index}.png`;
+
+        try {
+          const hostedUrl = await uploadImageToHost(buffer, filename);
+          imageUrls.push(hostedUrl);
+        } catch (hostError) {
+          console.error('[Generate API] 上传 base64 图片到图床失败，尝试 R2:', hostError);
+          try {
+            const r2Url = await uploadImageToR2(buffer, filename, 'image/png');
+            imageUrls.push(r2Url);
+          } catch (r2Error) {
+            console.error('[Generate API] 上传 base64 图片到 R2 也失败:', r2Error);
+            throw new Error('图片已生成，但转存图片失败，无法返回可访问 URL');
+          }
+        }
       } else if (item.url) {
         imageUrls.push(item.url);
       }
@@ -322,6 +339,7 @@ export async function POST(request: NextRequest) {
           formData.append('prompt', promptForEdit);
           formData.append('model', modelName);
           formData.append('size', editSize);
+          formData.append('response_format', 'url');
           if (quality) {
             formData.append('quality', quality);
           }
@@ -381,7 +399,7 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          const imageUrls = extractImageUrls(data);
+          const imageUrls = await extractImageUrls(data);
 
           if (imageUrls.length > 0) {
             console.log(`[Generate API] 第 ${i + 1} 张图片生成成功`);
@@ -475,6 +493,7 @@ export async function POST(request: NextRequest) {
           prompt: finalPrompt,
           n: 1,
           size: `${width}x${height}`,
+          response_format: 'url',
         };
 
         if (quality) {
@@ -538,7 +557,7 @@ export async function POST(request: NextRequest) {
           );
         }
         
-        const imageUrls = extractImageUrls(data);
+        const imageUrls = await extractImageUrls(data);
         
         if (imageUrls.length > 0) {
           console.log(`[Generate API] 第 ${i + 1} 张图片生成成功`);

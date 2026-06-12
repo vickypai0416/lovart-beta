@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Info, Sparkles, Bot, LayoutGrid, Wand2, Calculator, Gem } from 'lucide-react';
+import { X, Info, Sparkles, Bot, LayoutGrid, Wand2, Calculator, Gem, Grid3X3 } from 'lucide-react';
 
 // 工作流类型
-export type WorkflowType = 'chat' | 'image-generator' | 'ecommerce' | 'prompt-analyzer' | 'toolbox' | 'apiplus';
+export type WorkflowType = 'chat' | 'image-generator' | 'product-detail' | 'ecommerce' | 'prompt-analyzer' | 'toolbox' | 'apiplus';
 
 // 公告配置
 interface AnnouncementConfig {
@@ -26,6 +26,12 @@ const ANNOUNCEMENTS: Record<WorkflowType, AnnouncementConfig> = {
     title: '图片生成',
     description: '写出自己的需求描述进行生图，服务器储存有限无法设置上下文记忆。',
     tips: ['支持图生图', '可生成多张'],
+  },
+  'product-detail': {
+    icon: Grid3X3,
+    title: '详情页套图',
+    description: '一键生成6张标准电商详情页图片：主图、场景图、卖点图、细节图、尺寸图、生活图。',
+    tips: ['6张标准套图', '自动提示词生成', '批量下载'],
   },
   'ecommerce': {
     icon: LayoutGrid,

@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Wand2, Plus, Gem, Calculator } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Wand2, Plus, Gem, Calculator, Grid3X3 } from 'lucide-react';
 import { saveChatImageToHistory, getChatHistory, getChatHistoryWithUrls, deleteChatImage, clearChatHistory, ChatImageHistoryItem, saveChatMessages, getChatMessages } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
 import { PERSONAS, PersonaConfig } from '@/lib/persona';
@@ -22,7 +22,8 @@ import ImageGeneratorWorkflow from '@/components/workflows/ImageGeneratorWorkflo
 import DeepEcommerceWorkflow from '@/components/deep-workflow/DeepEcommerceWorkflow';
 import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
 import ToolboxWorkflow from '@/components/workflows/ToolboxWorkflow';
-import AnnouncementBar from '@/components/AnnouncementBar';
+import ProductDetailWorkflow from '@/components/workflows/ProductDetailWorkflow';
+import AnnouncementBar, { WorkflowType } from '@/components/AnnouncementBar';
 import { downloadImageByUrl } from '@/lib/download';
 import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -108,7 +109,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 }
 
 export default function Home() {
-  const [currentWorkflow, setCurrentWorkflow] = useState('chat');
+  const [currentWorkflow, setCurrentWorkflow] = useState<WorkflowType>('chat');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -2101,6 +2102,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
             {[
               { id: 'chat', name: '快速九宫格', icon: Bot },
               { id: 'image-generator', name: '图片生成', icon: Sparkles },
+              { id: 'product-detail', name: '详情页套图', icon: Grid3X3 },
               { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
               { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
               { id: 'toolbox', name: '工具箱', icon: Calculator },
@@ -2111,7 +2113,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
               return (
                 <button
                   key={workflow.id}
-                  onClick={() => setCurrentWorkflow(workflow.id)}
+                  onClick={() => setCurrentWorkflow(workflow.id as WorkflowType)}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'bg-gray-900 text-white'
@@ -2218,6 +2220,9 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         
         <div style={{ display: currentWorkflow === 'image-generator' ? 'flex' : 'none' }} className="flex-1 overflow-hidden">
           <ImageGeneratorWorkflow />
+        </div>
+        <div style={{ display: currentWorkflow === 'product-detail' ? 'flex' : 'none' }} className="flex-1 overflow-hidden">
+          <ProductDetailWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'prompt-analyzer' ? 'flex' : 'none' }} className="flex-1 overflow-hidden">
           <PromptAnalyzerWorkflow />
@@ -2792,14 +2797,15 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
   );
 }
 interface WorkflowTabsProps {
-  currentWorkflow: string;
-  onWorkflowChange: (workflow: string) => void;
+  currentWorkflow: WorkflowType;
+  onWorkflowChange: (workflow: WorkflowType) => void;
 }
 
 function WorkflowTabs({ currentWorkflow, onWorkflowChange }: WorkflowTabsProps) {
   const workflows = [
     { id: 'chat', name: '对话助手', icon: Bot },
     { id: 'image-generator', name: '图片生成', icon: Sparkles },
+    { id: 'product-detail', name: '详情页套图', icon: Grid3X3 },
     { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
   ];
 
@@ -2812,7 +2818,7 @@ function WorkflowTabs({ currentWorkflow, onWorkflowChange }: WorkflowTabsProps) 
         return (
           <button
             key={workflow.id}
-            onClick={() => onWorkflowChange(workflow.id)}
+            onClick={() => onWorkflowChange(workflow.id as WorkflowType)}
             className={`
               flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all
               ${isActive
