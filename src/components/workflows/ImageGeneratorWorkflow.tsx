@@ -182,8 +182,10 @@ export default function ImageGeneratorWorkflow() {
     { value: '1024x1536', label: '2:3 竖版' },
     { value: '1536x1024', label: '3:2 横版' },
     { value: '2880x2880', label: '1:1 大方形-九宫格用' },
-    { value: '2416x1008', label: 'A+ 电脑端' },
-    { value: '1664x1008', label: 'A+ 移动端' },
+    { value: '1024x1365', label: '4:3 竖版' },
+    { value: '1365x1024', label: '4:3 横版' },
+    { value: '1024x576', label: '16:9 横版' },
+    { value: '576x1024', label: '16:9 竖版' },
     { value: '1088x3264', label: '电脑端长图' },
     { value: '1024x3072', label: '移动端长图' },
   ];
