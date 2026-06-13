@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Image as ImageIcon, 
   Upload, 
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import BlankMockupCleanerWorkflow from './BlankMockupCleanerWorkflow';
 
 // 文件信息接口
 interface MockupFile {
@@ -34,12 +35,14 @@ interface ProductFile {
   name: string;
 }
 
+type GenerationStatus = 'pending' | 'generating' | 'completed' | 'failed';
+
 // 生成结果接口
 interface GenerationResult {
   id: string;
   mockupId: string;
   productId: string;
-  status: 'pending' | 'generating' | 'completed' | 'failed';
+  status: GenerationStatus;
   resultUrl?: string;
   error?: string;
 }
@@ -60,7 +63,88 @@ const PRODUCT_TYPE_PRESETS = [
   '钥匙扣',
 ];
 
+const OUTPUT_SIZE_PRESETS = [
+  { size: '1024x1024', ratio: 1 },
+  { size: '1365x1024', ratio: 1365 / 1024 },
+  { size: '1536x1024', ratio: 1536 / 1024 },
+  { size: '1792x1008', ratio: 1792 / 1008 },
+  { size: '1024x1365', ratio: 1024 / 1365 },
+  { size: '1024x1536', ratio: 1024 / 1536 },
+  { size: '1008x1792', ratio: 1008 / 1792 },
+];
+
+function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+    img.onerror = () => reject(new Error('无法读取样机图尺寸'));
+    img.src = src;
+  });
+}
+
+function getBestOutputSizeForImage(width: number, height: number): string {
+  if (!width || !height) return '1024x1024';
+
+  const ratio = width / height;
+  return OUTPUT_SIZE_PRESETS.reduce((best, preset) => {
+    const bestDistance = Math.abs(best.ratio - ratio);
+    const currentDistance = Math.abs(preset.ratio - ratio);
+    return currentDistance < bestDistance ? preset : best;
+  }).size;
+}
+
+function getTargetProductName(productType: string): string {
+  const normalized = productType.trim().toLowerCase();
+  if (!normalized) return 'target product';
+  if (normalized.includes('毛毯') || normalized.includes('毯') || normalized.includes('blanket')) return 'blanket';
+  if (normalized.includes('t恤') || normalized.includes('衣服') || normalized.includes('shirt') || normalized.includes('卫衣') || normalized.includes('hoodie')) return 'clothing item';
+  if (normalized.includes('马克杯') || normalized.includes('杯') || normalized.includes('mug') || normalized.includes('cup')) return 'mug';
+  if (normalized.includes('抱枕') || normalized.includes('枕') || normalized.includes('pillow') || normalized.includes('cushion')) return 'pillow';
+  if (normalized.includes('手机壳') || normalized.includes('phone')) return 'phone case';
+  if (normalized.includes('帆布袋') || normalized.includes('包') || normalized.includes('bag') || normalized.includes('tote')) return 'bag';
+  return productType.trim();
+}
+
+async function requestGeneratedImage({
+  prompt,
+  referenceImages,
+  size,
+  signal,
+}: {
+  prompt: string;
+  referenceImages: string[];
+  size: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const response = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      referenceImages,
+      model: 'gpt-image-2-edit',
+      size,
+      quality: 'medium',
+      n: 1,
+    }),
+    signal,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || `HTTP error! status: ${response.status}`);
+  }
+
+  if (data?.success && data.url) {
+    return data.url;
+  }
+
+  throw new Error(data?.error || 'Generation failed');
+}
+
 export default function ToolboxWorkflow() {
+  const [activeTool, setActiveTool] = useState<'batch-replace' | 'blank-cleaner'>('batch-replace');
   // 样机图列表
   const [mockupFiles, setMockupFiles] = useState<MockupFile[]>([]);
   // 产品图案列表
@@ -316,6 +400,47 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const updateResultStatus = (resultId: string, status: GenerationStatus, error?: string) => {
+    setResults(prev => prev.map(r =>
+      r.id === resultId ? { ...r, status, error } : r
+    ));
+  };
+
+  const buildDirectReplacementPrompt = (targetProduct: string) => {
+    if (prompt.trim()) return prompt.trim();
+
+    return `Use image 1 as the base mockup photo. Replace ONLY the ${targetProduct} in image 1 with the product/design from image 2.
+
+Preserve the exact position, size, shape, folds, draping, perspective, shadows, highlights, texture, edges, and occlusion of the original ${targetProduct}. The new design must stay strictly inside the original ${targetProduct} boundaries.
+
+Do not apply the design to the person, face, skin, clothing, chair, table, background, text overlays, props, or any other area. Keep the scene, lighting, typography, camera angle, and composition unchanged.
+
+The result should look like the same photo from image 1, with only the ${targetProduct} replaced by image 2's design.`;
+  };
+
+  const generateMockupReplacement = async ({
+    resultId,
+    mockupPreview,
+    productPreview,
+    outputSize,
+    signal,
+  }: {
+    resultId: string;
+    mockupPreview: string;
+    productPreview: string;
+    outputSize: string;
+    signal?: AbortSignal;
+  }): Promise<string> => {
+    const targetProduct = getTargetProductName(productType);
+    updateResultStatus(resultId, 'generating');
+    return requestGeneratedImage({
+      prompt: buildDirectReplacementPrompt(targetProduct),
+      referenceImages: [mockupPreview, productPreview],
+      size: outputSize,
+      signal,
+    });
+  };
+
   // 开始批量生成
   const startBatchGeneration = async () => {
     // 防止重复点击导致的重复执行
@@ -380,38 +505,19 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
       ));
 
       try {
-        // 构建提示词，明确标记图1和图2
-        const finalPrompt = prompt || `将图2印在图1的衣服上。图1是样机图，图2是需要应用的产品图案。保持图1的场景、光线和阴影不变，只将图2的图案应用到图1的产品上。`;
-        
-        // 调用 API 生成图片
-        // 注意：mockup.preview 作为图1，product.preview 作为图2
-        const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: finalPrompt,
-            referenceImages: [mockup.preview, product.preview],
-            model: 'gpt-image-2-edit',
-            size: '1024x1024',
-            quality: 'medium',
-            n: 1,
-          }),
+        const mockupDimensions = await getImageDimensions(mockup.preview);
+        const outputSize = getBestOutputSizeForImage(mockupDimensions.width, mockupDimensions.height);
+        const finalUrl = await generateMockupReplacement({
+          resultId: result.id,
+          mockupPreview: mockup.preview,
+          productPreview: product.preview,
+          outputSize,
           signal,
         });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        
-        if (data.success && data.url) {
-          setResults(prev => prev.map(r => 
-            r.id === result.id ? { ...r, status: 'completed', resultUrl: data.url } : r
-          ));
-        } else {
-          throw new Error(data.error || 'Generation failed');
-        }
+        setResults(prev => prev.map(r =>
+          r.id === result.id ? { ...r, status: 'completed', resultUrl: finalUrl, error: undefined } : r
+        ));
       } catch (error) {
         // 如果是中止错误，不显示为失败
         if (error instanceof Error && error.name === 'AbortError') {
@@ -459,42 +565,24 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
     ));
 
     try {
-      // 构建提示词
-      const finalPrompt = prompt || `将图2印在图1的衣服上。图1是样机图，图2是需要应用的产品图案。保持图1的场景、光线和阴影不变，只将图2的图案应用到图1的产品上。`;
-      
-      // 调用 API 生成图片
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: finalPrompt,
-          referenceImages: [mockup.preview, product.preview],
-          model: 'gpt-image-2-edit',
-          size: '1024x1024',
-          quality: 'medium',
-          n: 1,
-        }),
+      const mockupDimensions = await getImageDimensions(mockup.preview);
+      const outputSize = getBestOutputSizeForImage(mockupDimensions.width, mockupDimensions.height);
+      const finalUrl = await generateMockupReplacement({
+        resultId,
+        mockupPreview: mockup.preview,
+        productPreview: product.preview,
+        outputSize,
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.success && data.url) {
-        setResults(prev => prev.map(r => 
-          r.id === resultId ? { ...r, status: 'completed', resultUrl: data.url } : r
-        ));
-      } else {
-        throw new Error(data.error || 'Generation failed');
-      }
+      setResults(prev => prev.map(r =>
+        r.id === resultId ? { ...r, status: 'completed', resultUrl: finalUrl, error: undefined } : r
+      ));
     } catch (error) {
-      setResults(prev => prev.map(r => 
-        r.id === resultId ? { 
-          ...r, 
-          status: 'failed', 
-          error: error instanceof Error ? error.message : 'Unknown error' 
+      setResults(prev => prev.map(r =>
+        r.id === resultId ? {
+          ...r,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error'
         } : r
       ));
     }
@@ -541,7 +629,36 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
   const failedTasks = results.filter(r => r.status === 'failed').length;
 
   return (
-    <div className="h-full flex bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white">
+        <button
+          onClick={() => setActiveTool('batch-replace')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTool === 'batch-replace'
+              ? 'bg-gray-900 text-white'
+              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+          }`}
+        >
+          批量样机替换
+        </button>
+        <button
+          onClick={() => setActiveTool('blank-cleaner')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTool === 'blank-cleaner'
+              ? 'bg-gray-900 text-white'
+              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+          }`}
+        >
+          白底样机清洗
+        </button>
+      </div>
+
+      {activeTool === 'blank-cleaner' ? (
+        <div className="flex-1 min-h-0 p-4 bg-gray-50">
+          <BlankMockupCleanerWorkflow />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex bg-white overflow-hidden">
       {/* 左侧：上传区域 */}
       <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
         <div className="p-4 border-b border-gray-200">
@@ -803,7 +920,7 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
       </div>
 
       {/* 右侧：结果展示 */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col">
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <div>
@@ -837,7 +954,7 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
           </div>
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="p-6">
           {results.length === 0 ? (
             <div className="h-[calc(100vh-300px)] flex flex-col items-center justify-center text-gray-400">
@@ -885,11 +1002,10 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
                         {(result.status === 'failed' || result.status === 'completed') && (
                           <button
                             onClick={() => regenerateResult(result.id)}
-                            disabled={result.status === 'generating'}
                             className="p-1 text-gray-400 hover:text-blue-500 disabled:opacity-50"
                             title="重新生成"
                           >
-                            <RefreshCw className={`w-4 h-4 ${result.status === 'generating' ? 'animate-spin' : ''}`} />
+                            <RefreshCw className="w-4 h-4" />
                           </button>
                         )}
                         {result.status === 'completed' && result.resultUrl && (
@@ -905,12 +1021,12 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
                     </div>
 
                     {/* 图片预览 */}
-                    <div className="aspect-square bg-gray-200 relative">
+                    <div className="aspect-[4/3] bg-gray-200 relative">
                       {result.status === 'completed' && result.resultUrl ? (
                         <img
                           src={result.resultUrl}
                           alt="Generated"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                       ) : result.status === 'failed' ? (
                         <div className="w-full h-full flex items-center justify-center">
@@ -952,6 +1068,8 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
           </div>
         </ScrollArea>
       </div>
+        </div>
+      )}
     </div>
   );
 }

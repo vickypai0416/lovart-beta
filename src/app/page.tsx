@@ -2171,8 +2171,6 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                   <SelectItem value="2880x2880">2880×2880 (1:1 大方形-九宫格用)</SelectItem>
                   <SelectItem value="2416x1008">2416×1008 (A+ 电脑端)</SelectItem>
                   <SelectItem value="1664x1008">1664×1008 (A+ 移动端)</SelectItem>
-                  <SelectItem value="1472x3040">1472×3040 (电脑端长图)</SelectItem>
-                  <SelectItem value="1088x3264">1088×3264 (移动端长图)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2230,7 +2228,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         <div style={{ display: currentWorkflow === 'ecommerce' ? 'block' : 'none' }} className="flex-1 overflow-y-auto">
           <DeepEcommerceWorkflow />
         </div>
-        <div style={{ display: currentWorkflow === 'toolbox' ? 'flex' : 'none' }} className="flex-1 p-4">
+        <div style={{ display: currentWorkflow === 'toolbox' ? 'flex' : 'none' }} className="flex-1 min-h-0 overflow-hidden p-4">
           <ToolboxWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'apiplus' ? 'flex' : 'none' }} className="flex-1 bg-white">

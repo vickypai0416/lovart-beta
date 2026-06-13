@@ -186,8 +186,6 @@ export default function ImageGeneratorWorkflow() {
     { value: '1365x1024', label: '4:3 横版' },
     { value: '1792x1008', label: '16:9 横版' },
     { value: '1008x1792', label: '16:9 竖版' },
-    { value: '1088x3264', label: '电脑端长图' },
-    { value: '1024x3072', label: '移动端长图' },
   ];
 
   const presetTemplates = [
