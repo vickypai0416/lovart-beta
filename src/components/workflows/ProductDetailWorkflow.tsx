@@ -178,6 +178,60 @@ export default function ProductDetailWorkflow() {
     cardsRef.current = cards;
   }, [cards]);
 
+  // 缩略图缓存：将原图压缩成 webp data URL 用于显示；下载仍用原图
+  const thumbCacheRef = useRef<Map<string, string>>(new Map());
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+
+  const getWebpThumb = useCallback(async (url: string, maxSide = 480): Promise<string | null> => {
+    if (!url) return null;
+    if (thumbCacheRef.current.has(url)) {
+      return thumbCacheRef.current.get(url)!;
+    }
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = url;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('image load failed'));
+      });
+      const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+      const w = Math.max(1, Math.round((img.naturalWidth || img.width) * ratio));
+      const h = Math.max(1, Math.round((img.naturalHeight || img.height) * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, w, h);
+      const webp = canvas.toDataURL('image/webp', 0.85);
+      thumbCacheRef.current.set(url, webp);
+      return webp;
+    } catch (e) {
+      console.warn('[ProductDetail] 生成 webp 缩略图失败，使用原图:', e);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, string> = {};
+      for (const card of cards) {
+        if (card.status === 'completed' && card.imageUrl && !thumbs[card.imageUrl]) {
+          const webp = await getWebpThumb(card.imageUrl);
+          if (webp) updates[card.imageUrl] = webp;
+        }
+      }
+      if (!cancelled && Object.keys(updates).length > 0) {
+        setThumbs(prev => ({ ...prev, ...updates }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [cards, getWebpThumb, thumbs]);
+
   // 产品图上传和分析状态（模仿Amazon Listing）
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -341,6 +395,16 @@ export default function ProductDetailWorkflow() {
   const blanketPhysics = `the blanket must behave like a real soft flannel blanket, with natural fabric draping, visible folds and wrinkles where the body creates pressure points, design follows fabric deformation with 5-10% artwork softening, printed photo area shows fabric texture and edge fringe, natural thickness along edges, realistic contact shadows where the blanket touches body or surfaces, the blanket appears physically soft and flexible, NOT a flat poster or rigid board`;
   const blanketOcclusion = `the printed design is PARTIALLY VISIBLE ONLY with significant portions OBSCURED by natural folds and draping, the design is INTERRUPTED and DEFORMED by fabric physics, the blanket is NEVER laid flat or posed to display the full design, natural fabric behavior takes priority over design visibility, showcasing the complete printed artwork is FORBIDDEN`;
 
+  // 全局负面约束：禁止礼盒/包装，保护定制图案
+  const noPackagingClause = `STRICT PROHIBITIONS — DO NOT GENERATE ANY OF THE FOLLOWING: gift box, packaging, cardboard box, retail box, product box, shipping box, paper bag, plastic bag, plastic wrap, wrapping paper, gift wrap, ribbon, bow, twine, label sticker, price tag, bar code, envelope, container, wrapping material, foam, bubble wrap, or any delivery / retail packaging of any kind. The product is shown BARE / UNBOXED / as the standalone item, never inside or wrapped by any container.`;
+
+  const productIntegrityClause = `STRICT PRODUCT INTEGRITY RULES:
+1. Treat the uploaded product as ONE SINGLE INDIVISIBLE UNIT. Do not split it, do not generate loose parts, do not duplicate it, and do not rearrange its components.
+2. The customized artwork on the product (logos, monograms, names, photos, engravings, printed designs, embossed/laser-engraved text) is LOCKED and must remain EXACTLY as shown in the reference. Do NOT alter, redraw, reinterpret, replace, or re-typeset the customization.
+3. Do NOT add new customization, decoration, or text on the product that is not in the reference.
+4. Preserve the product's color, material, shape, proportions, stitching, edges, hardware, and surface texture.
+5. You may change only the environment, lighting, surface it rests on, camera angle, and background around the product. The product itself is FROZEN.`;
+
   // 生成Hero Banner提示词 - Hero Banner主题，强调真实物体物理特性
   const generateHeroPrompt = (product: string, sellingPoint: string, device: DeviceType): string => {
     const valueProposition = sellingPoint || 'A Gift Made for You';
@@ -348,7 +412,7 @@ export default function ProductDetailWorkflow() {
     const style = getCurrentColorStyle();
     const isBlanket = isBlanketProduct(product);
     const physicsLine = isBlanket ? `${product} must ${blanketPhysics}. ${blanketOcclusion}` : `${product} must behave like a real physical object with material-appropriate rendering, visible surface details, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board. The product is naturally placed or used by a person, the design is fully visible and not occluded.`;
-    return `Professional Amazon A+ Hero Banner ${size.label}, ${product} as main subject, ${physicsLine}, elegant emotional figure in background 30%, premium composition, MUST INCLUDE large hero headline "${valueProposition}" at top, secondary headline featuring the product category name, subheadline "Personalized Just for You", feature icons with labels: "CUSTOMIZABLE", "CRAFTED QUALITY", "MADE TO CELEBRATE", rich typography design, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${style.visualStyle}, high-end advertising photography, 4K quality`;
+    return `Professional Amazon A+ Hero Banner ${size.label}, ${product} as main subject, ${physicsLine}, elegant emotional figure in background 30%, premium composition, MUST INCLUDE large hero headline "${valueProposition}" at top, secondary headline featuring the product category name, subheadline "Personalized Just for You", feature icons with labels: "CUSTOMIZABLE", "CRAFTED QUALITY", "MADE TO CELEBRATE", rich typography design, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${style.visualStyle}, high-end advertising photography, 4K quality\n\n${noPackagingClause}\n\n${productIntegrityClause}`;
   };
 
   // 生成Personalization提示词 - 展示定制效果并包含简单定制说明
@@ -357,7 +421,7 @@ export default function ProductDetailWorkflow() {
     const style = getCurrentColorStyle();
     const isBlanket = isBlanketProduct(product);
     const physicsLine = isBlanket ? `${product} must ${blanketPhysics}. ${blanketOcclusion}` : `${product} must behave like a real physical object with material-appropriate rendering, natural surface details, edges, thickness, contact shadows. The product is naturally placed or held by a person, the design is fully visible and not occluded.`;
-    return `Amazon A+ Personalization module ${size.label}, ${product} showing the personalized custom design result with simple customization steps, ${physicsLine}, ${product} displays the custom photo/name/message printed on it in a beautiful lifestyle setting, MUST INCLUDE clear step-by-step customization guide: "Step 1: Upload Your Photo", "Step 2: Add Your Name", "Step 3: We Create Your Gift" with elegant icons, romantic/emotional headline like "Personalized Just for You" or "A Gift Made for You", elegant script typography, ${product} naturally displayed showing the custom print as a keepsake, warm sentimental atmosphere, ${style.colorPalette}, ${style.lightingStyle}, emotional gift photography emphasizing the personal connection`;
+    return `Amazon A+ Personalization module ${size.label}, ${product} showing the personalized custom design result with simple customization steps, ${physicsLine}, ${product} displays the customized design (name / logo / artwork / pattern) printed on it in a beautiful lifestyle setting, MUST INCLUDE a clear step-by-step customization guide: "Step 1: Upload Your Design", "Step 2: Add Your Name", "Step 3: We Create Your Gift" with elegant icons, romantic/emotional headline like "Personalized Just for You" or "A Gift Made for You", elegant script typography, ${product} naturally displayed showing the custom print as a keepsake, warm sentimental atmosphere, ${style.colorPalette}, ${style.lightingStyle}, emotional gift photography emphasizing the personal connection\n\n${noPackagingClause}\n\n${productIntegrityClause}`;
   };
 
   // 生成Emotional Story提示词
@@ -383,7 +447,7 @@ export default function ProductDetailWorkflow() {
         sceneSpecifics = `${customText} themed setting with appropriate decorations, atmosphere and visual elements that clearly represent ${customText}`;
       }
 
-      return `Amazon A+ Emotional Story module ${size.label}, ${customText} celebration scene, ${product} as the perfect ${customText} gift, ${sceneSpecifics}, ${product} naturally integrated in ${customText} scene, ${physicsLine}, ${placementLine}, emotional ${customText} moment with person using or holding ${product} showing natural material behavior, authentic ${customText} joy and celebration, MUST INCLUDE visible ${customText} themed emotional headline "Celebrate Your ${customText}" or "The Thoughtful ${customText} Gift" prominently displayed, ${customText} decorative elements and themed props, heartfelt descriptive copy about ${customText} memories and celebration, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${customText} lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications`;
+      return `Amazon A+ Emotional Story module ${size.label}, ${customText} celebration scene, ${product} as the perfect ${customText} gift, ${sceneSpecifics}, ${product} naturally integrated in ${customText} scene, ${physicsLine}, ${placementLine}, emotional ${customText} moment with person using or holding ${product} showing natural material behavior, authentic ${customText} joy and celebration, MUST INCLUDE visible ${customText} themed emotional headline "Celebrate Your ${customText}" or "The Thoughtful ${customText} Gift" prominently displayed, ${customText} decorative elements and themed props, heartfelt descriptive copy about ${customText} memories and celebration, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${customText} lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications\n\n${noPackagingClause}\n\n${productIntegrityClause}`;
     }
 
     const emotionalHeadlines: Record<EmotionalScene, string> = {
@@ -396,10 +460,10 @@ export default function ProductDetailWorkflow() {
       custom: "Your Special Moment"
     };
     const headline = emotionalHeadlines[scene];
-    return `Amazon A+ Emotional Story module ${size.label}, ${sceneConfig.prompt}, ${product} naturally integrated in scene, ${physicsLine}, ${placementLine}, emotional human subjects naturally using or holding ${product} showing real material behavior, authentic moment of joy and connection, MUST INCLUDE visible emotional headline "${headline}" with supporting subtext, heartfelt descriptive copy, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications`;
+    return `Amazon A+ Emotional Story module ${size.label}, ${sceneConfig.prompt}, ${product} naturally integrated in scene, ${physicsLine}, ${placementLine}, emotional human subjects naturally using or holding ${product} showing real material behavior, authentic moment of joy and connection, MUST INCLUDE visible emotional headline "${headline}" with supporting subtext, heartfelt descriptive copy, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications\n\n${noPackagingClause}\n\n${productIntegrityClause}`;
   };
 
-  // 生成Features提示词（产品各种功能图片） - 居中标题 + 左右两侧功能标注的高级排版
+  // 生成Features提示词（产品各种功能图片） - 居中标题 + 4 个核心特点 + 定制选项的高级排版
   const generateFeaturesPrompt = (product: string, device: DeviceType): string => {
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
@@ -410,15 +474,21 @@ export default function ProductDetailWorkflow() {
 
     return `Amazon A+ Product Features module ${size.label}, ${product} feature highlights, ${physicsLine}.
 
+FRAMEWORK: Showcase 4 core product features of ${product} while also highlighting customization options and personalization possibilities, create clear visual hierarchy, and PRESERVE the original product's size and proportions exactly as the reference.
+
 LAYOUT — Premium e-commerce infographic composition:
 - TOP: large bold serif headline "Personalized Quality" centered at the top, with smaller sans-serif subtitle "Designed to Last, Made for You" directly underneath.
-- CENTER: ${product} as the hero subject, vertically centered, with 3 stacked variants/angles in different finishes or colorways to showcase the personalization range (e.g. engraved name on one, embossed logo on another, custom photo on the third).
-- SIDES: exactly 2 feature callouts on the LEFT and 2 on the RIGHT, each with a small circular line-art icon, a short feature name, and a one-line description. Use the labels: "Crafted Quality", "Custom Design", "Thoughtful Gift", "Built to Endure". Each callout is connected to the corresponding product detail with a thin dotted line pointing inward.
+- CENTER: ${product} as the hero subject, vertically centered, shown ONCE (a single instance, not multiple variants). Keep its original size, proportions, material, and customization exactly as in the reference. Do NOT duplicate, redesign, or generate parallel variants of the product.
+- SIDES: exactly 2 feature callouts on the LEFT and 2 on the RIGHT, each with a small circular line-art icon, a short feature name, and a one-line description. Use the labels: "Crafted Quality", "Custom Design", "Thoughtful Gift", "Built to Endure". Each callout is connected to the corresponding product detail with a thin dotted line pointing inward. One or two of the callouts should hint at the customization / personalization possibility (e.g. "Custom Design" can mention engraved name, logo, or pattern types that are realistic for the product).
 - BOTTOM: a small horizontal rounded badge or ribbon with a one-line quality promise such as "Crafted with Care, Shipped with Love".
 - TYPOGRAPHY: serif bold for the main headline, clean sans-serif for everything else. Use warm brown or charcoal text color, never pure black.
 - BACKGROUND: minimalist warm beige or off-white background with a soft contact shadow under the product to add depth.
 
-STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product photography, 4K quality`;
+STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product photography, 4K quality
+
+${noPackagingClause}
+
+${productIntegrityClause}`;
   };
 
   // 生成Lifestyle提示词
@@ -429,7 +499,7 @@ STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product
     const physicsLine = isBlanket
       ? `${product} must ${blanketPhysics}. ${blanketOcclusion}`
       : `${product} must behave like a real physical object with material-appropriate rendering, natural surface details, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board. The product is naturally used and the design is fully visible.`;
-    return `Amazon A+ Lifestyle module ${size.label}, ${product} in authentic everyday use scenario, aspirational lifestyle moment, product naturally integrated into daily routine, ${physicsLine}, warm and relatable atmosphere, MUST INCLUDE visible lifestyle headline and short descriptive text, brand messaging, lifestyle copywriting, inspirational quote or tagline, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with editorial text overlays`;
+    return `Amazon A+ Lifestyle module ${size.label}, ${product} in authentic everyday use scenario, aspirational lifestyle moment, product naturally integrated into daily routine, ${physicsLine}, warm and relatable atmosphere, MUST INCLUDE visible lifestyle headline and short descriptive text, brand messaging, lifestyle copywriting, inspirational quote or tagline, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with editorial text overlays\n\n${noPackagingClause}\n\n${productIntegrityClause}`;
   };
 
   // 生成多场景应用展示提示词（第5张图）
@@ -440,7 +510,7 @@ STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product
     const physicsLine = isBlanket
       ? `${blanketPhysics}. ${blanketOcclusion}`
       : `${product} must behave like a real physical object in every scene, natural material rendering, surface reflections, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board. The product is naturally used and the design is fully visible.`;
-    return `Amazon A+ Multi-Scene Applications module ${size.label}, ${product} showcased in 4 different authentic usage scenarios side by side with real people using the product, ${physicsLine}, intelligently choose 4 usage scenarios that are most natural and relevant to ${product} (for example: home/office/travel/outdoor or daily/celebration/gifting/relaxation, choose what fits the product type best), each scene shows a real person interacting with ${product} in a realistic way, MUST INCLUDE large headline "MADE FOR EVERY MOMENT" at top, subtitle "Versatile, Thoughtful, Personal", each scene with icon and short descriptive text label, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, professional lifestyle photography showing real people using the product in authentic everyday situations`;
+    return `Amazon A+ Multi-Scene Applications module ${size.label}, ${product} showcased in 4 different authentic everyday use scenario, aspirational lifestyle moment, product naturally integrated into daily routine,  side by side with real people using the product, ${physicsLine}, intelligently choose 4 usage scenarios that are most natural and relevant to ${product} (for example: home/office/travel/outdoor or daily/celebration/gifting/relaxation, choose what fits the product type best), each scene shows a real person interacting with ${product} in a realistic way, MUST INCLUDE large headline "MADE FOR EVERY MOMENT" at top, subtitle "Versatile, Thoughtful, Personal", each scene with icon and short descriptive text label, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, professional lifestyle photography showing real people using the product in authentic everyday situations\n\n${noPackagingClause}\n\n${productIntegrityClause}`;
   };
 
   // 生成单个卡片提示词
@@ -699,9 +769,10 @@ STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product
           {card.status === 'completed' && card.imageUrl ? (
             <>
               <img
-                src={card.imageUrl}
+                src={thumbs[card.imageUrl] || card.imageUrl}
                 alt={card.title}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                 <Eye className="w-8 h-8 text-white" />
@@ -1024,8 +1095,16 @@ STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product
           <button
             onClick={() => setPreviewImage(null)}
             className="absolute top-4 right-4 p-2 text-white hover:bg-white/20 rounded-full transition-colors"
+            title="关闭"
           >
             <X className="w-6 h-6" />
+          </button>
+          <button
+            onClick={() => downloadImageByUrl(previewImage, `aplus-preview-${Date.now()}.png`)}
+            className="absolute top-4 right-16 p-2 text-white hover:bg-white/20 rounded-full transition-colors"
+            title="下载原图"
+          >
+            <Download className="w-6 h-6" />
           </button>
           <img
             src={previewImage}

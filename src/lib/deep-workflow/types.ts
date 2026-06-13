@@ -131,6 +131,8 @@ export interface DeepWorkflowState {
     platform: string;
     selectedHolidays: string[];
     selectedAudiences: string[];
+    customHoliday?: string;
+    customAudience?: string;
     visualStyle: string;
     colorScheme: string;
     customColors?: CustomColorPalette;

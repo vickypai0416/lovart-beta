@@ -156,7 +156,7 @@ Product Information:
 - Material: ${analysis.material}
 - Selling Points: ${analysis.selling_points.join(', ')}
 - Target Audience: ${selectedAudiences.join(', ') || analysis.target_audience.join(', ')}
-- Holidays: ${selectedHolidays.join(', ') || analysis.recommended_holidays.join(', ')}
+- Holidays: ${selectedHolidays.join(', ') || '通用礼品场景（无特定节日）'}
 ${dimensionsInfo}
 
 User Preferences:
@@ -178,7 +178,7 @@ You MUST generate a harmonious 5-color palette based on this primary color, cons
    - ${selectedAudiences.join(', ') || analysis.target_audience.join(', ')}
 
 3. TARGET HOLIDAYS/OCCASIONS (Consider traditional colors and themes):
-   - ${selectedHolidays.join(', ') || analysis.recommended_holidays.join(', ')}
+   - ${selectedHolidays.join(', ') || '通用礼品场景（无特定节日）'}
 
 4. VISUAL STYLE (Colors must match this aesthetic):
    - ${visualStyle}

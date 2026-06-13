@@ -758,7 +758,50 @@ export default function DeepEcommerceWorkflow() {
                       </Label>
                     </div>
                   ))}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="holiday-custom"
+                      checked={state.userPreferences.selectedHolidays.includes('custom')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setState(prev => ({
+                            ...prev,
+                            userPreferences: {
+                              ...prev.userPreferences,
+                              selectedHolidays: prev.userPreferences.selectedHolidays.includes('custom')
+                                ? prev.userPreferences.selectedHolidays
+                                : [...prev.userPreferences.selectedHolidays, 'custom']
+                            }
+                          }));
+                        } else {
+                          setState(prev => ({
+                            ...prev,
+                            userPreferences: {
+                              ...prev.userPreferences,
+                              selectedHolidays: prev.userPreferences.selectedHolidays.filter(h => h !== 'custom')
+                            }
+                          }));
+                        }
+                      }}
+                    />
+                    <Label htmlFor="holiday-custom" className="text-sm cursor-pointer">
+                      自定义
+                    </Label>
+                  </div>
                 </div>
+                {state.userPreferences.selectedHolidays.includes('custom') && (
+                  <div className="mt-2">
+                    <Input
+                      value={state.userPreferences.customHoliday || ''}
+                      onChange={(e) => setState(prev => ({
+                        ...prev,
+                        userPreferences: { ...prev.userPreferences, customHoliday: e.target.value }
+                      }))}
+                      placeholder="例如：开斋节 / Eid / 公司年会 / 退伍纪念日"
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Audiences */}
@@ -790,7 +833,50 @@ export default function DeepEcommerceWorkflow() {
                       </Label>
                     </div>
                   ))}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="audience-custom"
+                      checked={state.userPreferences.selectedAudiences.includes('custom')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setState(prev => ({
+                            ...prev,
+                            userPreferences: {
+                              ...prev.userPreferences,
+                              selectedAudiences: prev.userPreferences.selectedAudiences.includes('custom')
+                                ? prev.userPreferences.selectedAudiences
+                                : [...prev.userPreferences.selectedAudiences, 'custom']
+                            }
+                          }));
+                        } else {
+                          setState(prev => ({
+                            ...prev,
+                            userPreferences: {
+                              ...prev.userPreferences,
+                              selectedAudiences: prev.userPreferences.selectedAudiences.filter(a => a !== 'custom')
+                            }
+                          }));
+                        }
+                      }}
+                    />
+                    <Label htmlFor="audience-custom" className="text-sm cursor-pointer">
+                      自定义
+                    </Label>
+                  </div>
                 </div>
+                {state.userPreferences.selectedAudiences.includes('custom') && (
+                  <div className="mt-2">
+                    <Input
+                      value={state.userPreferences.customAudience || ''}
+                      onChange={(e) => setState(prev => ({
+                        ...prev,
+                        userPreferences: { ...prev.userPreferences, customAudience: e.target.value }
+                      }))}
+                      placeholder="例如：退休教师 / 退伍军人 / 钓鱼爱好者 / 露营玩家"
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Visual Style */}

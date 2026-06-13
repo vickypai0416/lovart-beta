@@ -160,15 +160,30 @@ export default function BlankMockupCleanerWorkflow() {
     setResults([]);
   };
 
-  const buildCleanupPrompt = (targetProduct: string) => `Use image 1 as the base mockup photo. Clean ONLY the existing ${targetProduct} into a blank white product mockup.
+  const buildCleanupPrompt = (targetProduct: string) => `Use image 1 as the base mockup photo. First, IDENTIFY the main product in the image (the user expects it to be: ${targetProduct}, but you must visually detect and confirm the actual product type — it could be a blanket, clothing item, mug, phone case, canvas print, night light, acrylic sheet, cutting board, pillow, or any other physical object).
 
-CRITICAL: Preserve the original ${targetProduct}'s exact position, size, silhouette, edges, folds, draping, wrinkles, perspective, fabric/material texture, seams, border, thickness, shadows, highlights, ambient lighting, and occlusion relationships.
+Once identified, clean ONLY the surface of that main product into a blank white product mockup, while keeping everything else untouched.
 
-Remove only the printed graphics, photos, text, patterns, logos, and decorative artwork from the ${targetProduct} surface. Convert the product surface to a clean blank white or off-white base while keeping all natural shading, fabric grain, wrinkles, creases, and realistic depth.
+UNIVERSAL PRESERVATION RULES (apply to EVERY product type):
+1. Preserve the original product's EXACT position, size, silhouette, edges, perspective, thickness, and outline.
+2. Preserve the product's material-appropriate physical behavior: fabric draping & wrinkles for soft materials (blankets, clothing), smooth surface & edge bevel for hard materials (acrylic, cutting board, mug, phone case), printed texture & frame for flat materials (canvas, poster).
+3. Preserve the original lighting: shadows, highlights, ambient light direction, and color temperature.
+4. Preserve depth and 3D form: the product must NOT become a flat 2D shape. Keep its natural material thickness, surface curvature, and physical volume.
+5. Preserve occlusion relationships: how the product interacts with hands, the chair, the table, the ground, or other objects around it.
+6. Preserve any physical marks that are part of the material itself (stitching, wood grain, fabric weave, plastic gloss, transparent refraction) — only clean the PRINTED GRAPHIC on top.
 
-Do not change the person, face, skin, clothing, chair, table, background, text overlays, props, lighting, camera angle, or composition. Do not add new objects. Do not redesign the product shape.
+WHAT TO REMOVE:
+- ONLY remove the printed graphics, photos, text, patterns, logos, and decorative artwork that are printed or engraved on the product surface.
+- Do NOT change the underlying material, color, structure, or shape of the product itself.
 
-The result should look like the same photo from image 1, with only the ${targetProduct} surface cleaned into a blank white mockup that still has the original light, texture, folds, and shadows.`;
+WHAT TO PRESERVE (UNTOUCHABLE):
+- Person, face, skin, hair, hands
+- Other clothing the person is wearing
+- Chair, table, background, props
+- All text overlays and marketing typography outside the product
+- Camera angle, composition, lighting direction
+
+OUTPUT: The result should look like the same photo from image 1, with only the printed artwork on the product surface cleaned into a blank white or off-white mockup. The product itself must remain physically realistic — its material, texture, edges, lighting, and form are preserved exactly as in the reference.`;
 
   const generateOne = async (resultId: string, mockup: MockupFile, signal?: AbortSignal) => {
     const dimensions = await getImageDimensions(mockup.preview);

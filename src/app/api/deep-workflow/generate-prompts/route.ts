@@ -9,6 +9,8 @@ interface GeneratePromptsRequest {
     platform: string;
     selectedHolidays: string[];
     selectedAudiences: string[];
+    customHoliday?: string;
+    customAudience?: string;
     visualStyle: string;
     colorScheme: string;
     emotion: string;
@@ -130,10 +132,48 @@ function generateStoryScene(selectedAudiences: string[]): string {
 }
 
 // Generate gifting scene based on holiday and audiences
-function generateGiftingScene(holidayHeadline: string, selectedHolidays: string[], selectedAudiences: string[]): string {
-  const holiday = selectedHolidays[0] || 'special occasion';
-  const audience = selectedAudiences[0] || 'loved one';
-  
+// - 有节日：用节日场景
+// - 无节日但有受众：用受众主题（mom / dad / partner / friend / child / grandparent）
+// - 自定义节日/受众：直接使用用户填写的内容，不去匹配字典
+// - 都没有：通用 fallback
+function audienceLabelForCustom(selectedAudiences: string[], customAudience: string): string {
+  if (selectedAudiences[0] === 'custom' && customAudience.trim()) {
+    return customAudience.trim();
+  }
+  return selectedAudiences[0] || 'loved one';
+}
+
+function generateGiftingScene(
+  holidayHeadline: string,
+  selectedHolidays: string[],
+  selectedAudiences: string[],
+  customHoliday: string = '',
+  customAudience: string = ''
+): string {
+  const hasCustomHoliday = selectedHolidays[0] === 'custom';
+  const hasCustomAudience = selectedAudiences[0] === 'custom';
+
+  // 自定义节日 / 受众：直接用用户填写的内容，不匹配预设字典
+  if (hasCustomHoliday && customHoliday.trim()) {
+    const audienceText = hasCustomAudience && customAudience.trim()
+      ? customAudience.trim()
+      : (audienceLabelForCustom(selectedAudiences, customAudience));
+    return `A real gift-giving moment celebrating ${customHoliday.trim()}, the recipient is ${audienceText}, authentic warm reaction, personalized product visibly being handed over or opened, environment and props appropriate to ${customHoliday.trim()}`;
+  }
+  if (hasCustomAudience && customAudience.trim()) {
+    const holidayText = (selectedHolidays[0] && selectedHolidays[0] !== 'custom' && holidayHeadline)
+      ? holidayHeadline.toLowerCase()
+      : '';
+    const leadIn = holidayText
+      ? `A real gift-giving moment during ${holidayText}, the recipient is ${customAudience.trim()}`
+      : `A real gift-giving moment, the recipient is ${customAudience.trim()}`;
+    return `${leadIn}, genuine warm reaction, personalized product visibly being handed over or opened, real environment, two real people in a candid moment`;
+  }
+
+  const holiday = (selectedHolidays[0] || '').toLowerCase();
+  const audience = (selectedAudiences[0] || '').toLowerCase();
+  const audienceLabel = selectedAudiences[0] || 'loved one';
+
   const holidayScenes: Record<string, string> = {
     'christmas': 'Beautiful Christmas morning scene with recipient unwrapping personalized gift under twinkling lights and festive decorations',
     'valentines_day': 'Romantic Valentine\'s setting with roses and candles, recipient receiving heartfelt personalized gift',
@@ -142,8 +182,33 @@ function generateGiftingScene(holidayHeadline: string, selectedHolidays: string[
     'birthday': 'Birthday celebration with balloons and cake, birthday person delighted by personalized surprise gift',
     'wedding': 'Wedding gift table scene or newlyweds exchanging personalized keepsakes, celebrating their union',
   };
-  
-  return holidayScenes[holiday.toLowerCase()] || `${holidayHeadline} celebration, ${audience} receiving personalized gift with genuine surprise and joy`;
+
+  const audienceScenes: Record<string, string> = {
+    'mom': 'Mother lovingly holding the personalized gift, warm heartfelt expression, cozy home setting, soft natural lighting',
+    'dad': 'Father proudly receiving the personalized gift, genuine appreciative smile, thoughtful moment with family',
+    'partner': 'Couple sharing intimate gifting moment with the personalized present, romantic warm atmosphere',
+    'friend': 'Best friend excitedly receiving the personalized gift, genuine surprise and delight, joyful friendship moment',
+    'child': 'Child holding the personalized gift, eyes lighting up with wonder, pure joy and excitement',
+    'grandparent': 'Grandparent cherishing the personalized keepsake, emotional family connection, treasured memory',
+    'men': 'A real man receiving the personalized gift from a real person, genuine warm reaction, masculine modern living room or workshop setting, natural confident expression, the gift moment feels authentic between two real people',
+    'women': 'A real woman receiving the personalized gift from a real person, genuine warm reaction, elegant home or cafe setting, natural joyful expression, the gift moment feels authentic between two real people',
+    'couple': 'A real couple exchanging the personalized gift, intimate candid moment, warm home setting, both showing genuine emotion',
+    'kids': 'A real child receiving the personalized gift, eyes wide with wonder, colorful playful setting, pure innocent joy',
+    'teens': 'A real teenager receiving the personalized gift, casual trendy bedroom or hangout setting, natural excited reaction',
+    'elderly': 'A real elderly person receiving the personalized gift, gentle warm expression, comfortable home setting, sentimental moment',
+  };
+
+  // 优先级：节日 > 受众 > 通用 fallback
+  if (holiday && holidayScenes[holiday]) {
+    return holidayScenes[holiday];
+  }
+  if (audience && audienceScenes[audience]) {
+    return audienceScenes[audience];
+  }
+  if (holidayHeadline) {
+    return `${holidayHeadline} celebration, ${audienceLabel} receiving personalized gift with genuine surprise and joy`;
+  }
+  return `${audienceLabel} receiving personalized gift with genuine surprise and joy, warm celebratory atmosphere`;
 }
 
 // Generate lifestyle scene based on audiences
@@ -215,20 +280,35 @@ function generateImageBlueprint(
       elements: ['Beautifully styled product with preserved customization', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Emotional visual storytelling', 'Existing custom design maintained exactly'],
       text_content: { headline: 'EXCLUSIVELY YOURS', subheadline: 'A Gift Made Just for You' }
     },
-    // Image 4: 节日送礼场景 - 强调收礼人情感反应和独特性
+    // Image 4: 真实人物之间的送礼瞬间 - 不再是电商排版礼盒图
     gifting: {
       index: 4,
-      type: '节日送礼场景',
-      goal: '展示真实的节日送礼场景，突出收礼人看到定制内容时的情感反应和礼物的独特性，强调这是独一无二的专属礼物，采用精美电商排版设计，保持产品原有尺寸和比例',
+      type: '真实送礼瞬间',
+      goal: '以专业电商排版的视觉语言展示一个真实人物之间正在互相送礼的瞬间：有人正把定制产品递给收礼人，收礼人正打开/看到/惊讶/微笑。突出收礼人看到定制内容那一刻的真实情感反应和礼物的独特性。要明确根据目标受众的人群（gender / age / role）来生成场景中的人物，禁止默认女性，禁止男女模糊。保持产品原图比例和定制内容不变。文案排版要求符合 Amazon A+ 专业电商排版标准：清晰层级、留白、字体、配色协调。',
       headline: holidayText.headline,
       subheadline: holidayText.subheadline,
-      scene: `Elegant e-commerce layout featuring ${generateGiftingScene(holidayText.headline, preferences.selectedHolidays, preferences.selectedAudiences)}, surrounded by festive decorative elements, elegant typography overlays, and premium background styling. MAINTAIN exact product proportions, size, and scale as shown in reference image`,
-      camera: 'Professional product photography with artistic composition, product positioned strategically with accurate scale representation alongside recipient',
-      lighting: 'Soft studio lighting with warm festive tones, creating luxurious celebratory atmosphere with gentle highlights on personalized details and text elements',
-      emotion: `Joyful ${holidayText.headline.toLowerCase()} celebration, genuine surprise and delight, premium luxury feel`,
-      composition: 'Modern e-commerce layout with gift box and personalized product as centerpiece at accurate scale, elegant headline text at top, decorative elements framing the scene, maintain true-to-life product proportions',
-      elements: ['Beautifully wrapped gift box', 'Product at accurate true-to-life size', 'Elegant typography elements', 'Festive decorative flourishes', 'Premium background texture', 'Professional e-commerce styling', 'Luxury gift presentation'],
-      text_content: { headline: `Celebrate with ${holidayText.headline}`, subheadline: 'An Exclusive Gift Made Just for You' }
+      scene: `A REAL gift-giving moment between two real people, composed with PROFESSIONAL E-COMMERCE TYPOGRAPHY: ${generateGiftingScene(holidayText.headline, preferences.selectedHolidays, preferences.selectedAudiences, preferences.customHoliday, preferences.customAudience)}. The scene depicts a genuine human moment — someone handing or opening the personalized product, the recipient showing an authentic reaction (surprise, smile, laughter, emotional response). Both people look and act like real human beings of the specified target audience (age, gender, role). DO NOT default to women; match the gender and age explicitly specified by the target audience. No studio backdrop, no gift box, no ribbon, no wrapping paper, no festive overlays. The product is shown BARE / unwrapped, being handed from one person to another. MAINTAIN exact product proportions, size, and scale as shown in reference image. Preserve the product's custom design exactly as the reference. The OVERALL LAYOUT must follow PROFESSIONAL E-COMMERCE TYPOGRAPHY: clear visual hierarchy, generous whitespace, headline + subheadline + body text balanced, typography colors and weights consistent with Amazon A+ premium listing standards.`,
+      camera: 'Natural candid photography, eye-level or slightly above, the two real people framed in a warm moment, both faces visible and showing genuine emotion, the personalized product clearly visible between them at accurate scale. The composition leaves clean room for headline + subheadline + body text overlays with professional e-commerce typography spacing',
+      lighting: 'Natural ambient lighting appropriate to the scene setting (warm home light, soft daylight, or a real environment) — NOT studio softbox. Captures skin tones and the product surface realistically',
+      emotion: holidayText.headline
+        ? `Genuine authentic gifting moment, real human reaction of surprise and delight, ${holidayText.headline.toLowerCase()} warmth`
+        : 'Genuine authentic gifting moment, real human reaction of surprise and delight, warm celebratory feeling',
+      composition: 'Candid two-person composition. The gift-giver is on one side, the recipient is on the other side, the personalized product is in the center between them or being handed over. Both people are fully in frame, faces and emotion clearly visible. Real environment background (home, cafe, workshop, etc.) — not a studio backdrop. Product size/proportions must match the reference image exactly. Apply PROFESSIONAL E-COMMERCE TYPOGRAPHY layout: clear headline / subheadline / body hierarchy, generous whitespace around the product, well-balanced composition, typography and color palette consistent with Amazon A+ premium listing standards',
+      elements: [
+        'Two real human subjects in a candid moment',
+        'Real environment (home, cafe, workshop, etc.), not studio',
+        'Personalized product handed or being opened between them',
+        'Both subjects showing authentic emotional reaction',
+        'Product at accurate true-to-life size, custom design preserved',
+        'Natural ambient lighting, no studio softbox',
+        'No gift box, no wrapping, no ribbon, no packaging',
+        'No festive decorative overlays',
+        'Professional e-commerce typography: headline + subheadline + body text with clear hierarchy',
+        'Generous whitespace and balanced visual composition'
+      ],
+      text_content: holidayText.headline
+        ? { headline: `Celebrate with ${holidayText.headline}`, subheadline: 'An Exclusive Gift Made Just for You' }
+        : { headline: 'A Gift Made Just for You', subheadline: 'Celebrate Every Moment' }
     },
     // Image 5: 产品特点展示 - 结合定制元素
     features: {
@@ -346,7 +426,8 @@ export async function POST(request: Request) {
     }
 
     // Get primary holiday for text content
-    const primaryHoliday = preferences.selectedHolidays[0] || analysis.recommended_holidays[0]?.toLowerCase().replace(/\s+/g, '_') || 'default';
+    // 注意：用户没选节日时，不要 fallback 到 recommended_holidays（可能含用户不想要的节日如 Christmas）
+    const primaryHoliday = preferences.selectedHolidays[0] || 'default';
     const holidayText = getHolidayText(primaryHoliday);
 
     // Define the 6 image types based on user's framework
