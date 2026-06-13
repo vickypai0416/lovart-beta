@@ -475,7 +475,7 @@ ${productImage ? '3. 一张产品图片' : ''}
               messages: [{ role: 'user', content }],
               model: 'gpt-image-2-edit',
               size: sizeConfig?.size || '1024x1024',
-              quality: 'high',
+              quality: 'medium',
               n: 1,
             }),
             signal,

@@ -83,6 +83,7 @@ async function requestGeneratedImage({ prompt, referenceImages, size, signal }: 
       size,
       quality: 'medium',
       n: 1,
+      scope: 'toolbox',
     }),
     signal,
   });

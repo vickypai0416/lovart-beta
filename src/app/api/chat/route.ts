@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[API] Received request');
     const body = await request.json();
-    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'high', referenceImages = [], systemPrompt, clientRequestId, modelName: customModelName } = body as {
+    const { messages, model: selectedModel, autoGenerate, n = 1, persona = 'default', size = '1024x1024', quality = 'medium', referenceImages = [], systemPrompt, clientRequestId, modelName: customModelName } = body as {
       messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>;
       model?: ImageModel;
       autoGenerate?: boolean;
@@ -249,7 +249,7 @@ async function generateImageDirectly(
   encoder: TextEncoder,
   n: number = 1,
   size: string = '1024x1024',
-  quality: string = 'high',
+  quality: string = 'medium',
   generationId: string | null = null,
   startTime: number = Date.now()
 ): Promise<void> {
@@ -398,7 +398,7 @@ async function generateImageDirectly(
   controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
 }
 
-async function generateWithDALL3(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
+async function generateWithDALL3(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'medium'): Promise<string[]> {
   const modelConfig = getModelConfig('openai-dalle');
   
   if (!modelConfig.apiKey) {
@@ -735,7 +735,7 @@ async function generateWithGPTImage2(prompt: string, referenceImages: string[] =
   return results[0] || null;
 }
 
-async function generateWithGPTImage2Gen(prompt: string, n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
+async function generateWithGPTImage2Gen(prompt: string, n: number = 1, size: string = '1024x1024', quality: string = 'medium'): Promise<string[]> {
   const modelConfig = getModelConfig('gpt-image-2-gen');
   if (!modelConfig.apiKey) {
     throw new Error('GPT Image 2 Gen API Key 未配置');
@@ -774,7 +774,7 @@ async function generateWithGPTImage2Gen(prompt: string, n: number = 1, size: str
   return urls;
 }
 
-async function generateWithGPTImage2Edit(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'high'): Promise<string[]> {
+async function generateWithGPTImage2Edit(prompt: string, referenceImages: string[] = [], n: number = 1, size: string = '1024x1024', quality: string = 'medium'): Promise<string[]> {
   const modelConfig = getModelConfig('gpt-image-2-edit');
   if (!modelConfig.apiKey) {
     throw new Error('GPT Image 2 Edit API Key 未配置');

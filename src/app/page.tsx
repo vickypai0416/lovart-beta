@@ -800,9 +800,10 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       // 九宫格大图：使用云雾 edits 接口支持的 2048 正方形（3840 不在支持列表会导致上游拒绝）
       size: '2048x2048',
       n: 1,
-      model: 'gpt-image-2-all',
+      model: 'gpt-image-2',
       referenceImage,
       skipTranslation: true, // 亚马逊九宫格模板包含大量中文说明，跳过翻译以保持模板结构
+      scope: 'amazon-grid',
     };
 
     console.log('[Amazon Grid Generation] Requesting /api/generate', {
@@ -1112,7 +1113,7 @@ const generateImagesFromPlanOld = async (messageId: string, referenceImage: stri
         requestBody.referenceImage = referenceImage;
         requestBody.model = 'gpt-image-2-edit';
       } else {
-        requestBody.model = 'gpt-image-2-all';
+        requestBody.model = 'gpt-image-2';
       }
       
       const response = await fetch('/api/generate', {
@@ -1207,21 +1208,22 @@ const generateSingleImageFromPlan = async (messageId: string, planIndex: number,
       size: selectedSize,
       quality: selectedQuality,
       n: 1,
+      scope: 'amazon-grid',
     };
-    
+
     const isValidImageUrl = referenceImage && (
-      referenceImage.startsWith('data:') || 
-      referenceImage.startsWith('http://') || 
+      referenceImage.startsWith('data:') ||
+      referenceImage.startsWith('http://') ||
       referenceImage.startsWith('https://')
     );
-    
+
     if (isValidImageUrl) {
       requestBody.referenceImage = referenceImage;
       requestBody.model = 'gpt-image-2-edit';
     } else {
-      requestBody.model = 'gpt-image-2-all';
+      requestBody.model = 'gpt-image-2';
     }
-    
+
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1512,6 +1514,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                   size: selectedSize,
                   quality: selectedQuality,
                   n: 1,
+                  scope: 'amazon-grid',
                 };
                 const isValidImageUrl = lastPlan.userImage && (
                   lastPlan.userImage.startsWith('data:') || 
@@ -1522,7 +1525,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
                   requestBody.referenceImage = lastPlan.userImage;
                   requestBody.model = 'gpt-image-2-edit';
                 } else {
-                  requestBody.model = 'gpt-image-2-all';
+                  requestBody.model = 'gpt-image-2';
                 }
                 const response = await fetch('/api/generate', {
                   method: 'POST',

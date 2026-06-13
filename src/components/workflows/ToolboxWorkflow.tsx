@@ -126,6 +126,7 @@ async function requestGeneratedImage({
       size,
       quality: 'medium',
       n: 1,
+      scope: 'toolbox',
     }),
     signal,
   });

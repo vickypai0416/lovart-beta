@@ -153,8 +153,8 @@ const MODULE_CONFIG: Record<APlusModuleType, { icon: typeof Star; name: string; 
 
 // 尺寸配置
 const SIZE_CONFIG: Record<DeviceType, { width: number; height: number; label: string }> = {
-  desktop: { width: 2416, height: 1008, label: '2416x1008' },
-  mobile: { width: 1664, height: 1008, label: '1664x1008' }
+  desktop: { width: 1536, height: 1152, label: '1536x1152' },
+  mobile: { width: 2416, height: 1008, label: '2416x1008' }
 };
 
 export default function ProductDetailWorkflow() {
@@ -162,7 +162,7 @@ export default function ProductDetailWorkflow() {
   const [productName, setProductName] = useState('');
   const [productDescription, setProductDescription] = useState('');
   const [coreSellingPoint, setCoreSellingPoint] = useState('');
-  const [selectedQuality, setSelectedQuality] = useState('low');
+  const [selectedQuality, setSelectedQuality] = useState('medium');
   const [emotionalScene, setEmotionalScene] = useState<EmotionalScene>('general');
   const [customEmotionalText, setCustomEmotionalText] = useState('');
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
@@ -172,6 +172,11 @@ export default function ProductDetailWorkflow() {
   const [promptsGenerated, setPromptsGenerated] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const cardsRef = useRef<APlusCard[]>([]);
+
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
 
   // 产品图上传和分析状态（模仿Amazon Listing）
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -180,32 +185,53 @@ export default function ProductDetailWorkflow() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 初始化10张卡片（5模块 x 2设备）
+  // 初始化卡片：仅显示手机端，电脑端在对应手机端生成完后动态加入
   const initCards = () => {
     const newCards: APlusCard[] = [];
     let order = 1;
-    
-    (['desktop', 'mobile'] as DeviceType[]).forEach((deviceType) => {
-      (['hero', 'personalization', 'emotional', 'features', 'lifestyle'] as APlusModuleType[]).forEach((moduleType) => {
-        const config = MODULE_CONFIG[moduleType];
-        const sizeConfig = SIZE_CONFIG[deviceType];
-        
-        newCards.push({
-          id: `aplus-${deviceType}-${moduleType}-${Date.now()}`,
-          moduleType,
-          deviceType,
-          title: `${deviceType === 'desktop' ? 'Desktop' : 'Mobile'} ${config.name}`,
-          moduleName: config.name,
-          size: sizeConfig.label,
-          prompt: '',
-          status: 'pending',
-          order: order++
-        });
+
+    (['hero', 'personalization', 'emotional', 'features', 'lifestyle'] as APlusModuleType[]).forEach((moduleType) => {
+      const config = MODULE_CONFIG[moduleType];
+      const sizeConfig = SIZE_CONFIG.desktop; // 手机端使用 desktop 配置（1536x1152）
+
+      newCards.push({
+        id: `aplus-desktop-${moduleType}-${Date.now()}`,
+        moduleType,
+        deviceType: 'desktop',
+        title: `Mobile Detail ${config.name}`,
+        moduleName: config.name,
+        size: sizeConfig.label,
+        prompt: '',
+        status: 'pending',
+        order: order++,
       });
     });
-    
+
     setCards(newCards);
     setPromptsGenerated(false);
+  };
+
+  // 根据已生成的手机端图创建对应的电脑端卡片
+  const ensureDesktopMirrors = (sourceCards: APlusCard[]) => {
+    setCards(prev => {
+      const hasModule = (moduleType: APlusModuleType) => prev.some(card => card.deviceType === 'mobile' && card.moduleType === moduleType);
+      const missing = sourceCards
+        .filter(card => card.deviceType === 'desktop' && card.status === 'completed' && !hasModule(card.moduleType))
+        .map(card => ({
+          id: `aplus-mobile-${card.moduleType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          moduleType: card.moduleType,
+          deviceType: 'mobile' as DeviceType,
+          title: `Desktop ${MODULE_CONFIG[card.moduleType].name}`,
+          moduleName: MODULE_CONFIG[card.moduleType].name,
+          size: SIZE_CONFIG.mobile.label,
+          prompt: card.prompt,
+          status: 'pending' as const,
+          order: card.order,
+        }));
+
+      if (missing.length === 0) return prev;
+      return [...prev, ...missing];
+    });
   };
 
   // 处理文件上传
@@ -305,39 +331,51 @@ export default function ProductDetailWorkflow() {
   // 获取当前色调风格配置
   const getCurrentColorStyle = () => COLOR_STYLES[selectedColorStyle] || COLOR_STYLES[DEFAULT_COLOR_STYLE];
 
-  // 生成Hero Banner提示词 - Hero Banner主题，强调真实布料物理特性
+  // 判断产品是否为毛毯（只有毛毯才需要"印刷图案大部分被遮挡"的物理提示）
+  const isBlanketProduct = (product: string): boolean => {
+    const p = product.toLowerCase();
+    return p.includes('毛毯') || p.includes('毯') || p.includes('blanket') || p.includes('throw');
+  };
+
+  // 毛毯专属物理遮挡描述（仅在识别为毛毯时使用）
+  const blanketPhysics = `the blanket must behave like a real soft flannel blanket, with natural fabric draping, visible folds and wrinkles where the body creates pressure points, design follows fabric deformation with 5-10% artwork softening, printed photo area shows fabric texture and edge fringe, natural thickness along edges, realistic contact shadows where the blanket touches body or surfaces, the blanket appears physically soft and flexible, NOT a flat poster or rigid board`;
+  const blanketOcclusion = `the printed design is PARTIALLY VISIBLE ONLY with significant portions OBSCURED by natural folds and draping, the design is INTERRUPTED and DEFORMED by fabric physics, the blanket is NEVER laid flat or posed to display the full design, natural fabric behavior takes priority over design visibility, showcasing the complete printed artwork is FORBIDDEN`;
+
+  // 生成Hero Banner提示词 - Hero Banner主题，强调真实物体物理特性
   const generateHeroPrompt = (product: string, sellingPoint: string, device: DeviceType): string => {
-    const valueProposition = sellingPoint || 'Wrap Up Your Achievements';
+    const valueProposition = sellingPoint || 'A Gift Made for You';
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
-    const heroPlacement = "ABSOLUTE PHYSICS PRIORITY: the blanket is naturally draped over furniture or held by a person, the printed design is PARTIALLY VISIBLE ONLY (40-60% shown) with significant portions OBSCURED by natural folds and draping, the design is INTERRUPTED and DEFORMED by fabric physics, the blanket is NEVER laid flat or posed to display the full design, natural fabric behavior takes priority over design visibility, showcasing the complete printed artwork is FORBIDDEN";
-    return `Professional Amazon A+ Hero Banner ${size.label}, ${product} as main subject, the blanket must behave like a real soft flannel blanket with natural fabric draping, visible folds and wrinkles, design follows fabric deformation, printed artwork slightly conforms to folds, soft plush texture visible across the printed area, natural thickness along blanket edges (10-15mm visual thickness), realistic contact shadows where blanket touches surfaces, edge绒毛 and卷边 visible, the blanket appears physically soft flexible and naturally integrated, NOT a flat poster banner canvas or rigid board, ${heroPlacement}, elegant emotional figure in background 30%, premium composition, MUST INCLUDE large hero headline "${valueProposition}" at top, secondary headline "Custom Graduation Blanket" or similar product category, subheadline "Personalized with Your Name & School", feature icons with labels: "CUSTOMIZABLE Name & School", "PREMIUM QUALITY Soft & Durable", "MADE TO CELEBRATE Your Special Moment", rich typography design with graduation cap icons, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${style.visualStyle}, high-end advertising photography, 4K quality`;
+    const isBlanket = isBlanketProduct(product);
+    const physicsLine = isBlanket ? `${product} must ${blanketPhysics}. ${blanketOcclusion}` : `${product} must behave like a real physical object with material-appropriate rendering, visible surface details, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board. The product is naturally placed or used by a person, the design is fully visible and not occluded.`;
+    return `Professional Amazon A+ Hero Banner ${size.label}, ${product} as main subject, ${physicsLine}, elegant emotional figure in background 30%, premium composition, MUST INCLUDE large hero headline "${valueProposition}" at top, secondary headline featuring the product category name, subheadline "Personalized Just for You", feature icons with labels: "CUSTOMIZABLE", "CRAFTED QUALITY", "MADE TO CELEBRATE", rich typography design, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${style.visualStyle}, high-end advertising photography, 4K quality`;
   };
 
   // 生成Personalization提示词 - 展示定制效果并包含简单定制说明
   const generatePersonalizationPrompt = (product: string, device: DeviceType): string => {
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
-    const personalizationPlacement = "ABSOLUTE PHYSICS PRIORITY: the blanket is naturally draped or displayed, the printed design is PARTIALLY VISIBLE ONLY (40-60% shown) with significant portions OBSCURED by natural folds and draping, the design is INTERRUPTED and DEFORMED by fabric physics, the blanket is NEVER laid flat or posed to display the full design, natural fabric behavior takes priority over design visibility, showcasing the complete printed artwork is FORBIDDEN";
-    return `Amazon A+ Personalization module ${size.label}, ${product} showing the personalized custom design result with simple customization steps, ${personalizationPlacement}, the blanket displays the custom photo/name/message printed on it in a beautiful lifestyle setting, MUST INCLUDE clear step-by-step customization guide: "Step 1: Upload Your Photo", "Step 2: Add Name & School", "Step 3: We Create Your Gift" with elegant icons, romantic/emotional headline like "Personalized Just for You" or "A Gift Made for [Name]", elegant script typography, the blanket naturally draped showing the custom print as a keepsake, warm sentimental atmosphere, ${style.colorPalette}, ${style.lightingStyle}, emotional gift photography emphasizing the personal connection`;
+    const isBlanket = isBlanketProduct(product);
+    const physicsLine = isBlanket ? `${product} must ${blanketPhysics}. ${blanketOcclusion}` : `${product} must behave like a real physical object with material-appropriate rendering, natural surface details, edges, thickness, contact shadows. The product is naturally placed or held by a person, the design is fully visible and not occluded.`;
+    return `Amazon A+ Personalization module ${size.label}, ${product} showing the personalized custom design result with simple customization steps, ${physicsLine}, ${product} displays the custom photo/name/message printed on it in a beautiful lifestyle setting, MUST INCLUDE clear step-by-step customization guide: "Step 1: Upload Your Photo", "Step 2: Add Your Name", "Step 3: We Create Your Gift" with elegant icons, romantic/emotional headline like "Personalized Just for You" or "A Gift Made for You", elegant script typography, ${product} naturally displayed showing the custom print as a keepsake, warm sentimental atmosphere, ${style.colorPalette}, ${style.lightingStyle}, emotional gift photography emphasizing the personal connection`;
   };
 
-  // 生成Emotional Story提示词 - 支持自定义场景，强调真实布料物理特性
+  // 生成Emotional Story提示词
   const generateEmotionalPrompt = (product: string, scene: EmotionalScene, device: DeviceType, customText: string): string => {
     const sceneConfig = EMOTIONAL_SCENES[scene];
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
-    const fabricPhysics = "the blanket must behave like a real soft flannel blanket with natural fabric draping, visible folds and wrinkles where the body creates pressure points, design follows fabric deformation with 5-10% artwork softening, printed photo area shows fabric texture and绒毛遮挡, natural thickness along edges, realistic contact shadows where blanket touches body or surfaces, the blanket appears physically soft and flexible, NOT a flat poster or rigid board";
-    const naturalPlacement = "MANDATORY PHYSICS COMPLIANCE: the blanket is wrapped around the person's shoulders and body, the printed design is MOSTLY HIDDEN (only 20-30% visible) with the MAJORITY OBSCURED by body contact, shoulder draping, arm positions, and natural fabric folds, the design is SEVERELY INTERRUPTED by the 3D form of the human body, the blanket CONFORMS to body contours with realistic sagging and bunching, the printed pattern is BROKEN and DISCONTINUOUS across folds and overlaps, it is PHYSICALLY IMPOSSIBLE to see the full design when wrapped around a person, the focus is purely on the emotional moment and human subjects, the blanket is a prop not the main display subject";
+    const isBlanket = isBlanketProduct(product);
+    const physicsLine = isBlanket ? blanketPhysics : `${product} must behave like a real physical object with material-appropriate rendering, natural surface details, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board`;
+    const placementLine = isBlanket
+      ? `MANDATORY PHYSICS COMPLIANCE: the blanket is wrapped around the person's shoulders and body, ${blanketOcclusion}, the design is BROKEN and DISCONTINUOUS across folds and overlaps, the focus is purely on the emotional moment and human subjects, the blanket is a prop not the main display subject`
+      : `${product} is naturally held, used, or placed by a person in a realistic way, the printed design is fully visible on the product surface, focus is on the emotional moment and human subjects, ${product} is a prop not the main display subject`;
 
-    // 如果是自定义场景，使用用户输入的文本
     if (scene === 'custom' && customText) {
-      // 检测是否是毕业季相关场景
       const isGraduation = customText.toLowerCase().includes('graduation') ||
                            customText.toLowerCase().includes('毕业') ||
                            customText.toLowerCase().includes('graduate');
 
-      // 根据场景类型构建特定的场景描述
       let sceneSpecifics = '';
       if (isGraduation) {
         sceneSpecifics = 'graduation ceremony setting with graduates wearing caps and gowns, diploma in hand, graduation stage or campus background, celebratory atmosphere with confetti, proud family members in background, "Class of 2024/2025" signage, academic celebration theme';
@@ -345,7 +383,7 @@ export default function ProductDetailWorkflow() {
         sceneSpecifics = `${customText} themed setting with appropriate decorations, atmosphere and visual elements that clearly represent ${customText}`;
       }
 
-      return `Amazon A+ Emotional Story module ${size.label}, ${customText} celebration scene, ${product} as the perfect ${customText} gift, ${sceneSpecifics}, ${product} naturally integrated in ${customText} scene, ${fabricPhysics}, ${naturalPlacement}, emotional ${customText} moment with person wrapped in the blanket showing natural fabric behavior, authentic ${customText} joy and celebration, the blanket wrapped around shoulders and body with MOST OF THE DESIGN HIDDEN by the human form, realistic sagging and bunching conforming to body contours, the printed pattern BROKEN and DISCONTINUOUS across natural folds, MUST INCLUDE visible ${customText} themed emotional headline "Celebrate Your ${customText}" or "The Perfect ${customText} Gift" prominently displayed, ${customText} decorative elements and themed props, heartfelt descriptive copy about ${customText} memories and celebration, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${customText} lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications`;
+      return `Amazon A+ Emotional Story module ${size.label}, ${customText} celebration scene, ${product} as the perfect ${customText} gift, ${sceneSpecifics}, ${product} naturally integrated in ${customText} scene, ${physicsLine}, ${placementLine}, emotional ${customText} moment with person using or holding ${product} showing natural material behavior, authentic ${customText} joy and celebration, MUST INCLUDE visible ${customText} themed emotional headline "Celebrate Your ${customText}" or "The Thoughtful ${customText} Gift" prominently displayed, ${customText} decorative elements and themed props, heartfelt descriptive copy about ${customText} memories and celebration, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, ${customText} lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications`;
     }
 
     const emotionalHeadlines: Record<EmotionalScene, string> = {
@@ -354,36 +392,55 @@ export default function ProductDetailWorkflow() {
       couple: "Celebrate Your Love Story",
       family: "Creating Family Memories",
       pet: "For Your Furry Best Friend",
-      general: "The Perfect Personalized Gift",
+      general: "The Thoughtful Personalized Gift",
       custom: "Your Special Moment"
     };
     const headline = emotionalHeadlines[scene];
-    return `Amazon A+ Emotional Story module ${size.label}, ${sceneConfig.prompt}, ${product} naturally integrated in scene, ${fabricPhysics}, ${naturalPlacement}, emotional human subjects wrapped in the blanket showing natural fabric behavior, authentic moment of joy and connection, the blanket wrapped around shoulders and body with MOST OF THE DESIGN HIDDEN by the human form, realistic sagging and bunching conforming to body contours, the printed pattern BROKEN and DISCONTINUOUS across natural folds, MUST INCLUDE visible emotional headline "${headline}" with supporting subtext, heartfelt descriptive copy, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications`;
+    return `Amazon A+ Emotional Story module ${size.label}, ${sceneConfig.prompt}, ${product} naturally integrated in scene, ${physicsLine}, ${placementLine}, emotional human subjects naturally using or holding ${product} showing real material behavior, authentic moment of joy and connection, MUST INCLUDE visible emotional headline "${headline}" with supporting subtext, heartfelt descriptive copy, warm emotional narrative text overlay, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with storytelling text elements, focus purely on emotional storytelling and human connection, NO product features or technical specifications`;
   };
 
-  // 生成Features提示词（产品各种功能图片）
+  // 生成Features提示词（产品各种功能图片） - 居中标题 + 左右两侧功能标注的高级排版
   const generateFeaturesPrompt = (product: string, device: DeviceType): string => {
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
-    const featuresPlacement = "MANDATORY PHYSICS COMPLIANCE: the blanket is displayed leaning against pillows, folded, or casually draped, the printed design is MOSTLY OBSCURED (only 30-40% visible) with significant portions hidden by folds, overlaps, and the 3D form of the draped fabric, the pattern is INTERRUPTED and BROKEN at fold lines, NEVER display the full design when the blanket is not laid completely flat, the design must realistically conform to the fabric's physical shape";
-    return `Amazon A+ Product Features module ${size.label}, ${product} showcasing multiple product features and functions, ${featuresPlacement}, the blanket positioned against pillows or furniture with natural draping and visible folds obscuring the design, MUST INCLUDE visible feature text labels: "Premium Quality", "Custom Design", "Perfect Gift", "Made to Last" with clear readable typography, feature descriptions and bullet points, benefit callouts with text annotations, clean feature showcase layout with informative copywriting, ${style.colorPalette}, ${style.lightingStyle}, professional product photography with detailed text annotations`;
+    const isBlanket = isBlanketProduct(product);
+    const physicsLine = isBlanket
+      ? `${product} must ${blanketPhysics}. ${blanketOcclusion}.`
+      : `${product} must behave like a real physical object with material-appropriate rendering, natural surface details, edges, thickness, contact shadows. The product is naturally placed and fully visible.`;
+
+    return `Amazon A+ Product Features module ${size.label}, ${product} feature highlights, ${physicsLine}.
+
+LAYOUT — Premium e-commerce infographic composition:
+- TOP: large bold serif headline "Personalized Quality" centered at the top, with smaller sans-serif subtitle "Designed to Last, Made for You" directly underneath.
+- CENTER: ${product} as the hero subject, vertically centered, with 3 stacked variants/angles in different finishes or colorways to showcase the personalization range (e.g. engraved name on one, embossed logo on another, custom photo on the third).
+- SIDES: exactly 2 feature callouts on the LEFT and 2 on the RIGHT, each with a small circular line-art icon, a short feature name, and a one-line description. Use the labels: "Crafted Quality", "Custom Design", "Thoughtful Gift", "Built to Endure". Each callout is connected to the corresponding product detail with a thin dotted line pointing inward.
+- BOTTOM: a small horizontal rounded badge or ribbon with a one-line quality promise such as "Crafted with Care, Shipped with Love".
+- TYPOGRAPHY: serif bold for the main headline, clean sans-serif for everything else. Use warm brown or charcoal text color, never pure black.
+- BACKGROUND: minimalist warm beige or off-white background with a soft contact shadow under the product to add depth.
+
+STYLE: ${style.colorPalette}, ${style.lightingStyle}, high-end lifestyle product photography, 4K quality`;
   };
 
   // 生成Lifestyle提示词
   const generateLifestylePrompt = (product: string, device: DeviceType): string => {
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
-    const lifestylePlacement = "ABSOLUTE PHYSICS PRIORITY: the blanket is naturally used in the scene - draped over furniture, wrapped around a person, or casually placed, the printed design is PARTIALLY VISIBLE ONLY (30-50% shown) with significant portions OBSCURED by natural folds, usage patterns, and draping, the design is INTERRUPTED and DEFORMED by fabric physics, the blanket is NEVER posed flat to display the full design, authentic usage takes priority over design visibility, showcasing the complete printed artwork is FORBIDDEN";
-    return `Amazon A+ Lifestyle module ${size.label}, ${product} in authentic everyday use scenario, aspirational lifestyle moment, product naturally integrated into daily routine, ${lifestylePlacement}, warm and relatable atmosphere, MUST INCLUDE visible lifestyle headline and descriptive text, brand messaging, lifestyle copywriting, inspirational quote or tagline, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with editorial text overlays`;
+    const isBlanket = isBlanketProduct(product);
+    const physicsLine = isBlanket
+      ? `${product} must ${blanketPhysics}. ${blanketOcclusion}`
+      : `${product} must behave like a real physical object with material-appropriate rendering, natural surface details, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board. The product is naturally used and the design is fully visible.`;
+    return `Amazon A+ Lifestyle module ${size.label}, ${product} in authentic everyday use scenario, aspirational lifestyle moment, product naturally integrated into daily routine, ${physicsLine}, warm and relatable atmosphere, MUST INCLUDE visible lifestyle headline and short descriptive text, brand messaging, lifestyle copywriting, inspirational quote or tagline, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, lifestyle photography with editorial text overlays`;
   };
 
-  // 生成多场景应用展示提示词（第5张图）- 人物使用产品的真实场景
+  // 生成多场景应用展示提示词（第5张图）
   const generateMultiScenePrompt = (product: string, device: DeviceType): string => {
     const size = SIZE_CONFIG[device];
     const style = getCurrentColorStyle();
-    const fabricPhysics = "the blanket must behave like a real soft flannel blanket in every scene, natural fabric draping with visible folds and wrinkles, design follows fabric deformation, printed artwork conforms to folds with 5-10% softening, soft plush texture visible, natural thickness along edges (10-15mm), realistic contact shadows where blanket touches surfaces or body, edge绒毛 and卷边 visible, the blanket appears physically soft flexible and naturally integrated, NOT a flat poster banner canvas or rigid board";
-    const multiScenePlacement = "ABSOLUTE PHYSICS PRIORITY: in each scene the blanket is naturally used and draped, the printed design is PARTIALLY VISIBLE ONLY (20-40% shown) with MOST PORTIONS OBSCURED by natural folds, body contact, and usage patterns, the design is INTERRUPTED and DEFORMED by fabric physics in every scene, the blanket is NEVER laid out flat to display the full design, natural physical behavior and authentic usage always take priority over design visibility, showcasing the complete printed artwork is FORBIDDEN";
-    return `Amazon A+ Multi-Scene Applications module ${size.label}, ${product} showcased in 4 different AI-analyzed usage scenarios side by side with real people using the product, ${fabricPhysics}, ${multiScenePlacement}, Scene 1 "COZY THROW" shows a real person relaxing on couch wrapped in the blanket with natural body-contouring folds, blanket draping naturally over their legs and shoulders with design partially obscured, Scene 2 "PICNIC BLANKET" shows real people having a picnic in park sitting on the blanket spread on grass with natural unevenness and grass blades visible around edges, design partially visible from folds and people sitting on it, Scene 3 "DORM DECOR" shows a real person in bedroom with blanket hanging on wall as tapestry or draped over bed with natural下垂 and folds obscuring parts of design, Scene 4 "TRAVEL & NAPS" shows a real person sleeping on airplane or traveling with blanket wrapped around them showing realistic wrapping and contact with body with design mostly obscured, each scene features authentic human subjects interacting naturally with the blanket, MUST INCLUDE large headline "MADE FOR EVERY MOMENT" at top, subtitle "Cozy, Stylish & Versatile", each scene with icon and descriptive text label, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, professional lifestyle photography showing real people using the product in authentic everyday situations`;
+    const isBlanket = isBlanketProduct(product);
+    const physicsLine = isBlanket
+      ? `${blanketPhysics}. ${blanketOcclusion}`
+      : `${product} must behave like a real physical object in every scene, natural material rendering, surface reflections, edges, thickness, contact shadows, design follows the 3D form with realistic deformation, NOT a flat poster or rigid board. The product is naturally used and the design is fully visible.`;
+    return `Amazon A+ Multi-Scene Applications module ${size.label}, ${product} showcased in 4 different authentic usage scenarios side by side with real people using the product, ${physicsLine}, intelligently choose 4 usage scenarios that are most natural and relevant to ${product} (for example: home/office/travel/outdoor or daily/celebration/gifting/relaxation, choose what fits the product type best), each scene shows a real person interacting with ${product} in a realistic way, MUST INCLUDE large headline "MADE FOR EVERY MOMENT" at top, subtitle "Versatile, Thoughtful, Personal", each scene with icon and short descriptive text label, ${style.colorPalette}, ${style.lightingStyle}, ${style.moodAtmosphere}, professional lifestyle photography showing real people using the product in authentic everyday situations`;
   };
 
   // 生成单个卡片提示词
@@ -421,30 +478,55 @@ export default function ProductDetailWorkflow() {
   // 单张图片生成
   const generateSingleImage = async (cardId: string) => {
     const card = cards.find(c => c.id === cardId);
-    if (!card || !card.prompt) {
-      // 如果没有提示词，先生成提示词
+    if (!card) return;
+    if (!card.prompt) {
       if (!promptsGenerated && productName) {
         generateAllPrompts();
       }
       return;
     }
 
-    setCards(prev => prev.map(c => 
+    // 电脑端必须等待对应手机端图生成完成
+    if (card.deviceType === 'mobile') {
+      const sourceCard = cards.find(c => c.deviceType === 'desktop' && c.moduleType === card.moduleType);
+      if (!sourceCard || sourceCard.status !== 'completed' || !sourceCard.imageUrl) {
+        setCards(prev => prev.map(c =>
+          c.id === cardId ? { ...c, status: 'pending', error: '请先生成对应的手机端详情页' } : c
+        ));
+        return;
+      }
+    }
+
+    setCards(prev => prev.map(c =>
       c.id === cardId ? { ...c, status: 'generating', error: undefined } : c
     ));
 
     try {
+      // 电脑端（mobile deviceType）必须依赖对应手机端（desktop deviceType）已生成的图与提示词
+      // - 参考图：手机端生成的图片（保留画面元素）
+      // - 提示词：在原提示词末尾追加一致性约束（仅调整排版适配 2416x1008，不改元素内容）
+      const sourceMobileCard = card.deviceType === 'mobile'
+        ? cards.find(c => c.deviceType === 'desktop' && c.moduleType === card.moduleType)
+        : null;
+      const referenceImages: string[] = [];
+      if (uploadedImage) referenceImages.push(uploadedImage);
+      if (sourceMobileCard?.imageUrl) referenceImages.push(sourceMobileCard.imageUrl);
+
+      const promptForRequest = card.deviceType === 'mobile'
+        ? `${card.prompt}\n\nIMPORTANT — KEEP ALL VISUAL ELEMENTS UNCHANGED: This is a layout re-composition task. You MUST preserve the EXACT SAME visual content from the reference image: same people/subjects, same product, same scene, same colors, same mood, same lighting, same text content, same design elements, same background. Only adjust the layout and composition to fit the wider 2416x1008 aspect ratio. Do NOT add, remove, replace, or reinterpret any element. Do NOT change product type, material, color, or wording. Keep all design elements consistent with the reference.`
+        : card.prompt;
+
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: card.prompt,
+          prompt: promptForRequest,
           size: card.size,
           quality: selectedQuality,
           n: 1,
           model: 'gpt-image-2',
-          // 如果有上传的产品图，作为参考图传递
-          ...(uploadedImage ? { referenceImage: uploadedImage } : {}),
+          scope: 'detail-page',
+          ...(referenceImages.length > 0 ? { referenceImages } : {}),
         }),
         signal: abortControllerRef.current?.signal,
       });
@@ -454,40 +536,77 @@ export default function ProductDetailWorkflow() {
       }
 
       const data = await response.json();
-      
+
       if (data.success && data.url) {
-        setCards(prev => prev.map(c => 
-          c.id === cardId ? { ...c, status: 'completed', imageUrl: data.url } : c
-        ));
+        setCards(prev => {
+          const updated = prev.map(c =>
+            c.id === cardId ? { ...c, status: 'completed' as const, imageUrl: data.url } : c
+          );
+          // 手机端生成完成后，自动创建对应的电脑端卡片
+          if (card.deviceType === 'desktop') {
+            setTimeout(() => ensureDesktopMirrors(updated), 0);
+          }
+          return updated;
+        });
       } else {
         throw new Error(data.error || '生成失败');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '生成失败';
-      setCards(prev => prev.map(c => 
+      setCards(prev => prev.map(c =>
         c.id === cardId ? { ...c, status: 'failed', error: errorMessage } : c
       ));
     }
   };
 
-  // 生成全部图片
+  // 生成全部图片：先按顺序生成手机端（5张），每张完成后再触发电脑端镜像
   const generateAllImages = async () => {
     if (!productName) return;
-    
-    // 先确保提示词已生成
+
     if (!promptsGenerated) {
       generateAllPrompts();
     }
-    
+
     setIsGeneratingAll(true);
     abortControllerRef.current = new AbortController();
 
-    // 依次生成所有卡片
-    for (const card of cards) {
+    const pollForMirrors = async () => {
+      // 轮询直到所有手机端都有对应电脑端卡且全部完成，或用户中止
+      while (!abortControllerRef.current?.signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // 先同步一次镜像（基于最新 state）
+        setCards(prev => {
+          ensureDesktopMirrors(prev);
+          return prev;
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        // 重新读取最新 cards
+        const currentCards = cardsRef.current;
+        const allMobileCompleted = currentCards
+          .filter(c => c.deviceType === 'mobile')
+          .every(c => c.status === 'completed' || c.status === 'failed');
+        const allCompleted = currentCards.every(c => c.status === 'completed' || c.status === 'failed');
+        if (allMobileCompleted) {
+          const pendingMirrors = currentCards.filter(c => c.deviceType === 'mobile' && c.status === 'pending');
+          for (const mirror of pendingMirrors) {
+            if (abortControllerRef.current?.signal.aborted) break;
+            await generateSingleImage(mirror.id);
+          }
+        }
+        if (allCompleted) break;
+      }
+    };
+
+    // 先生成手机端（deviceType='desktop'，即1536x1152组）
+    const mobileCards = cards.filter(c => c.deviceType === 'desktop');
+    for (const card of mobileCards) {
       if (abortControllerRef.current.signal.aborted) break;
-      if (card.status === 'completed') continue; // 跳过已完成的
+      if (card.status === 'completed') continue;
       await generateSingleImage(card.id);
     }
+
+    // 等待电脑端镜像生成
+    await pollForMirrors();
 
     setIsGeneratingAll(false);
   };
@@ -527,7 +646,7 @@ export default function ProductDetailWorkflow() {
   const progress = getProgressStats();
 
   // 获取设备标签
-  const getDeviceLabel = (device: DeviceType) => device === 'desktop' ? '电脑端' : '移动端';
+  const getDeviceLabel = (device: DeviceType) => device === 'desktop' ? '手机端' : '电脑端';
 
   // 获取模块编号
   const getModuleNumber = (moduleType: APlusModuleType) => {

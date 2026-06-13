@@ -127,7 +127,7 @@ export function getDefaultPreferences(): UserPreferences {
   return {
     model: 'gpt-5-nano',
     size: '1024x1024',
-    quality: 'high',
+    quality: 'medium',
     count: 1,
     persona: 'default',
   };

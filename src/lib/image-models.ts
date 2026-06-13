@@ -6,6 +6,16 @@ export type ModelType = 'image' | 'text';
 
 export type ImageModel = 'openai-dalle' | 'gpt-4o-image' | 'gpt-image-2' | 'gpt-image-2-gen' | 'gpt-image-2-edit' | 'gpt-image-2-all' | 'gpt-5-nano' | 'gpt-5.4';
 
+// 业务作用域：每个功能可以绑定独立的 API Key
+export type ModelScope =
+  | 'default'        // 默认 / 图片生成器
+  | 'image-generator' // 图片生成器
+  | 'detail-page'     // 详情页套图
+  | 'amazon'          // Amazon Listing
+  | 'amazon-grid'     // 快速九宫格
+  | 'toolbox'         // 工具箱
+  | 'deep-workflow';  // Deep Workflow
+
 export interface ImageModelConfig {
   id: ImageModel;
   name: string;
@@ -17,142 +27,185 @@ export interface ImageModelConfig {
   modelName?: string;
 }
 
-export const IMAGE_MODELS: Record<ImageModel, ImageModelConfig> = {
-  // 图片生成模型
-  'openai-dalle': {
-    id: 'openai-dalle',
-    name: 'DALL-E 3',
-    description: 'OpenAI 图片生成模型，细节丰富',
-    type: 'image',
-    available: false,
-    apiKey: process.env.OPENAI_API_KEY || '',
-  },
-  'gpt-4o-image': {
-    id: 'gpt-4o-image',
-    name: 'GPT-4o Image',
-    description: '支持图文生图，可美化、添加文字、调整尺寸',
-    type: 'image',
-    available: false,
-    apiKey: process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/chat/completions',
-    modelName: 'gpt-image-2',
-  },
-  'gpt-image-2': {
-    id: 'gpt-image-2',
-    name: 'GPT Image 2',
-    description: '统一图片生成/编辑模型',
-    type: 'image',
-    available: false,
-    apiKey: process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/images/edits',
-    modelName: 'gpt-image-2',
-  },
-  'gpt-image-2-gen': {
-    id: 'gpt-image-2-gen',
-    name: 'GPT Image 2 (生成)',
-    description: '纯文本生图，支持多种尺寸和画质',
-    type: 'image',
-    available: false,
-    apiKey: process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/images/generations',
-    modelName: 'gpt-image-2',
-  },
-  'gpt-image-2-edit': {
-    id: 'gpt-image-2-edit',
-    name: 'GPT Image 2 (编辑)',
-    description: '图片编辑，支持美化、合并多张图片，使用 multipart/form-data',
-    type: 'image',
-    available: false,
-    apiKey: process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/images/edits',
-    modelName: 'gpt-image-2-all',
-  },
-  'gpt-image-2-all': {
-    id: 'gpt-image-2-all',
-    name: 'GPT Image 2 All',
-    description: 'GPT Image 2 全功能版，支持生成+编辑',
-    type: 'image',
-    available: true,
-    apiKey: process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/images/edits',
-    modelName: 'gpt-image-2-all',
-  },
-  // 文本生成模型
+// 通用基础配置
+const BASE_GPT_IMAGE_2_ENDPOINT = 'https://yunwu.ai/v1/images/edits';
+const BASE_GPT_IMAGE_2_GEN_ENDPOINT = 'https://yunwu.ai/v1/images/generations';
+const BASE_GPT_IMAGE_2_ALL_ENDPOINT = 'https://yunwu.ai/v1/images/edits';
+const BASE_CHAT_COMPLETIONS_ENDPOINT = 'https://yunwu.ai/v1/chat/completions';
+const DEFAULT_MODEL_NAME = 'gpt-image-2';
+const DEFAULT_ALL_MODEL_NAME = 'gpt-image-2-all';
+const DEFAULT_NANO_MODEL_NAME = 'gpt-5.4-nano';
+const DEFAULT_GPT_5_4_MODEL_NAME = 'gpt-5.4';
+
+// 文本模型（仅作为语言模型/对话模型用），各 scope 都使用默认 Key
+const TEXT_MODELS_BASE: Pick<ImageModelConfig, 'id' | 'name' | 'description' | 'type' | 'endpoint' | 'modelName'> = {
   'gpt-5-nano': {
     id: 'gpt-5-nano',
     name: 'GPT-5.4 nano',
     description: '轻量模型，支持对话和图片识别',
     type: 'text',
-    available: false,
-    apiKey: process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/chat/completions',
-    modelName: 'gpt-5.4-nano',
+    endpoint: BASE_CHAT_COMPLETIONS_ENDPOINT,
+    modelName: DEFAULT_NANO_MODEL_NAME,
   },
   'gpt-5.4': {
     id: 'gpt-5.4',
     name: 'GPT-5.4',
     description: '旗舰模型，更强的推理能力',
     type: 'text',
-    available: false,
-    apiKey: process.env.YUNWU_API_KEY || '',
-    endpoint: 'https://yunwu.ai/v1/chat/completions',
-    modelName: 'gpt-5.4',
+    endpoint: BASE_CHAT_COMPLETIONS_ENDPOINT,
+    modelName: DEFAULT_GPT_5_4_MODEL_NAME,
   },
-};
+} as const;
+
+/**
+ * 根据 scope 解析 API Key：
+ * 1. 优先取该 scope 的专用 Key
+ * 2. 若未设置则回落到 GPT_IMAGE_2_API_KEY / YUNWU_API_KEY
+ */
+function resolveScopeApiKey(scope: ModelScope | undefined): string {
+  const s = scope || 'default';
+  const scopedKey = (() => {
+    switch (s) {
+      case 'image-generator':
+        return process.env.YUNWU_API_KEY;
+      case 'detail-page':
+        return process.env.KEY_DETAIL_PAGE || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+      case 'amazon':
+        return process.env.KEY_AMAZON || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+      case 'amazon-grid':
+        return process.env.KEY_AMAZON_GRID || process.env.KEY_AMAZON || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+      case 'toolbox':
+        return process.env.KEY_TOOLBOX || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+      case 'deep-workflow':
+        return process.env.KEY_DEEP_WORKFLOW || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+      default:
+        return process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+    }
+  })();
+  return (scopedKey || '').trim();
+}
+
+/**
+ * 构造图片生成模型配置（图片类）
+ */
+function buildImageModelConfig(
+  id: ImageModel,
+  apiKey: string,
+  endpoint: string,
+  modelName: string
+): ImageModelConfig {
+  return {
+    id,
+    name: TEXT_MODELS_BASE[id]?.name || id,
+    description: TEXT_MODELS_BASE[id]?.description || '',
+    type: 'image',
+    available: !!apiKey,
+    apiKey,
+    endpoint,
+    modelName,
+  };
+}
+
+/**
+ * 构造文本模型配置（语言类）
+ */
+function buildTextModelConfig(id: 'gpt-5-nano' | 'gpt-5.4'): ImageModelConfig {
+  const base = TEXT_MODELS_BASE[id];
+  return {
+    ...base,
+    available: !!process.env.YUNWU_API_KEY,
+    apiKey: process.env.YUNWU_API_KEY,
+  };
+}
 
 /**
  * 获取图片生成模型列表
  */
 export function getImageModels(): ImageModelConfig[] {
-  return Object.values(IMAGE_MODELS).filter(m => m.type === 'image');
+  return [
+    buildImageModelConfig('openai-dalle', process.env.OPENAI_API_KEY || '', '', ''),
+    buildImageModelConfig('gpt-4o-image', resolveScopeApiKey('default'), BASE_CHAT_COMPLETIONS_ENDPOINT, DEFAULT_MODEL_NAME),
+    buildImageModelConfig('gpt-image-2', resolveScopeApiKey('default'), BASE_GPT_IMAGE_2_ENDPOINT, DEFAULT_MODEL_NAME),
+    buildImageModelConfig('gpt-image-2-gen', resolveScopeApiKey('default'), BASE_GPT_IMAGE_2_GEN_ENDPOINT, DEFAULT_MODEL_NAME),
+    buildImageModelConfig('gpt-image-2-edit', resolveScopeApiKey('default'), BASE_GPT_IMAGE_2_ENDPOINT, DEFAULT_ALL_MODEL_NAME),
+    buildImageModelConfig('gpt-image-2-all', resolveScopeApiKey('default'), BASE_GPT_IMAGE_2_ALL_ENDPOINT, DEFAULT_ALL_MODEL_NAME),
+  ];
 }
 
 /**
  * 获取文本生成模型列表
  */
 export function getTextModels(): ImageModelConfig[] {
-  return Object.values(IMAGE_MODELS).filter(m => m.type === 'text');
+  return [buildTextModelConfig('gpt-5-nano'), buildTextModelConfig('gpt-5.4')];
 }
 
 /** 图生图/编辑（含参考图）统一走 gpt-image-2 */
-export function getImageEditModelConfig(): ImageModelConfig {
-  const config = IMAGE_MODELS['gpt-image-2'];
+export function getImageEditModelConfig(scope?: ModelScope): ImageModelConfig {
+  const apiKey = resolveScopeApiKey(scope);
   return {
-    ...config,
-    available: !!config.apiKey,
-    endpoint: config.endpoint || 'https://yunwu.ai/v1/images/edits',
-    modelName: config.modelName || 'gpt-image-2',
+    id: 'gpt-image-2',
+    name: 'GPT Image 2',
+    description: '统一图片生成/编辑模型',
+    type: 'image',
+    available: !!apiKey,
+    apiKey,
+    endpoint: BASE_GPT_IMAGE_2_ENDPOINT,
+    modelName: DEFAULT_MODEL_NAME,
   };
 }
 
 /**
- * 获取模型配置
+ * 根据 scope 获取模型配置
  */
-export function getModelConfig(modelId: string): ImageModelConfig {
+export function getModelConfig(modelId: string, scope?: ModelScope): ImageModelConfig {
   const model = modelId as ImageModel;
-  const config = IMAGE_MODELS[model];
-  if (!config) {
-    return IMAGE_MODELS['gpt-5-nano'];
+  const apiKey = resolveScopeApiKey(scope);
+
+  switch (model) {
+    case 'openai-dalle':
+      return {
+        ...buildImageModelConfig('openai-dalle', process.env.OPENAI_API_KEY || '', '', ''),
+      };
+    case 'gpt-4o-image':
+      return {
+        ...buildImageModelConfig('gpt-4o-image', apiKey, BASE_CHAT_COMPLETIONS_ENDPOINT, DEFAULT_MODEL_NAME),
+      };
+    case 'gpt-image-2':
+      return {
+        ...buildImageModelConfig('gpt-image-2', apiKey, BASE_GPT_IMAGE_2_ENDPOINT, DEFAULT_MODEL_NAME),
+      };
+    case 'gpt-image-2-gen':
+      return {
+        ...buildImageModelConfig('gpt-image-2-gen', apiKey, BASE_GPT_IMAGE_2_GEN_ENDPOINT, DEFAULT_MODEL_NAME),
+      };
+    case 'gpt-image-2-edit':
+      return {
+        ...buildImageModelConfig('gpt-image-2-edit', apiKey, BASE_GPT_IMAGE_2_ENDPOINT, DEFAULT_ALL_MODEL_NAME),
+      };
+    case 'gpt-image-2-all':
+      return {
+        ...buildImageModelConfig('gpt-image-2-all', apiKey, BASE_GPT_IMAGE_2_ALL_ENDPOINT, DEFAULT_ALL_MODEL_NAME),
+      };
+    case 'gpt-5-nano':
+    case 'gpt-5.4':
+    default:
+      return buildTextModelConfig('gpt-5-nano');
   }
-  return {
-    ...config,
-    available: !!config.apiKey,
-  };
 }
 
 /**
  * 检查模型是否可用
  */
-export function isModelAvailable(modelId: string): boolean {
-  const config = getModelConfig(modelId);
+export function isModelAvailable(modelId: string, scope?: ModelScope): boolean {
+  const config = getModelConfig(modelId, scope);
   return config.available;
 }
 
 /**
  * 获取可用的模型列表
  */
-export function getAvailableModels(): ImageModelConfig[] {
-  return Object.values(IMAGE_MODELS).filter(m => !!m.apiKey);
+export function getAvailableModels(scope?: ModelScope): ImageModelConfig[] {
+  return getImageModels().concat(getTextModels()).filter(m => !!m.apiKey);
 }
 
 /**
@@ -160,29 +213,29 @@ export function getAvailableModels(): ImageModelConfig[] {
  */
 export function getTextModelFallback(): ImageModelConfig {
   const textModels = getTextModels().filter(m => !!m.apiKey);
-  
+
   if (textModels.length === 0) {
-    return IMAGE_MODELS['gpt-5-nano'];
+    return buildTextModelConfig('gpt-5-nano');
   }
-  
+
   return textModels[0];
 }
 
 /**
  * 获取备用语言模型
  */
-export function getFallbackModel(preferredModel: string): ImageModelConfig {
-  const preferredConfig = getModelConfig(preferredModel);
-  
+export function getFallbackModel(preferredModel: string, scope?: ModelScope): ImageModelConfig {
+  const preferredConfig = getModelConfig(preferredModel, scope);
+
   if (preferredConfig.available) {
     return preferredConfig;
   }
-  
+
   const textModels = getTextModels().filter(m => m.id !== preferredModel && !!m.apiKey);
-  
+
   if (textModels.length > 0) {
     return textModels[0];
   }
-  
-  return IMAGE_MODELS['gpt-5-nano'];
+
+  return buildTextModelConfig('gpt-5-nano');
 }

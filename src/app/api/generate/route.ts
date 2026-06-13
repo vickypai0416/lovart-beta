@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
-import { getImageEditModelConfig, getModelConfig } from '@/lib/image-models';
+import { getImageEditModelConfig, getModelConfig, ModelScope } from '@/lib/image-models';
 import { createGeneration, getAllGenerationRecords, updateGeneration } from '@/lib/analytics';
 import { parseUpstreamApiError } from '@/lib/upstream-api-error';
 import { uploadImageToHost } from '@/lib/image-host';
@@ -17,6 +17,10 @@ const SUPPORTED_EDIT_SIZES = new Set([
   '2880x2880', '1472x3040', '1088x3264', '1024x3072',
   // 比例尺寸
   '1024x1365', '1365x1024', '1792x1008', '1008x1792',
+  // 手机端详情页
+  '1536x1152',
+  // 电脑端详情页
+  '2416x1008',
 ]);
 
 function normalizeEditSize(width: number, height: number): string {
@@ -156,25 +160,29 @@ export async function POST(request: NextRequest) {
     console.log('[Generate API] POST received, before request.json');
     const body = await request.json();
     console.log('[Generate API] request.json completed');
-    const { 
+    const {
       clientRequestId,
       product,
-      scene, 
-      size = '1024x1024', 
+      scene,
+      size = '1024x1024',
       specType = 'main',
       prompt,
       referenceImage,
       referenceImages,
       styleReferenceImage,
       model,
-      quality = 'high',
+      quality = 'medium',
       n: requestN,
       // Deep workflow specific fields
       workflow,
       listingIndex,
       listingType,
       designBibleId,
+      // 业务作用域：用于选择不同功能的 API Key
+      scope,
     } = body;
+
+    const modelScope: ModelScope | undefined = typeof scope === 'string' && scope ? (scope as ModelScope) : undefined;
 
     const imageCount = Math.min(Math.max(Number(requestN) || 1, 1), 4);
     const finalReferenceImages = referenceImages || (referenceImage ? [referenceImage] : []);
@@ -284,7 +292,7 @@ export async function POST(request: NextRequest) {
       console.log('[Generate API] 参考图数量:', finalReferenceImages.length);
       console.log('[Generate API] 请求生成图片数量:', imageCount);
 
-      const modelConfig = getImageEditModelConfig();
+      const modelConfig = getImageEditModelConfig(modelScope);
 
       if (!modelConfig.apiKey) {
         console.error('[Generate API] GPT Image 2 编辑 API Key 未配置');
@@ -467,7 +475,7 @@ export async function POST(request: NextRequest) {
     console.log('[Generate API] 使用 GPT Image 2 生成模型（无参考图）');
     console.log('[Generate API] 提示词:', finalPrompt.substring(0, 100) + '...');
     
-    const modelConfig = getModelConfig('gpt-image-2-gen');
+    const modelConfig = getModelConfig('gpt-image-2-gen', modelScope);
     
     if (!modelConfig.apiKey) {
       console.error('[Generate API] 图片生成 API Key 未配置');

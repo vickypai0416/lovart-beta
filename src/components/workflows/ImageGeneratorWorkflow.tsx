@@ -365,6 +365,7 @@ export default function ImageGeneratorWorkflow() {
             quality: selectedQuality,
             n: selectedCount,
             model: selectedModel,
+            scope: 'image-generator',
             ...(referenceImages.length > 0 ? { referenceImages } : {}),
           }),
           signal: abortControllerRef.current.signal,
