@@ -68,20 +68,8 @@ export function useAnalytics() {
     }
     console.log('[Analytics] trackEvent called:', type, payload);
     try {
-      const response = await fetch('/api/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'track_event',
-          sessionId: resolvedSessionId,
-          type,
-          payload,
-        }),
-      });
-      const result = await response.json();
-      console.log('[Analytics] trackEvent response:', result);
+      /* /api/track 已删除；本地上报由 lib/analytics.ts 写入 localStorage */
+      return;
     } catch (error) {
       console.error('[Analytics] Failed to track event:', error);
     }
@@ -110,25 +98,8 @@ export function useAnalytics() {
     console.log('[Analytics] trackMessage: sending to API, sessionId:', resolvedSessionId);
 
     try {
-      const response = await fetch('/api/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'track_message',
-          sessionId: resolvedSessionId,
-          ...data,
-        }),
-      });
-      const result = await response.json();
-      console.log('[Analytics] trackMessage API response:', result);
-      if (result.success && result.message) {
-        console.log('[Analytics] trackMessage succeeded, message ID:', result.message.id);
-        return result.message.id;
-      } else {
-        console.error('[Analytics] trackMessage failed:', result.error);
-      }
+      /* /api/track 已删除 */
+      return null;
     } catch (error) {
       console.error('[Analytics] Failed to track message:', error);
     }
@@ -155,25 +126,8 @@ export function useAnalytics() {
     console.log('[Analytics] trackGeneration: sending to API, sessionId:', resolvedSessionId);
 
     try {
-      const response = await fetch('/api/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'track_generation',
-          sessionId: resolvedSessionId,
-          ...data,
-        }),
-      });
-      const result = await response.json();
-      console.log('[Analytics] trackGeneration API response:', result);
-      if (result.success && result.generation) {
-        console.log('[Analytics] trackGeneration succeeded, generation ID:', result.generation.id);
-        return result.generation.id;
-      } else {
-        console.error('[Analytics] trackGeneration failed:', result.error);
-      }
+      /* /api/track 已删除 */
+      return null;
     } catch (error) {
       console.error('[Analytics] Failed to track generation:', error);
     }
@@ -189,19 +143,7 @@ export function useAnalytics() {
   }) => {
     console.log('[Analytics] updateGeneration called:', id, updates);
     try {
-      const response = await fetch('/api/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'update_generation',
-          id,
-          updates,
-        }),
-      });
-      const result = await response.json();
-      console.log('[Analytics] updateGeneration response:', result);
+      /* /api/track 已删除 */
     } catch (error) {
       console.error('[Analytics] Failed to update generation:', error);
     }
@@ -220,17 +162,7 @@ export function useAnalytics() {
     }
     console.log('[Analytics] submitFeedback called:', data);
     try {
-      await fetch('/api/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'track_feedback',
-          sessionId: resolvedSessionId,
-          ...data,
-        }),
-      });
+      /* /api/track 已删除 */
     } catch (error) {
       console.warn('[Analytics] Failed to submit feedback:', error);
     }
