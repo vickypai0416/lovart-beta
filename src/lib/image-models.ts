@@ -38,7 +38,7 @@ const DEFAULT_NANO_MODEL_NAME = 'gpt-5.4-nano';
 const DEFAULT_GPT_5_4_MODEL_NAME = 'gpt-5.4';
 
 // 文本模型（仅作为语言模型/对话模型用），各 scope 都使用默认 Key
-const TEXT_MODELS_BASE: Pick<ImageModelConfig, 'id' | 'name' | 'description' | 'type' | 'endpoint' | 'modelName'> = {
+const TEXT_MODELS_BASE: Record<'gpt-5-nano' | 'gpt-5.4', Pick<ImageModelConfig, 'id' | 'name' | 'description' | 'type' | 'endpoint' | 'modelName'>> = {
   'gpt-5-nano': {
     id: 'gpt-5-nano',
     name: 'GPT-5.4 nano',
@@ -67,7 +67,7 @@ function resolveScopeApiKey(scope: ModelScope | undefined): string {
   const scopedKey = (() => {
     switch (s) {
       case 'image-generator':
-        return process.env.YUNWU_API_KEY;
+        return process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       case 'detail-page':
         return process.env.KEY_DETAIL_PAGE || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       case 'amazon':
@@ -96,8 +96,8 @@ function buildImageModelConfig(
 ): ImageModelConfig {
   return {
     id,
-    name: TEXT_MODELS_BASE[id]?.name || id,
-    description: TEXT_MODELS_BASE[id]?.description || '',
+    name: id,
+    description: '',
     type: 'image',
     available: !!apiKey,
     apiKey,
