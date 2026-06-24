@@ -182,8 +182,6 @@ export default function ImageGeneratorWorkflow() {
     { value: '1024x1536', label: '2:3 竖版' },
     { value: '1536x1024', label: '3:2 横版' },
     { value: 'auto', label: '默认 在提示词里自己输入尺寸' },
-    { value: '1024x1365', label: '4:3 竖版' },
-    { value: '1365x1024', label: '4:3 横版' },
     { value: '1792x1008', label: '16:9 横版' },
     { value: '1008x1792', label: '16:9 竖版' },
   ];
