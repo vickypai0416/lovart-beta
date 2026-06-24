@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch('https://yunwu.ai/v1/chat/completions', {
+    const response = await fetch('https://api.apiyi.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

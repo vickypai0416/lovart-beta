@@ -28,10 +28,10 @@ export interface ImageModelConfig {
 }
 
 // 通用基础配置
-const BASE_GPT_IMAGE_2_ENDPOINT = 'https://yunwu.ai/v1/images/edits';
-const BASE_GPT_IMAGE_2_GEN_ENDPOINT = 'https://yunwu.ai/v1/images/generations';
-const BASE_GPT_IMAGE_2_ALL_ENDPOINT = 'https://yunwu.ai/v1/images/edits';
-const BASE_CHAT_COMPLETIONS_ENDPOINT = 'https://yunwu.ai/v1/chat/completions';
+const BASE_GPT_IMAGE_2_ENDPOINT = 'https://api.apiyi.com/v1/images/edits';
+const BASE_GPT_IMAGE_2_GEN_ENDPOINT = 'https://api.apiyi.com/v1/images/generations';
+const BASE_GPT_IMAGE_2_ALL_ENDPOINT = 'https://api.apiyi.com/v1/images/edits';
+const BASE_CHAT_COMPLETIONS_ENDPOINT = 'https://api.apiyi.com/v1/chat/completions';
 const DEFAULT_MODEL_NAME = 'gpt-image-2';
 const DEFAULT_ALL_MODEL_NAME = 'gpt-image-2-all';
 const DEFAULT_NANO_MODEL_NAME = 'gpt-5.4-nano';

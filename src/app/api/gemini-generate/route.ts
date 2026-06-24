@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const endpoint = `https://yunwu.ai/v1beta/models/${model}:generateContent?key=`;
+    const endpoint = `https://api.apiyi.com/v1beta/models/${model}:generateContent?key=`;
 
     const response = await fetch(endpoint, {
       method: 'POST',

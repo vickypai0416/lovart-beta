@@ -479,7 +479,7 @@ async function generateWithYunwuAPI(
     throw new Error(`${modelConfig.name} API Key 未配置`);
   }
 
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/chat/completions';
+  const endpoint = modelConfig.endpoint || 'https://api.apiyi.com/v1/chat/completions';
   const modelName = modelConfig.modelName || 'gpt-4o-image-vip';
 
   let content: Array<{ type: string; text?: string; image_url?: { url: string } }>;
@@ -593,7 +593,7 @@ async function generateWithYunwuAPIStream(
     return;
   }
 
-  const endpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/chat/completions';
+  const endpoint = modelConfig.endpoint || 'https://api.apiyi.com/v1/chat/completions';
   const modelName = customModelName || modelConfig.modelName || 'gpt-5.4-nano';
 
   const hasImage = messages.some(m => 
@@ -741,7 +741,7 @@ async function generateWithGPTImage2Gen(prompt: string, n: number = 1, size: str
     throw new Error('GPT Image 2 Gen API Key 未配置');
   }
 
-  const response = await fetch('https://yunwu.ai/v1/images/generations', {
+  const response = await fetch('https://api.apiyi.com/v1/images/generations', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -810,7 +810,7 @@ async function generateWithGPTImage2Edit(prompt: string, referenceImages: string
   formData.append('size', size);
   formData.append('quality', quality);
 
-  const response = await fetch(modelConfig.endpoint || 'https://yunwu.ai/v1/images/edits', {
+  const response = await fetch(modelConfig.endpoint || 'https://api.apiyi.com/v1/images/edits', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${modelConfig.apiKey}`,

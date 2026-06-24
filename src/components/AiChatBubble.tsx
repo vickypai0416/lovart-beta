@@ -239,7 +239,7 @@ export default function AiChatBubble() {
         });
       });
 
-      // 调用本地 API 路由，由服务器转发到 yunwu.ai
+      // 调用本地 API 路由，由服务器转发到 api.apiyi.com
       const response = await fetch('/api/chat-bubble', {
         method: 'POST',
         headers: {

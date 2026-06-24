@@ -87,7 +87,7 @@ export class CtrAgent {
 
       while (!success && retryCount < maxRetries) {
         try {
-          const response = await fetch('https://yunwu.ai/v1/images/generations', {
+          const response = await fetch('https://api.apiyi.com/v1/images/generations', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

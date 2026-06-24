@@ -485,7 +485,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const genEndpoint = modelConfig.endpoint || 'https://yunwu.ai/v1/images/generations';
+    const genEndpoint = modelConfig.endpoint || 'https://api.apiyi.com/v1/images/generations';
     const modelName = modelConfig.modelName || 'gpt-image-2';
 
     try {

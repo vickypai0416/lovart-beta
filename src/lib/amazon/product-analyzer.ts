@@ -22,7 +22,7 @@ export class ProductAnalyzer {
 
   constructor(config: ProductAnalyzerConfig) {
     this.apiKey = config.apiKey;
-    this.endpoint = config.endpoint || 'https://yunwu.ai/v1/chat/completions';
+    this.endpoint = config.endpoint || 'https://api.apiyi.com/v1/chat/completions';
   }
 
   private async analyzeWithModel(imageUrl: string, modelName: string): Promise<ProductAnalysis> {
