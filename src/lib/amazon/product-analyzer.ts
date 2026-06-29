@@ -103,9 +103,10 @@ export class ProductAnalyzer {
   }
 
   static create(): ProductAnalyzer {
-    const apiKey = process.env.YUNWU_API_KEY;
+    // 优先 NEW_APIYI_KEY（apiyi 中转站万能 Key），fallback 到旧的 YUNWU_API_KEY
+    const apiKey = process.env.NEW_APIYI_KEY || process.env.YUNWU_API_KEY;
     if (!apiKey) {
-      throw new Error('缺少 YUNWU_API_KEY 配置');
+      throw new Error('缺少 NEW_APIYI_KEY 或 YUNWU_API_KEY 配置');
     }
     return new ProductAnalyzer({ apiKey });
   }

@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.YUNWU_API_KEY) {
+    // 优先 NEW_APIYI_KEY（apiyi 中转站万能 Key），fallback 到旧的 YUNWU_API_KEY
+    if (!process.env.NEW_APIYI_KEY && !process.env.YUNWU_API_KEY) {
       return NextResponse.json(
         { error: '未配置 API Key' },
         { status: 500 }
@@ -49,13 +50,13 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const agent = new CtrAgent({ apiKey: process.env.YUNWU_API_KEY || '' });
+    const agent = new CtrAgent({ apiKey: process.env.NEW_APIYI_KEY || process.env.YUNWU_API_KEY || '' });
     const sceneTypes = agent['strategyGenerator'].getSceneTypes();
 
     return NextResponse.json({
       success: true,
       sceneTypes,
-      available: !!process.env.YUNWU_API_KEY,
+      available: !!(process.env.NEW_APIYI_KEY || process.env.YUNWU_API_KEY),
     });
   } catch (error) {
     console.error('CTR Agent config error:', error);

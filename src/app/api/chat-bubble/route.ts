@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.YUNWU_API_KEY;
+    // 优先 NEW_APIYI_KEY（apiyi 中转站万能 Key），fallback 到旧的 YUNWU_API_KEY
+    const apiKey = process.env.NEW_APIYI_KEY || process.env.YUNWU_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'API Key 未配置' }),
