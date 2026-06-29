@@ -1,9 +1,9 @@
 /**
  * 自建图床上传工具
- * 图床地址: https://imageproxy.chongyuan.chat
+ * 图床地址: https://imageproxy.zhongzhuan.chat
  */
 
-const IMAGE_HOST_API = 'https://imageproxy.chongyuan.chat/api/upload';
+const IMAGE_HOST_API = 'https://imageproxy.zhongzhuan.chat/api/upload';
 
 /**
  * 上传图片到自建图床
@@ -18,16 +18,24 @@ export async function uploadImageToHost(
   try {
     // 创建 FormData
     const formData = new FormData();
-    
-    // 将 Buffer 转换为 Blob
-    const blob = new Blob([imageBuffer], { type: 'image/png' });
-    
+
+    // 将 Buffer 转换为 Blob（包一层 Uint8Array 以满足 BlobPart 类型）
+    const blob = new Blob([new Uint8Array(imageBuffer)], { type: 'image/png' });
+
     // 添加到 FormData
     formData.append('file', blob, filename);
+
+    // 图床需要 Bearer 鉴权（TUCHUANG_KEY 在 .env.local 配置）
+    const token = process.env.TUCHUANG_KEY;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     // 发送请求
     const response = await fetch(IMAGE_HOST_API, {
       method: 'POST',
+      headers,
       body: formData,
     });
 
