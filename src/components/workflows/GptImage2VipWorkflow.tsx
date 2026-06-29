@@ -65,6 +65,34 @@ interface ChatMessage {
   error?: string;
 }
 
+// 刷新后保留对话：localStorage 持久化 key
+const VIP_STORAGE_KEY = 'gptImage2VipState';
+
+const WELCOME_MESSAGE: ChatMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  content: '你好！我是 GPT Image 2 VIP 对话式生图助手。\n\n支持：\n• 纯文本文生图\n• 上传参考图改图\n• 基于已生成图片继续多轮迭代',
+};
+
+/** 从 localStorage 读取上次的会话（messages + size）；读不到则返回欢迎语 */
+function loadPersistedState(): { messages: ChatMessage[]; selectedSize: string } {
+  if (typeof window === 'undefined') {
+    return { messages: [WELCOME_MESSAGE], selectedSize: 'auto' };
+  }
+  try {
+    const raw = localStorage.getItem(VIP_STORAGE_KEY);
+    if (!raw) return { messages: [WELCOME_MESSAGE], selectedSize: 'auto' };
+    const parsed = JSON.parse(raw) as { messages?: ChatMessage[]; selectedSize?: string };
+    const messages = Array.isArray(parsed.messages) && parsed.messages.length > 0
+      // 清掉可能残留的"生成中"中间态，避免刷新后卡在 loading
+      ? parsed.messages.map((m) => ({ ...m, isGenerating: false }))
+      : [WELCOME_MESSAGE];
+    return { messages, selectedSize: parsed.selectedSize || 'auto' };
+  } catch {
+    return { messages: [WELCOME_MESSAGE], selectedSize: 'auto' };
+  }
+}
+
 const SIZE_OPTIONS = [
   { value: 'auto', label: '自动 (跟随提示词/参考图)' },
   { value: '1280x1280', label: '1280×1280 (1:1)' },
@@ -83,15 +111,10 @@ const SIZE_OPTIONS = [
 ];
 
 export default function GptImage2VipWorkflow() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: '你好！我是 GPT Image 2 VIP 对话式生图助手。\n\n支持：\n• 纯文本文生图\n• 上传参考图改图\n• 基于已生成图片继续多轮迭代',
-    },
-  ]);
+  // 惰性初始化：刷新后从 localStorage 恢复上次会话
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadPersistedState().messages);
   const [input, setInput] = useState('');
-  const [selectedSize, setSelectedSize] = useState('auto');
+  const [selectedSize, setSelectedSize] = useState(() => loadPersistedState().selectedSize);
   const [isGenerating, setIsGenerating] = useState(false);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -105,6 +128,37 @@ export default function GptImage2VipWorkflow() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, pendingImages]);
+
+  // 自动持久化会话到 localStorage（刷新后可恢复）。
+  // 全量保留（含用户上传的参考图 data URL）；若超出配额则降级：
+  // 逐步剔除最旧消息里的参考图 images 再重试，最坏只保留文字+生成图。
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // 不持久化“生成中”的中间态
+    if (messages.some((m) => m.isGenerating)) return;
+
+    const trySave = (msgs: ChatMessage[]): boolean => {
+      try {
+        localStorage.setItem(VIP_STORAGE_KEY, JSON.stringify({ messages: msgs, selectedSize }));
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (trySave(messages)) return;
+
+    // 超配额降级：从最旧消息开始逐个丢弃 images（用户上传的大 data URL），保留 generatedImage
+    const stripped = messages.map((m) => ({ ...m }));
+    for (let i = 0; i < stripped.length; i++) {
+      if (stripped[i].images && stripped[i].images!.length > 0) {
+        delete stripped[i].images;
+        if (trySave(stripped)) return;
+      }
+    }
+    // 仍失败则放弃持久化（不影响当前使用）
+    console.warn('[VIP] 会话过大，localStorage 持久化失败');
+  }, [messages, selectedSize]);
 
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -246,6 +300,14 @@ export default function GptImage2VipWorkflow() {
     ]);
     setPendingImages([]);
     setError('');
+    // 同时清除持久化内容，避免刷新后又恢复出来
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(VIP_STORAGE_KEY);
+      } catch {
+        // 忽略
+      }
+    }
   };
 
   const useAsReference = (imageUrl: string) => {

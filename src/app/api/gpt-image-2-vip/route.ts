@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { uploadImageToHost } from '@/lib/image-host';
+import { uploadImageToHost, transferImageToHost } from '@/lib/image-host';
+import { createGeneration } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -208,8 +209,17 @@ export async function POST(request: NextRequest) {
           console.error('[gpt-image-2-vip] 上传 base64 到图床失败:', hostError);
           imageUrl = fromContent;
         }
-      } else {
+      } else if (fromContent.includes('imageproxy.zhongzhuan.chat')) {
+        // 已是自建图床 url，无需转存
         imageUrl = fromContent;
+      } else {
+        // 上游临时 url（如 files.chatgpt-topup.com）：转存到自建图床，存稳定 url
+        try {
+          imageUrl = await transferImageToHost(fromContent, `vip-${Date.now()}.png`);
+        } catch (transferError) {
+          console.error('[gpt-image-2-vip] 转存上游 url 到图床失败，回退原始 url:', transferError);
+          imageUrl = fromContent;
+        }
       }
     }
 
@@ -217,7 +227,17 @@ export async function POST(request: NextRequest) {
     if (!imageUrl) {
       const item = data.data?.[0];
       if (item?.url) {
-        imageUrl = item.url;
+        // 同样转存到图床（已是图床 url 则直接用）
+        if (item.url.includes('imageproxy.zhongzhuan.chat')) {
+          imageUrl = item.url;
+        } else {
+          try {
+            imageUrl = await transferImageToHost(item.url, `vip-${Date.now()}.png`);
+          } catch (transferError) {
+            console.error('[gpt-image-2-vip] 转存上游 url 到图床失败，回退原始 url:', transferError);
+            imageUrl = item.url;
+          }
+        }
       } else if (item?.b64_json) {
         const hasPrefix = item.b64_json.startsWith('data:');
         const b64 = hasPrefix ? item.b64_json.split(',')[1] : item.b64_json;
@@ -234,6 +254,27 @@ export async function POST(request: NextRequest) {
     if (!imageUrl) {
       console.error('[gpt-image-2-vip] 无法从响应提取图片，content:', content?.substring(0, 200));
       return NextResponse.json({ success: false, error: 'API 未返回图片' }, { status: 500 });
+    }
+
+    // 每轮生成成功都写一条 generation 到 upstash（图床 url，已转存）。
+    // VIP 是多轮对话，每次调用都是一轮 → 每张图都入库，不只第一张。
+    try {
+      const sessionId =
+        request.headers.get('X-Session-ID') ||
+        `vip-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      await createGeneration({
+        sessionId,
+        prompt: prompt.trim(),
+        size: finalSize || 'auto',
+        quality: 'auto',
+        model: 'gpt-image-2-vip',
+        count: 1,
+        status: 'success',
+        imageUrl,
+      });
+    } catch (kvError) {
+      // 写库失败不影响出图返回
+      console.error('[gpt-image-2-vip] 写入 generation 到 upstash 失败:', kvError);
     }
 
     return NextResponse.json({
