@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Info, Sparkles, Bot, LayoutGrid, Wand2, Calculator, Gem, Grid3X3 } from 'lucide-react';
+import { X, Info, Sparkles, Bot, LayoutGrid, Wand2, Calculator, Gem, Grid3X3, Crown } from 'lucide-react';
 
 // 工作流类型
-export type WorkflowType = 'chat' | 'image-generator' | 'product-detail' | 'ecommerce' | 'prompt-analyzer' | 'toolbox' | 'apiplus';
+export type WorkflowType = 'chat' | 'image-generator' | 'product-detail' | 'ecommerce' | 'prompt-analyzer' | 'toolbox' | 'apiplus' | 'vip-chat';
 
 // 公告配置
 interface AnnouncementConfig {
@@ -56,6 +56,12 @@ const ANNOUNCEMENTS: Record<WorkflowType, AnnouncementConfig> = {
     title: 'APIPLUS',
     description: '第三方API服务集成平台。（测试官方连接使用）',
     tips: ['外部服务', 'API集成'],
+  },
+  'vip-chat': {
+    icon: Crown,
+    title: 'GPT Image 2 VIP',
+    description: '对话式生图：纯文生图、上传参考图改图、基于已生成图片多轮迭代。默认返回 URL。',
+    tips: ['文生图', '参考图改图', '多轮迭代'],
   },
 };
 

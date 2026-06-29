@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Wand2, Plus, Gem, Calculator, Grid3X3 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, X, Image as ImageIcon, Upload, Square, LayoutGrid, Search, Download, Trash2, ArrowUp, Paperclip, RefreshCw, Copy, Wand2, Plus, Gem, Calculator, Grid3X3, Crown } from 'lucide-react';
 import { saveChatImageToHistory, getChatHistory, getChatHistoryWithUrls, deleteChatImage, clearChatHistory, ChatImageHistoryItem, saveChatMessages, getChatMessages } from '@/lib/history-manager';
 import { getImageUrl } from '@/lib/idb-storage';
 import { PERSONAS, PersonaConfig } from '@/lib/persona';
@@ -23,6 +23,7 @@ import DeepEcommerceWorkflow from '@/components/deep-workflow/DeepEcommerceWorkf
 import PromptAnalyzerWorkflow from '@/components/workflows/PromptAnalyzerWorkflow';
 import ToolboxWorkflow from '@/components/workflows/ToolboxWorkflow';
 import ProductDetailWorkflow from '@/components/workflows/ProductDetailWorkflow';
+import GptImage2VipWorkflow from '@/components/workflows/GptImage2VipWorkflow';
 import AnnouncementBar, { WorkflowType } from '@/components/AnnouncementBar';
 import { downloadImageByUrl } from '@/lib/download';
 import { Session, createSession, getSessions, saveSession, deleteSession } from '@/lib/session-manager';
@@ -2109,6 +2110,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
               { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
               { id: 'ecommerce', name: '商品图套图', icon: LayoutGrid },
               { id: 'toolbox', name: '工具箱', icon: Calculator },
+              { id: 'vip-chat', name: 'VIP 对话生图', icon: Crown },
               { id: 'apiplus', name: 'APIPLUS', icon: Gem },
             ].map((workflow) => {
               const Icon = workflow.icon;
@@ -2233,6 +2235,9 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
         </div>
         <div style={{ display: currentWorkflow === 'toolbox' ? 'flex' : 'none' }} className="flex-1 min-h-0 overflow-hidden p-4">
           <ToolboxWorkflow />
+        </div>
+        <div style={{ display: currentWorkflow === 'vip-chat' ? 'flex' : 'none' }} className="flex-1 min-h-0 overflow-hidden">
+          <GptImage2VipWorkflow />
         </div>
         <div style={{ display: currentWorkflow === 'apiplus' ? 'flex' : 'none' }} className="flex-1 bg-white">
           <iframe
