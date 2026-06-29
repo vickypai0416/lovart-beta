@@ -220,13 +220,27 @@ export default function GptImage2VipWorkflow() {
 
     try {
       const history = getHistoryMessages(messages);
+
+      // 关键：该逆向模型只认「最后一条 user 消息里的真实 image_url」作为底图，
+      // 历史里的图片会被忽略。为实现"记住之前的产品/图"，总是把上一张生成图
+      // 作为参考图自动带上；与用户本轮上传的参考图合并去重。
+      const lastGeneratedImage = [...messages]
+        .reverse()
+        .find((m) => m.role === 'assistant' && m.generatedImage)?.generatedImage;
+      const effectiveReferenceImages = Array.from(
+        new Set([
+          ...(lastGeneratedImage ? [lastGeneratedImage] : []),
+          ...(userMessage.images || []),
+        ])
+      );
+
       const response = await fetch('/api/gpt-image-2-vip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: userMessage.content,
           history,
-          referenceImages: userMessage.images || [],
+          referenceImages: effectiveReferenceImages,
           size: selectedSize,
         }),
         signal: abortControllerRef.current.signal,
