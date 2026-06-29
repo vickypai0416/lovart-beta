@@ -3,7 +3,7 @@ import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/ima
 import { getImageEditModelConfig, getModelConfig, ModelScope } from '@/lib/image-models';
 import { createGeneration, getAllGenerationRecords, updateGeneration } from '@/lib/analytics';
 import { parseUpstreamApiError } from '@/lib/upstream-api-error';
-import { uploadImageToHost } from '@/lib/image-host';
+import { uploadImageToHost, transferImageToHost } from '@/lib/image-host';
 import { uploadImageToR2 } from '@/lib/r2-storage';
 
 export const runtime = 'nodejs';
@@ -87,6 +87,24 @@ function shouldKeepPendingForRecovery(error: unknown, clientRequestId?: string):
   return error.name === 'AbortError' || error.message === 'fetch failed';
 }
 
+/**
+ * 把上游返回的 url 转存到自建图床，返回图床的稳定 url。
+ * - 已经是本图床域名的 url 直接返回，不重复转存
+ * - 转存失败则回退原始 url（不影响出图）
+ * 目的：上游（如 OSS）url 多为带签名的临时链接（X-Amz-Expires），转存后用永久 url 入库/展示。
+ */
+async function persistUpstreamUrl(originalUrl: string, index: number): Promise<string> {
+  if (originalUrl.includes('imageproxy.zhongzhuan.chat')) {
+    return originalUrl;
+  }
+  try {
+    return await transferImageToHost(originalUrl, `generated-${Date.now()}-${index}.png`);
+  } catch (err) {
+    console.error('[Generate API] 转存上游 url 到图床失败，回退原始 url:', err);
+    return originalUrl;
+  }
+}
+
 async function extractImageUrls(data: unknown): Promise<string[]> {
   const imageUrls: string[] = [];
   const payload = data as { data?: Array<{ b64_json?: string; url?: string }>; url?: string };
@@ -94,7 +112,8 @@ async function extractImageUrls(data: unknown): Promise<string[]> {
   if (payload.data && payload.data.length > 0) {
     for (const [index, item] of payload.data.entries()) {
       if (item.url) {
-        imageUrls.push(item.url);
+        // 上游直接给 url：转存到自建图床，存稳定 url（避免上游临时签名链接过期）
+        imageUrls.push(await persistUpstreamUrl(item.url, index));
         continue;
       }
       if (item.b64_json) {
@@ -133,7 +152,7 @@ async function extractImageUrls(data: unknown): Promise<string[]> {
   }
 
   if (imageUrls.length === 0 && payload.url) {
-    imageUrls.push(payload.url);
+    imageUrls.push(await persistUpstreamUrl(payload.url, 0));
   }
 
   if (imageUrls.length === 0 && typeof data === 'string') {
