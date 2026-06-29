@@ -285,7 +285,8 @@ export async function POST(request: NextRequest) {
 
     generationId = (await createGeneration(generationPayload)).id;
     
-    if (spec) {
+    // vip 用 30 档 size 锁尺寸（含 auto），不适用 Amazon spec 的最小尺寸校验，直接跳过
+    if (spec && model !== 'gpt-image-2-vip') {
       if (spec.minWidth && width < spec.minWidth) {
         return NextResponse.json(
           { success: false, error: `图片宽度不足：${width}px < ${spec.minWidth}px` },
@@ -312,15 +313,18 @@ export async function POST(request: NextRequest) {
       if (!modelConfig.apiKey) {
         console.error('[Generate API] GPT Image 2 编辑 API Key 未配置');
         return NextResponse.json(
-          { success: false, error: '图片生成失败：GPT Image 2 编辑 API Key 未配置（GPT_IMAGE_2_API_KEY 或 YUNWU_API_KEY）' },
+          { success: false, error: '图片生成失败：GPT Image 2 编辑 API Key 未配置（NEW_APIYI_KEY / GPT_IMAGE_2_API_KEY / YUNWU_API_KEY 任一即可）' },
           { status: 400 }
         );
       }
 
       const endpoint = modelConfig.endpoint!;
-      const modelName = modelConfig.modelName!;
-      const editSize = normalizeEditSize(width, height);
-      if (editSize !== `${width}x${height}`) {
+      // 有参考图（图生图）优先用 gpt-image-2-vip：支持 30 档 size + response_format=url（实测该账户可用）
+      const isVip = model === 'gpt-image-2-vip';
+      const modelName = isVip ? 'gpt-image-2-vip' : modelConfig.modelName!;
+      // vip 用前端原始 size（30 档之一或 auto），不走 gpt-image-2-all 的白名单归一化
+      const editSize = isVip ? size : normalizeEditSize(width, height);
+      if (!isVip && editSize !== `${width}x${height}`) {
         console.warn(
           `[Generate API] 尺寸 ${width}x${height} 不在编辑接口支持列表，已调整为 ${editSize}`
         );
@@ -362,10 +366,14 @@ export async function POST(request: NextRequest) {
           formData.append('prompt', promptForEdit);
           formData.append('model', modelName);
           formData.append('size', editSize);
-          // 注意：不传 response_format — apiyi 中转站不支持此参数，会返回 400。
-          // 上游默认返回 b64_json，项目代码会在 [extractImageUrls] 里自动转存到图床。
-          if (quality) {
-            formData.append('quality', quality);
+          if (isVip) {
+            // vip：直接请求 url 格式（实测该账户支持），且不传 quality（vip 不接受 quality）
+            formData.append('response_format', 'url');
+          } else {
+            // gpt-image-2：不传 response_format（apiyi 不支持会 400），默认 b64_json 后由 extractImageUrls 转存图床
+            if (quality) {
+              formData.append('quality', quality);
+            }
           }
 
           console.log('[Generate API] 发送请求到:', endpoint, '(images/edits)');
@@ -503,6 +511,8 @@ export async function POST(request: NextRequest) {
 
     const genEndpoint = modelConfig.endpoint || 'https://api.apiyi.com/v1/images/generations';
     const modelName = modelConfig.modelName || 'gpt-image-2';
+    // gpt-image-2 文生图需要具体尺寸；若前端传了 auto（或非法尺寸导致 width/height 为 NaN），回退到 1024x1024
+    const genSize = Number.isFinite(width) && Number.isFinite(height) ? `${width}x${height}` : '1024x1024';
 
     try {
       // GPT Image 2 生成接口每次只返回一张图片，需要循环调用以生成多张
@@ -516,7 +526,7 @@ export async function POST(request: NextRequest) {
           model: modelName,
           prompt: finalPrompt,
           n: 1,
-          size: `${width}x${height}`,
+          size: genSize,
           // 注意：不传 response_format — apiyi 中转站不支持此参数，会返回 400。
           // 上游默认返回 b64_json，项目代码会在 [extractImageUrls] 里自动转存到图床。
         };

@@ -56,9 +56,10 @@ const compressImageToDataUrl = async (
 export default function ImageGeneratorWorkflow() {
   const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
   const [prompt, setPrompt] = useState('');
-  const [selectedSize, setSelectedSize] = useState('1024x1024');
+  const [selectedSize, setSelectedSize] = useState('2048x2048');
   const [selectedQuality, setSelectedQuality] = useState('high');
   const [selectedCount, setSelectedCount] = useState(1);
+  // selectedModel 仅为 UI 占位；实际请求的 model 在发送时按"是否有参考图"动态决定（见 effectiveModel）
   const [selectedModel, setSelectedModel] = useState('gpt-image-2');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export default function ImageGeneratorWorkflow() {
           if (state.selectedSize) setSelectedSize(state.selectedSize);
           if (state.selectedQuality) setSelectedQuality(state.selectedQuality);
           if (state.selectedCount) setSelectedCount(state.selectedCount);
+          // model 由发送时按是否有参考图动态决定，这里固定占位为 gpt-image-2
           if (state.selectedModel) setSelectedModel('gpt-image-2');
         } catch (e) {
           console.warn('恢复图片生成状态失败:', e);
@@ -177,13 +179,21 @@ export default function ImageGeneratorWorkflow() {
     { value: 'gpt-image-2', label: 'GPT Image 2' },
   ];
 
+  // 精选常用尺寸（gpt-image-2-vip 30 档子集，gpt-image-2 文生图也兼容；写法须为半角小写 x）
+  // 注意：auto 仅在有参考图（走 vip）时生效；无参考图（文生图）时后端会回退到 1024x1024
   const sizes = [
-    { value: '1024x1024', label: '1:1 方形' },
-    { value: '1024x1536', label: '2:3 竖版' },
-    { value: '1536x1024', label: '3:2 横版' },
-    { value: 'auto', label: '默认 在提示词里自己输入尺寸' },
-    { value: '1792x1008', label: '16:9 横版' },
-    { value: '1008x1792', label: '16:9 竖版' },
+    { value: '2048x2048', label: '1:1 方形 2K' },
+    { value: '2048x1360', label: '3:2 横版 2K（电商主图）' },
+    { value: '1360x2048', label: '2:3 竖版 2K' },
+    { value: '1536x2048', label: '3:4 竖版 2K（海报）' },
+    { value: '2048x1152', label: '16:9 横版 2K（封面）' },
+    { value: '1152x2048', label: '9:16 竖版 2K（壁纸）' },
+    // 4K Detail（高清/印刷）
+    { value: '2880x2880', label: '1:1 方形 4K' },
+    { value: '3840x2160', label: '16:9 横版 4K' },
+    { value: '2160x3840', label: '9:16 竖版 4K' },
+    { value: '2480x3312', label: '3:4 竖版 4K' },
+    { value: 'auto', label: '默认 自动（仅图生图，由提示词决定）' },
   ];
 
   const presetTemplates = [
@@ -352,7 +362,11 @@ export default function ImageGeneratorWorkflow() {
           referenceImageCount: referenceImages.length,
         });
 
-        console.log('[Generate] fetch /api/generate start');
+        // 有参考图（图生图/编辑）走 gpt-image-2-vip（30 档锁尺寸 + 直接返回 url）；
+        // 无参考图（文生图）继续走 gpt-image-2。
+        const effectiveModel = referenceImages.length > 0 ? 'gpt-image-2-vip' : 'gpt-image-2';
+
+        console.log('[Generate] fetch /api/generate start, model:', effectiveModel);
         const response = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -362,7 +376,7 @@ export default function ImageGeneratorWorkflow() {
             size: selectedSize,
             quality: selectedQuality,
             n: selectedCount,
-            model: selectedModel,
+            model: effectiveModel,
             scope: 'image-generator',
             ...(referenceImages.length > 0 ? { referenceImages } : {}),
           }),
@@ -628,17 +642,7 @@ export default function ImageGeneratorWorkflow() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedQuality} onValueChange={setSelectedQuality}>
-            <SelectTrigger className="w-24 h-8 text-xs border-gray-200">
-              <SelectValue placeholder="画质" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="auto">Auto</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* gpt-image-2-vip 不接受 quality 参数，已移除画质选择器 */}
           <Select value={String(selectedCount)} onValueChange={(v) => setSelectedCount(Number(v))}>
             <SelectTrigger className="w-20 h-8 text-xs border-gray-200">
               <SelectValue placeholder="数量" />
