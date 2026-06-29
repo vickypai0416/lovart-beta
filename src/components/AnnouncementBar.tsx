@@ -35,7 +35,7 @@ const ANNOUNCEMENTS: Record<WorkflowType, AnnouncementConfig> = {
   },
   'ecommerce': {
     icon: LayoutGrid,
-    title: 'Amazon Listing',
+    title: '商品图套图',
     description: '深度工作流，分析产品并生成完整的6张Listing图片。',
     tips: ['智能产品分析', '自动配色方案', '生成6张标准图片'],
   },

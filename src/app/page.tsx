@@ -2107,7 +2107,7 @@ const retryGenerateImage = async (originalUrl: string, aiMessageId: string): Pro
               { id: 'image-generator', name: '图片生成', icon: Sparkles },
               { id: 'product-detail', name: '详情页套图', icon: Grid3X3 },
               { id: 'prompt-analyzer', name: '提示词分析助手', icon: Wand2 },
-              { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
+              { id: 'ecommerce', name: '商品图套图', icon: LayoutGrid },
               { id: 'toolbox', name: '工具箱', icon: Calculator },
               { id: 'apiplus', name: 'APIPLUS', icon: Gem },
             ].map((workflow) => {
@@ -2807,7 +2807,7 @@ function WorkflowTabs({ currentWorkflow, onWorkflowChange }: WorkflowTabsProps) 
     { id: 'chat', name: '对话助手', icon: Bot },
     { id: 'image-generator', name: '图片生成', icon: Sparkles },
     { id: 'product-detail', name: '详情页套图', icon: Grid3X3 },
-    { id: 'ecommerce', name: 'Amazon Listing', icon: LayoutGrid },
+    { id: 'ecommerce', name: '商品图套图', icon: LayoutGrid },
   ];
 
   return (

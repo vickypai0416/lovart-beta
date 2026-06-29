@@ -591,10 +591,13 @@ ${productIntegrityClause}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: promptForRequest,
-          size: card.size,
+          // 商品图套图固定 2048x2048（gpt-image-2-vip/all 30 档之一，1:1 2K Recommended）
+          size: '2048x2048',
           quality: selectedQuality,
           n: 1,
-          model: 'gpt-image-2',
+          // 用 gpt-image-2-all：apiyi 中转站上它支持直接返回 url，
+          // 避免 gpt-image-2 只能返回 b64_json 时转存图床失败导致图片看不到。
+          model: 'gpt-image-2-all',
           scope: 'detail-page',
           ...(referenceImages.length > 0 ? { referenceImages } : {}),
         }),

@@ -93,26 +93,41 @@ async function extractImageUrls(data: unknown): Promise<string[]> {
 
   if (payload.data && payload.data.length > 0) {
     for (const [index, item] of payload.data.entries()) {
+      if (item.url) {
+        imageUrls.push(item.url);
+        continue;
+      }
       if (item.b64_json) {
-        const b64 = item.b64_json.startsWith('data:') ? item.b64_json.split(',')[1] : item.b64_json;
+        // 上游 b64_json 可能是 "iVBOR..." 纯 base64，也可能是 "data:image/png;base64,iVBOR..." 已带前缀
+        const hasPrefix = item.b64_json.startsWith('data:');
+        const b64 = hasPrefix ? item.b64_json.split(',')[1] : item.b64_json;
         const buffer = Buffer.from(b64, 'base64');
         const filename = `generated-${Date.now()}-${index}.png`;
 
+        // 1) 优先尝试图床
         try {
           const hostedUrl = await uploadImageToHost(buffer, filename);
           imageUrls.push(hostedUrl);
+          continue;
         } catch (hostError) {
           console.error('[Generate API] 上传 base64 图片到图床失败，尝试 R2:', hostError);
-          try {
-            const r2Url = await uploadImageToR2(buffer, filename, 'image/png');
-            imageUrls.push(r2Url);
-          } catch (r2Error) {
-            console.error('[Generate API] 上传 base64 图片到 R2 也失败:', r2Error);
-            throw new Error('图片已生成，但转存图片失败，无法返回可访问 URL');
-          }
         }
-      } else if (item.url) {
-        imageUrls.push(item.url);
+
+        // 2) 回退到 R2
+        try {
+          const r2Url = await uploadImageToR2(buffer, filename, 'image/png');
+          imageUrls.push(r2Url);
+          continue;
+        } catch (r2Error) {
+          console.error('[Generate API] 上传 base64 图片到 R2 也失败，回退为 data URL:', r2Error);
+        }
+
+        // 3) 最后回退：直接返回 data URL，让前端 <img src> 仍能渲染
+        // 注意：上游如果已经返回 "data:image/png;base64,..."，保留原样；
+        //      否则补上 "data:image/png;base64," 前缀。
+        imageUrls.push(
+          hasPrefix ? item.b64_json : `data:image/png;base64,${item.b64_json}`
+        );
       }
     }
   }
@@ -347,7 +362,8 @@ export async function POST(request: NextRequest) {
           formData.append('prompt', promptForEdit);
           formData.append('model', modelName);
           formData.append('size', editSize);
-          formData.append('response_format', 'url');
+          // 注意：不传 response_format — apiyi 中转站不支持此参数，会返回 400。
+          // 上游默认返回 b64_json，项目代码会在 [extractImageUrls] 里自动转存到图床。
           if (quality) {
             formData.append('quality', quality);
           }
@@ -501,7 +517,8 @@ export async function POST(request: NextRequest) {
           prompt: finalPrompt,
           n: 1,
           size: `${width}x${height}`,
-          response_format: 'url',
+          // 注意：不传 response_format — apiyi 中转站不支持此参数，会返回 400。
+          // 上游默认返回 b64_json，项目代码会在 [extractImageUrls] 里自动转存到图床。
         };
 
         if (quality) {

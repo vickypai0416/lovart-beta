@@ -60,26 +60,27 @@ const TEXT_MODELS_BASE: Record<'gpt-5-nano' | 'gpt-5.4', Pick<ImageModelConfig, 
 /**
  * 根据 scope 解析 API Key：
  * 1. 优先取该 scope 的专用 Key
- * 2. 若未设置则回落到 GPT_IMAGE_2_API_KEY / YUNWU_API_KEY
+ * 2. 若未设置则回落到 NEW_APIYI_KEY（apiyi 中转站万能 Key）
+ * 3. 最后回落到 GPT_IMAGE_2_API_KEY / YUNWU_API_KEY（兼容旧 yunwu）
  */
 function resolveScopeApiKey(scope: ModelScope | undefined): string {
   const s = scope || 'default';
   const scopedKey = (() => {
     switch (s) {
       case 'image-generator':
-        return process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.GPT_IMAGE_2_API_KEY || process.env.NEW_APIYI_KEY || process.env.YUNWU_API_KEY;
       case 'detail-page':
-        return process.env.KEY_DETAIL_PAGE || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.KEY_DETAIL_PAGE || process.env.NEW_APIYI_KEY || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       case 'amazon':
-        return process.env.KEY_AMAZON || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.KEY_AMAZON || process.env.NEW_APIYI_KEY || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       case 'amazon-grid':
-        return process.env.KEY_AMAZON_GRID || process.env.KEY_AMAZON || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.KEY_AMAZON_GRID || process.env.KEY_AMAZON || process.env.NEW_APIYI_KEY || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       case 'toolbox':
-        return process.env.KEY_TOOLBOX || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.KEY_TOOLBOX || process.env.NEW_APIYI_KEY || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       case 'deep-workflow':
-        return process.env.KEY_DEEP_WORKFLOW || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.KEY_DEEP_WORKFLOW || process.env.NEW_APIYI_KEY || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
       default:
-        return process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
+        return process.env.NEW_APIYI_KEY || process.env.GPT_IMAGE_2_API_KEY || process.env.YUNWU_API_KEY;
     }
   })();
   return (scopedKey || '').trim();
@@ -111,10 +112,11 @@ function buildImageModelConfig(
  */
 function buildTextModelConfig(id: 'gpt-5-nano' | 'gpt-5.4'): ImageModelConfig {
   const base = TEXT_MODELS_BASE[id];
+  const apiKey = process.env.NEW_APIYI_KEY || process.env.YUNWU_API_KEY;
   return {
     ...base,
-    available: !!process.env.YUNWU_API_KEY,
-    apiKey: process.env.YUNWU_API_KEY,
+    available: !!apiKey,
+    apiKey,
   };
 }
 
