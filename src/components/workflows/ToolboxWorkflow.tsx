@@ -63,16 +63,6 @@ const PRODUCT_TYPE_PRESETS = [
   '钥匙扣',
 ];
 
-const OUTPUT_SIZE_PRESETS = [
-  { size: '1024x1024', ratio: 1 },
-  { size: '1365x1024', ratio: 1365 / 1024 },
-  { size: '1536x1024', ratio: 1536 / 1024 },
-  { size: '1792x1008', ratio: 1792 / 1008 },
-  { size: '1024x1365', ratio: 1024 / 1365 },
-  { size: '1024x1536', ratio: 1024 / 1536 },
-  { size: '1008x1792', ratio: 1008 / 1792 },
-];
-
 function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -82,38 +72,17 @@ function getImageDimensions(src: string): Promise<{ width: number; height: numbe
   });
 }
 
-function getBestOutputSizeForImage(width: number, height: number): string {
-  if (!width || !height) return '1024x1024';
-
-  const ratio = width / height;
-  return OUTPUT_SIZE_PRESETS.reduce((best, preset) => {
-    const bestDistance = Math.abs(best.ratio - ratio);
-    const currentDistance = Math.abs(preset.ratio - ratio);
-    return currentDistance < bestDistance ? preset : best;
-  }).size;
-}
-
-function getTargetProductName(productType: string): string {
-  const normalized = productType.trim().toLowerCase();
-  if (!normalized) return 'target product';
-  if (normalized.includes('毛毯') || normalized.includes('毯') || normalized.includes('blanket')) return 'blanket';
-  if (normalized.includes('t恤') || normalized.includes('衣服') || normalized.includes('shirt') || normalized.includes('卫衣') || normalized.includes('hoodie')) return 'clothing item';
-  if (normalized.includes('马克杯') || normalized.includes('杯') || normalized.includes('mug') || normalized.includes('cup')) return 'mug';
-  if (normalized.includes('抱枕') || normalized.includes('枕') || normalized.includes('pillow') || normalized.includes('cushion')) return 'pillow';
-  if (normalized.includes('手机壳') || normalized.includes('phone')) return 'phone case';
-  if (normalized.includes('帆布袋') || normalized.includes('包') || normalized.includes('bag') || normalized.includes('tote')) return 'bag';
-  return productType.trim();
-}
-
 async function requestGeneratedImage({
   prompt,
   referenceImages,
   size,
+  mask,
   signal,
 }: {
   prompt: string;
   referenceImages: string[];
   size: string;
+  mask?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   const response = await fetch('/api/generate', {
@@ -122,11 +91,13 @@ async function requestGeneratedImage({
     body: JSON.stringify({
       prompt,
       referenceImages,
-      model: 'gpt-image-2-edit',
+      // 带蒙版时后端会强制走 gpt-image-2（唯一支持 mask 的模型）
+      model: 'gpt-image-2',
       size,
       quality: 'medium',
       n: 1,
       scope: 'toolbox',
+      ...(mask ? { mask } : {}),
     }),
     signal,
   });
@@ -146,9 +117,12 @@ async function requestGeneratedImage({
 
 export default function ToolboxWorkflow() {
   const [activeTool, setActiveTool] = useState<'batch-replace' | 'blank-cleaner'>('batch-replace');
-  // 样机图列表
+  // 样机图列表（局部重绘时取第 1 张作为底图）
   const [mockupFiles, setMockupFiles] = useState<MockupFile[]>([]);
-  // 产品图案列表
+  // 蒙版图（PNG，透明区=要替换的区域，须与样机同尺寸；原样上传不压缩）
+  const [maskPreview, setMaskPreview] = useState<string>('');
+  const [maskName, setMaskName] = useState<string>('');
+  // 产品图案列表（设计图案，遍历批量）
   const [productFiles, setProductFiles] = useState<ProductFile[]>([]);
   // 提示词
   const [prompt, setPrompt] = useState<string>('');
@@ -170,9 +144,11 @@ export default function ToolboxWorkflow() {
   const currentIndexRef = useRef<number>(0);
   
   const mockupInputRef = useRef<HTMLInputElement>(null);
+  const maskInputRef = useRef<HTMLInputElement>(null);
   const productInputRef = useRef<HTMLInputElement>(null);
 
-  // 压缩图片
+  // 压缩图片（jpeg，会丢透明通道；当前 mask 流程改用原样上传，此函数暂保留备用）
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const compressImage = (file: File, maxWidth: number = 1024, maxHeight: number = 1024, quality: number = 0.85): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -238,40 +214,25 @@ export default function ToolboxWorkflow() {
     });
   };
 
-  // 处理样机图上传
+  // 处理样机图上传（局部重绘只用 1 张底图，原样上传保尺寸以与蒙版对齐，替换旧的）
   const handleMockupUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
 
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-      
-      try {
-        // 压缩图片
-        const compressedPreview = await compressImage(file, 1024, 1024, 0.85);
-        
-        const newMockup: MockupFile = {
-          id: `mockup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          file,
-          preview: compressedPreview,
-          name: file.name,
-        };
-        setMockupFiles((prev) => [...prev, newMockup]);
-      } catch (error) {
-        console.error('[Toolbox] 样机图压缩失败:', error);
-        // 如果压缩失败，使用原图
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const newMockup: MockupFile = {
-            id: `mockup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            file,
-            preview: event.target?.result as string,
-            name: file.name,
-          };
-          setMockupFiles((prev) => [...prev, newMockup]);
-        };
-        reader.readAsDataURL(file);
-      }
+    try {
+      // 原样读取（不压缩、不改尺寸），保证与用户的蒙版像素尺寸一致
+      const dataUrl = await readFileAsDataUrl(file);
+      const newMockup: MockupFile = {
+        id: `mockup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        file,
+        preview: dataUrl,
+        name: file.name,
+      };
+      // 局部重绘只需一张底图，直接替换
+      setMockupFiles([newMockup]);
+    } catch (error) {
+      console.error('[Toolbox] 样机图读取失败:', error);
     }
 
     if (mockupInputRef.current) {
@@ -279,45 +240,63 @@ export default function ToolboxWorkflow() {
     }
   };
 
-  // 处理产品图案上传
+  // 处理设计图案上传（原样读取，保留 PNG 透明通道——绝不能转 JPEG，否则透明底会变黑底）
   const handleProductUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
-      
+
       try {
-        // 压缩图片
-        const compressedPreview = await compressImage(file, 1024, 1024, 0.85);
-        
+        // 原样读取（不压缩、不转格式），保留 alpha 透明通道
+        const dataUrl = await readFileAsDataUrl(file);
         const newProduct: ProductFile = {
           id: `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           file,
-          preview: compressedPreview,
+          preview: dataUrl,
           name: file.name,
         };
         setProductFiles((prev) => [...prev, newProduct]);
       } catch (error) {
-        console.error('[Toolbox] 产品图案压缩失败:', error);
-        // 如果压缩失败，使用原图
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const newProduct: ProductFile = {
-            id: `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            file,
-            preview: event.target?.result as string,
-            name: file.name,
-          };
-          setProductFiles((prev) => [...prev, newProduct]);
-        };
-        reader.readAsDataURL(file);
+        console.error('[Toolbox] 设计图案读取失败:', error);
       }
     }
 
     if (productInputRef.current) {
       productInputRef.current.value = '';
     }
+  };
+
+  // 原样读取为 dataURL（不压缩、不改尺寸、不转格式），用于蒙版（须保 PNG alpha）
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+
+  // 处理蒙版上传（PNG，原样上传保留 alpha 通道；透明区=要替换的区域）
+  const handleMaskUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setMaskPreview(dataUrl);
+      setMaskName(file.name);
+    } catch (error) {
+      console.error('[Toolbox] 蒙版读取失败:', error);
+    }
+    if (maskInputRef.current) {
+      maskInputRef.current.value = '';
+    }
+  };
+
+  const removeMask = () => {
+    setMaskPreview('');
+    setMaskName('');
   };
 
   // 删除样机图
@@ -333,6 +312,8 @@ export default function ToolboxWorkflow() {
   // 清空所有
   const clearAll = () => {
     setMockupFiles([]);
+    setMaskPreview('');
+    setMaskName('');
     setProductFiles([]);
     setResults([]);
     setPrompt('');
@@ -407,18 +388,6 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
     ));
   };
 
-  const buildDirectReplacementPrompt = (targetProduct: string) => {
-    if (prompt.trim()) return prompt.trim();
-
-    return `Use image 1 as the base mockup photo. Replace ONLY the ${targetProduct} in image 1 with the product/design from image 2.
-
-Preserve the exact position, size, shape, folds, draping, perspective, shadows, highlights, texture, edges, and occlusion of the original ${targetProduct}. The new design must stay strictly inside the original ${targetProduct} boundaries.
-
-Do not apply the design to the person, face, skin, clothing, chair, table, background, text overlays, props, or any other area. Keep the scene, lighting, typography, camera angle, and composition unchanged.
-
-The result should look like the same photo from image 1, with only the ${targetProduct} replaced by image 2's design.`;
-  };
-
   const generateMockupReplacement = async ({
     resultId,
     mockupPreview,
@@ -432,12 +401,16 @@ The result should look like the same photo from image 1, with only the ${targetP
     outputSize: string;
     signal?: AbortSignal;
   }): Promise<string> => {
-    const targetProduct = getTargetProductName(productType);
     updateResultStatus(resultId, 'generating');
+    // 局部重绘：样机图=底图(image1)，设计图案=image2，蒙版标出替换区域。
+    // 提示词优先用用户自定义，否则用固定的“替换图案”。
+    const replacePrompt = prompt.trim()
+      || '把图2的图案替换到图1中蒙版标出的区域，其余部分保持不变';
     return requestGeneratedImage({
-      prompt: buildDirectReplacementPrompt(targetProduct),
+      prompt: replacePrompt,
       referenceImages: [mockupPreview, productPreview],
       size: outputSize,
+      mask: maskPreview || undefined,
       signal,
     });
   };
@@ -450,36 +423,32 @@ The result should look like the same photo from image 1, with only the ${targetP
       return;
     }
     
-    if (mockupFiles.length === 0 || productFiles.length === 0) return;
-    
-    console.log('[Toolbox] 开始批量生成', { 
-      mockupCount: mockupFiles.length, 
+    // 局部重绘：需要样机图（底图）+ 蒙版 + 至少一张设计图案
+    if (mockupFiles.length === 0 || !maskPreview || productFiles.length === 0) return;
+
+    // 底图固定取第 1 张样机
+    const mockup = mockupFiles[0];
+
+    console.log('[Toolbox] 开始批量局部重绘', {
       productCount: productFiles.length,
-      totalTasks: mockupFiles.length * productFiles.length 
+      totalTasks: productFiles.length,
     });
-    
+
     setIsGenerating(true);
     setResults([]);
-    
+
     // 创建新的 AbortController
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    // 为每个样机图和产品图案的组合创建生成任务
-    const newResults: GenerationResult[] = [];
-    
-    for (const mockup of mockupFiles) {
-      for (const product of productFiles) {
-        const result: GenerationResult = {
-          id: `result-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          mockupId: mockup.id,
-          productId: product.id,
-          status: 'pending',
-        };
-        newResults.push(result);
-      }
-    }
-    
+    // 固定底图 + 蒙版，遍历每张设计图案各生成一张
+    const newResults: GenerationResult[] = productFiles.map((product) => ({
+      id: `result-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      mockupId: mockup.id,
+      productId: product.id,
+      status: 'pending' as GenerationStatus,
+    }));
+
     setResults(newResults);
 
     // 逐个执行生成
@@ -506,8 +475,9 @@ The result should look like the same photo from image 1, with only the ${targetP
       ));
 
       try {
+        // 局部重绘：输出尺寸必须等于样机真实尺寸（须与蒙版同尺寸），不做档位归一化
         const mockupDimensions = await getImageDimensions(mockup.preview);
-        const outputSize = getBestOutputSizeForImage(mockupDimensions.width, mockupDimensions.height);
+        const outputSize = `${mockupDimensions.width}x${mockupDimensions.height}`;
         const finalUrl = await generateMockupReplacement({
           resultId: result.id,
           mockupPreview: mockup.preview,
@@ -566,8 +536,9 @@ The result should look like the same photo from image 1, with only the ${targetP
     ));
 
     try {
+      // 局部重绘：输出尺寸=样机真实尺寸（须与蒙版同尺寸）
       const mockupDimensions = await getImageDimensions(mockup.preview);
-      const outputSize = getBestOutputSizeForImage(mockupDimensions.width, mockupDimensions.height);
+      const outputSize = `${mockupDimensions.width}x${mockupDimensions.height}`;
       const finalUrl = await generateMockupReplacement({
         resultId,
         mockupPreview: mockup.preview,
@@ -624,8 +595,8 @@ The result should look like the same photo from image 1, with only the ${targetP
     };
   };
 
-  // 计算总任务数
-  const totalTasks = mockupFiles.length * productFiles.length;
+  // 计算总任务数（局部重绘：底图+蒙版固定，任务数=设计图案数）
+  const totalTasks = productFiles.length;
   const completedTasks = results.filter(r => r.status === 'completed').length;
   const failedTasks = results.filter(r => r.status === 'failed').length;
 
@@ -673,17 +644,37 @@ The result should look like the same photo from image 1, with only the ${targetP
 
         {/* 可滚动内容区域 */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* 样机图上传 */}
+          {/* 使用教程（可折叠） */}
+          <details className="bg-blue-50 border border-blue-100 rounded-lg text-xs text-gray-600">
+            <summary className="cursor-pointer select-none px-3 py-2 font-medium text-blue-700">
+              📖 使用说明（点击展开）
+            </summary>
+            <div className="px-3 pb-3 space-y-1.5 leading-relaxed">
+              <p>本工具用「蒙版局部重绘」把设计图案精确替换到样机的指定区域。</p>
+              <p><b>1. 样机图（底图）</b>：产品实拍/样机，上传 1 张。</p>
+              <p><b>2. 蒙版图</b>：<b>PNG 格式，必须与样机图尺寸完全相同</b>。<b>透明区域</b>=要替换图案的位置，不透明区域=保持不变。</p>
+              <p><b>3. 设计图案</b>：可上传多张，每张各生成一张结果（批量）。</p>
+              <div className="mt-1.5 pt-1.5 border-t border-blue-100">
+                <p className="font-medium text-blue-700">📐 支持的尺寸（样机图与蒙版都要满足）</p>
+                <p className="mt-1">推荐直接用<b>预设尺寸</b>之一：</p>
+                <p className="text-gray-500">1024×1024、1536×1024、1024×1536、2048×2048、2048×1152、3840×2160、2160×3840</p>
+                <p className="mt-1">也可用自定义尺寸，但必须<b>同时</b>满足：</p>
+                <p className="text-gray-500">· 最大边 ≤ 3840px<br/>· 宽和高都是 16 的倍数<br/>· 长短比 ≤ 3:1<br/>· 总像素在 0.65–8.3 百万（约 810×810 到 2880×2880 之间）</p>
+              </div>
+              <p className="text-amber-600 mt-1.5">⚠️ 样机图与蒙版尺寸必须一致、且落在上面范围内，否则会生成失败。请先在 PS / 图片工具里调好尺寸再上传。</p>
+            </div>
+          </details>
+
+          {/* 样机图上传（底图，1 张） */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-700">样机图</h3>
-              <span className="text-xs text-gray-500">{mockupFiles.length} 张</span>
+              <h3 className="text-sm font-medium text-gray-700">样机图（底图）</h3>
+              <span className="text-xs text-gray-500">{mockupFiles.length > 0 ? '1 张' : '未上传'}</span>
             </div>
             <input
               ref={mockupInputRef}
               type="file"
               accept="image/*"
-              multiple
               onChange={handleMockupUpload}
               className="hidden"
             />
@@ -694,11 +685,11 @@ The result should look like the same photo from image 1, with only the ${targetP
             >
               <div className="flex flex-col items-center gap-1">
                 <Upload className="w-5 h-5 text-gray-400" />
-                <span className="text-xs text-gray-500">点击上传样机图</span>
+                <span className="text-xs text-gray-500">点击上传样机图（原图，保持尺寸）</span>
               </div>
             </Button>
-            
-            {/* 样机图列表 */}
+
+            {/* 样机图预览 */}
             {mockupFiles.length > 0 && (
               <div className="mt-3 space-y-2">
                 {mockupFiles.map((mockup) => (
@@ -721,10 +712,55 @@ The result should look like the same photo from image 1, with only the ${targetP
             )}
           </div>
 
-          {/* 产品图案上传 */}
+          {/* 蒙版图上传（PNG，透明区=替换区域，须与样机同尺寸） */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-700">产品图案</h3>
+              <h3 className="text-sm font-medium text-gray-700">蒙版图（PNG）</h3>
+              <span className="text-xs text-gray-500">{maskPreview ? '已上传' : '未上传'}</span>
+            </div>
+            <input
+              ref={maskInputRef}
+              type="file"
+              accept="image/png"
+              onChange={handleMaskUpload}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              className="w-full h-20 border-dashed"
+              onClick={() => maskInputRef.current?.click()}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <Upload className="w-5 h-5 text-gray-400" />
+                <span className="text-xs text-gray-500">点击上传蒙版（透明区=要替换的区域）</span>
+              </div>
+            </Button>
+
+            {/* 蒙版预览 */}
+            {maskPreview && (
+              <div className="mt-3">
+                <div className="flex items-center gap-2 p-2 bg-white rounded-lg border">
+                  <img
+                    src={maskPreview}
+                    alt={maskName}
+                    className="w-10 h-10 object-cover rounded bg-[repeating-conic-gradient(#ccc_0_25%,#fff_0_50%)] bg-[length:12px_12px]"
+                  />
+                  <span className="flex-1 text-xs text-gray-600 truncate">{maskName}</span>
+                  <button
+                    onClick={removeMask}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 设计图案上传（多张，逐张批量替换） */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-700">设计图案</h3>
               <span className="text-xs text-gray-500">{productFiles.length} 张</span>
             </div>
             <input
@@ -742,7 +778,7 @@ The result should look like the same photo from image 1, with only the ${targetP
             >
               <div className="flex flex-col items-center gap-1">
                 <Upload className="w-5 h-5 text-gray-400" />
-                <span className="text-xs text-gray-500">点击上传产品图案</span>
+                <span className="text-xs text-gray-500">点击上传设计图案（可多张，各出一张）</span>
               </div>
             </Button>
             
@@ -885,7 +921,7 @@ The result should look like the same photo from image 1, with only the ${targetP
           ) : (
             <Button
               className="w-full"
-              disabled={mockupFiles.length === 0 || productFiles.length === 0 || isGenerating}
+              disabled={mockupFiles.length === 0 || !maskPreview || productFiles.length === 0 || isGenerating}
               onClick={() => {
                 if (!isGenerating) {
                   startBatchGeneration();
@@ -893,7 +929,7 @@ The result should look like the same photo from image 1, with only the ${targetP
               }}
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              开始批量生成
+              开始批量替换
               {totalTasks > 0 && ` (${totalTasks} 张)`}
             </Button>
           )}

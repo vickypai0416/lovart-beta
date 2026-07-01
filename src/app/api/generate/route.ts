@@ -207,6 +207,8 @@ export async function POST(request: NextRequest) {
       model,
       quality = 'medium',
       n: requestN,
+      // 局部重绘蒙版（dataURL 或 http url，仅 gpt-image-2 编辑接口支持）
+      mask,
       // Deep workflow specific fields
       workflow,
       listingIndex,
@@ -338,12 +340,15 @@ export async function POST(request: NextRequest) {
       }
 
       const endpoint = modelConfig.endpoint!;
-      // 有参考图（图生图）优先用 gpt-image-2-vip：支持 30 档 size + response_format=url（实测该账户可用）
-      const isVip = model === 'gpt-image-2-vip';
-      const modelName = isVip ? 'gpt-image-2-vip' : modelConfig.modelName!;
-      // vip 用前端原始 size（30 档之一或 auto），不走 gpt-image-2-all 的白名单归一化
-      const editSize = isVip ? size : normalizeEditSize(width, height);
-      if (!isVip && editSize !== `${width}x${height}`) {
+      // 局部重绘：只有 gpt-image-2 支持 mask，vip/all 都不支持。
+      // 带 mask 时强制走 gpt-image-2，并用原始 size（须与 mask/样机同尺寸），不做白名单归一化。
+      const hasMask = typeof mask === 'string' && mask.length > 0;
+      // 有参考图（图生图）默认优先用 gpt-image-2-vip；但带 mask 时强制非 vip
+      const isVip = !hasMask && model === 'gpt-image-2-vip';
+      const modelName = hasMask ? 'gpt-image-2' : (isVip ? 'gpt-image-2-vip' : modelConfig.modelName!);
+      // vip 用前端原始 size（30 档）；带 mask 用原始 size（须与样机同尺寸）；其余走白名单归一化
+      const editSize = (isVip || hasMask) ? size : normalizeEditSize(width, height);
+      if (!isVip && !hasMask && editSize !== `${width}x${height}`) {
         console.warn(
           `[Generate API] 尺寸 ${width}x${height} 不在编辑接口支持列表，已调整为 ${editSize}`
         );
@@ -361,6 +366,12 @@ export async function POST(request: NextRequest) {
         let styleRefBlob: Blob | null = null;
         if (styleReferenceImage) {
           styleRefBlob = await imageToBlob(styleReferenceImage);
+        }
+
+        // 局部重绘蒙版（仅 gpt-image-2 生效，作用于第一张 image）
+        let maskBlob: Blob | null = null;
+        if (hasMask) {
+          maskBlob = await imageToBlob(mask);
         }
 
         let promptForEdit = finalPrompt;
@@ -381,6 +392,10 @@ export async function POST(request: NextRequest) {
           });
           if (styleRefBlob) {
             formData.append('image', styleRefBlob, 'style_reference.png');
+          }
+          // 蒙版：作用于第一张 image，透明区=重绘，须与第一张同尺寸（gpt-image-2 专属）
+          if (maskBlob) {
+            formData.append('mask', maskBlob, 'mask.png');
           }
           formData.append('prompt', promptForEdit);
           formData.append('model', modelName);
