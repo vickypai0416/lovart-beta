@@ -798,10 +798,10 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     const requestBody: Record<string, unknown> = {
       clientRequestId,
       prompt: gridPrompt,
-      // 九宫格大图：使用云雾 edits 接口支持的 2048 正方形（3840 不在支持列表会导致上游拒绝）
-      size: '2048x2048',
+      // 九宫格大图：gpt-image-2-vip 支持 2880x2880 4K 正方形（30 档之一）
+      size: '2880x2880',
       n: 1,
-      model: 'gpt-image-2',
+      model: 'gpt-image-2-vip',
       referenceImage,
       skipTranslation: true, // 亚马逊九宫格模板包含大量中文说明，跳过翻译以保持模板结构
       scope: 'amazon-grid',
@@ -851,14 +851,9 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     const gridUrl = gridData?.url || gridData?.urls?.[0] || (gridData?.images && gridData.images[0]);
     
     if (!gridUrl) throw new Error('生成接口未返回图片 URL');
-    
-    const croppedImages = await cropGridImages(gridUrl);
-    const validImages = croppedImages.filter(Boolean) as string[];
-    const displayImages = validImages.length > 0 ? [gridUrl, ...validImages] : [gridUrl];
 
-    if (validImages.length === 0) {
-      console.warn('[Amazon Grid Generation] Grid crop failed, showing original grid image instead');
-    }
+    // 不再裁成 9 张，直接展示整张九宫格大图
+    const displayImages = [gridUrl];
 
     if (isMounted.current) {
       setMessages(prev => prev.map(m => {
@@ -872,14 +867,11 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
       }));
     }
 
-    for (let i = 0; i < displayImages.length; i++) {
-      const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
-      await handleSaveChatImage(displayImages[i], label, messageId);
-    }
-    
+    await handleSaveChatImage(gridUrl, '亚马逊listing完整九宫格', messageId);
+
     const updatedHistory = await getChatHistoryWithUrls();
     setChatImageHistory(updatedHistory);
-    
+
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       console.log('[Amazon Grid Generation] Aborted');
@@ -894,9 +886,8 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
     
     const recoveredUrl = await recoverGeneratedImage(clientRequestId);
     if (recoveredUrl) {
-      const croppedImages = await cropGridImages(recoveredUrl);
-      const validImages = croppedImages.filter(Boolean) as string[];
-      const displayImages = validImages.length > 0 ? [recoveredUrl, ...validImages] : [recoveredUrl];
+      // 不再裁成 9 张，直接展示整张九宫格大图
+      const displayImages = [recoveredUrl];
 
       if (isMounted.current) {
         setMessages(prev => prev.map(m => {
@@ -910,10 +901,7 @@ const generateAmazonGridImage = async (messageId: string, referenceImage: string
         }));
       }
 
-      for (let i = 0; i < displayImages.length; i++) {
-        const label = validImages.length > 0 && i > 0 ? `亚马逊listing套图 - 图${i}` : '亚马逊listing完整九宫格';
-        await handleSaveChatImage(displayImages[i], label, messageId);
-      }
+      await handleSaveChatImage(recoveredUrl, '亚马逊listing完整九宫格', messageId);
 
       const updatedHistory = await getChatHistoryWithUrls();
       setChatImageHistory(updatedHistory);
