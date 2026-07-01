@@ -151,10 +151,11 @@ const MODULE_CONFIG: Record<APlusModuleType, { icon: typeof Star; name: string; 
   lifestyle: { icon: Heart, name: 'Lifestyle', shortName: 'Life' }
 };
 
-// 尺寸配置
+// 尺寸配置（gpt-image-2-vip 30 档尺寸）
+// desktop=手机端详情(4:3)，mobile=电脑端详情(超宽)
 const SIZE_CONFIG: Record<DeviceType, { width: number; height: number; label: string }> = {
-  desktop: { width: 1536, height: 1152, label: '1536x1152' },
-  mobile: { width: 2416, height: 1008, label: '2416x1008' }
+  desktop: { width: 2048, height: 1536, label: '2048x1536' },
+  mobile: { width: 2048, height: 864, label: '2048x864' }
 };
 
 export default function ProductDetailWorkflow() {
@@ -246,7 +247,7 @@ export default function ProductDetailWorkflow() {
 
     (['hero', 'personalization', 'emotional', 'features', 'lifestyle'] as APlusModuleType[]).forEach((moduleType) => {
       const config = MODULE_CONFIG[moduleType];
-      const sizeConfig = SIZE_CONFIG.desktop; // 手机端使用 desktop 配置（1536x1152）
+      const sizeConfig = SIZE_CONFIG.desktop; // 手机端使用 desktop 配置（2048x1536，4:3）
 
       newCards.push({
         id: `aplus-desktop-${moduleType}-${Date.now()}`,
@@ -583,21 +584,24 @@ ${productIntegrityClause}`;
       if (sourceMobileCard?.imageUrl) referenceImages.push(sourceMobileCard.imageUrl);
 
       const promptForRequest = card.deviceType === 'mobile'
-        ? `${card.prompt}\n\nIMPORTANT — KEEP ALL VISUAL ELEMENTS UNCHANGED: This is a layout re-composition task. You MUST preserve the EXACT SAME visual content from the reference image: same people/subjects, same product, same scene, same colors, same mood, same lighting, same text content, same design elements, same background. Only adjust the layout and composition to fit the wider 2416x1008 aspect ratio. Do NOT add, remove, replace, or reinterpret any element. Do NOT change product type, material, color, or wording. Keep all design elements consistent with the reference.`
+        ? `${card.prompt}\n\nIMPORTANT — KEEP ALL VISUAL ELEMENTS UNCHANGED: This is a layout re-composition task. You MUST preserve the EXACT SAME visual content from the reference image: same people/subjects, same product, same scene, same colors, same mood, same lighting, same text content, same design elements, same background. Only adjust the layout and composition to fit the wider 2048x864 aspect ratio. Do NOT add, remove, replace, or reinterpret any element. Do NOT change product type, material, color, or wording. Keep all design elements consistent with the reference.`
         : card.prompt;
+
+      // gpt-image-2-vip 只支持 30 档固定尺寸，按设备映射：
+      // desktop（手机端详情，4:3）→ 2048x1536；mobile（电脑端详情，超宽）→ 2048x864
+      const vipSize = card.deviceType === 'mobile' ? '2048x864' : '2048x1536';
 
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: promptForRequest,
-          // 商品图套图固定 2048x2048（gpt-image-2-vip/all 30 档之一，1:1 2K Recommended）
-          size: '2048x2048',
+          // 按设备映射到 vip 30 档尺寸
+          size: vipSize,
           quality: selectedQuality,
           n: 1,
-          // 用 gpt-image-2-all：apiyi 中转站上它支持直接返回 url，
-          // 避免 gpt-image-2 只能返回 b64_json 时转存图床失败导致图片看不到。
-          model: 'gpt-image-2-all',
+          // 用 gpt-image-2-vip：支持 30 档锁尺寸 + 直接返回 url
+          model: 'gpt-image-2-vip',
           scope: 'detail-page',
           ...(referenceImages.length > 0 ? { referenceImages } : {}),
         }),
