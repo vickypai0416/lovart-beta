@@ -714,7 +714,18 @@ export default function ImageGeneratorWorkflow() {
               </SelectContent>
             </Select>
           )}
-          {/* gpt-image-2-vip 不接受 quality 参数，已移除画质选择器 */}
+          {/* 质量控制选择器：仅 gpt-image-2（官转）可用，VIP/All 不支持 quality 参数 */}
+          {selectedModel === 'gpt-image-2' && (
+            <Select value={selectedQuality} onValueChange={setSelectedQuality}>
+              <SelectTrigger className="w-24 h-8 text-xs border-gray-200 bg-blue-50">
+                <SelectValue placeholder="质量" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low（快）</SelectItem>
+                <SelectItem value="medium">Medium（标准）</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={String(selectedCount)} onValueChange={(v) => setSelectedCount(Number(v))}>
             <SelectTrigger className="w-20 h-8 text-xs border-gray-200">
               <SelectValue placeholder="数量" />
