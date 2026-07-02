@@ -91,6 +91,7 @@ function GeneratedImageCard({ prompt, referenceImage, productName, designBibleId
         body: JSON.stringify({
           prompt: prompt.prompt,
           referenceImage: referenceImage,
+          model: 'gpt-image-2-vip', // 使用 VIP 模型（官逆 Codex 线）
           size: '1024x1024',
           quality: 'medium',
           n: 1,
