@@ -57,10 +57,10 @@ export default function ImageGeneratorWorkflow() {
   const { trackGeneration, updateGeneration, isInitialized } = useAnalytics();
   const [prompt, setPrompt] = useState('');
   const [selectedSize, setSelectedSize] = useState('2048x2048');
-  const [selectedQuality, setSelectedQuality] = useState('high');
+  const [selectedQuality, setSelectedQuality] = useState('low');
   const [selectedCount, setSelectedCount] = useState(1);
-  // selectedModel 仅为 UI 占位；实际请求的 model 在发送时按"是否有参考图"动态决定（见 effectiveModel）
-  const [selectedModel, setSelectedModel] = useState('gpt-image-2');
+  // 默认选择 gpt-image-2-vip（官逆Codex），通过比例控制尺寸
+  const [selectedModel, setSelectedModel] = useState('gpt-image-2-vip');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
@@ -94,8 +94,8 @@ export default function ImageGeneratorWorkflow() {
           if (state.selectedSize) setSelectedSize(state.selectedSize);
           if (state.selectedQuality) setSelectedQuality(state.selectedQuality);
           if (state.selectedCount) setSelectedCount(state.selectedCount);
-          // model 由发送时按是否有参考图动态决定，这里固定占位为 gpt-image-2
-          if (state.selectedModel) setSelectedModel('gpt-image-2');
+          // 恢复保存的模型选择，默认为 gpt-image-2-vip
+          if (state.selectedModel) setSelectedModel(state.selectedModel);
         } catch (e) {
           console.warn('恢复图片生成状态失败:', e);
           localStorage.removeItem('imageGeneratorState');
@@ -175,12 +175,32 @@ export default function ImageGeneratorWorkflow() {
     }
   };
 
+  // 模型选择：gpt-image-2（官转）、vip（官逆Codex）、all（官逆ChatGPT）
   const models = [
-    { value: 'gpt-image-2', label: 'GPT Image 2' },
+    { value: 'gpt-image-2', label: 'GPT Image 2（官转）', description: '尺寸无限制，quality=low' },
+    { value: 'gpt-image-2-vip', label: 'VIP（官逆Codex）', description: '通过比例控制尺寸' },
+    { value: 'gpt-image-2-all', label: 'All（官逆ChatGPT）', description: '最快，通过比例控制尺寸' },
   ];
 
-  // 精选常用尺寸（gpt-image-2-vip 30 档子集，gpt-image-2 文生图也兼容；写法须为半角小写 x）
-  // 注意：auto 仅在有参考图（走 vip）时生效；无参考图（文生图）时后端会回退到 1024x1024
+  // 比例选择（用于 vip/all 模型通过 prompt 头部控制尺寸）
+  const aspectRatios = [
+    { value: 'auto', label: '自动（由模型决定）', promptTag: '' },
+    { value: '1:1', label: '1:1 方形', promptTag: '[方形1:1]' },
+    { value: '3:2', label: '3:2 横版', promptTag: '[横版3:2]' },
+    { value: '2:3', label: '2:3 竖版', promptTag: '[竖版2:3]' },
+    { value: '4:3', label: '4:3 横版', promptTag: '[横版4:3]' },
+    { value: '3:4', label: '3:4 竖版', promptTag: '[竖版3:4]' },
+    { value: '16:9', label: '16:9 横版', promptTag: '[横版16:9]' },
+    { value: '9:16', label: '9:16 竖版', promptTag: '[竖版9:16]' },
+  ];
+
+  // 判断当前选择的模型是否为官逆（vip/all），需要通过比例控制尺寸
+  const isReverseModel = selectedModel === 'gpt-image-2-vip' || selectedModel === 'gpt-image-2-all';
+
+  // 比例状态（仅用于 vip/all 模型）
+  const [selectedRatio, setSelectedRatio] = useState('auto');
+
+  // 精选常用尺寸（2K档，gpt-image-2 文生图兼容）
   const sizes = [
     { value: '2048x2048', label: '1:1 方形 2K' },
     { value: '2048x1360', label: '3:2 横版 2K（电商主图）' },
@@ -188,11 +208,7 @@ export default function ImageGeneratorWorkflow() {
     { value: '1536x2048', label: '3:4 竖版 2K（海报）' },
     { value: '2048x1152', label: '16:9 横版 2K（封面）' },
     { value: '1152x2048', label: '9:16 竖版 2K（壁纸）' },
-    // 4K Detail（高清/印刷）
-    { value: '2880x2880', label: '1:1 方形 4K' },
-    { value: '3840x2160', label: '16:9 横版 4K' },
-    { value: '2160x3840', label: '9:16 竖版 4K' },
-    { value: '2480x3312', label: '3:4 竖版 4K' },
+    { value: '2880x2880', label: '1:1 方形（最大）' },
     { value: 'auto', label: '默认 自动（仅图生图，由提示词决定）' },
   ];
 
@@ -362,24 +378,54 @@ export default function ImageGeneratorWorkflow() {
           referenceImageCount: referenceImages.length,
         });
 
-        // 有参考图（图生图/编辑）走 gpt-image-2-vip（30 档锁尺寸 + 直接返回 url）；
-        // 无参考图（文生图）继续走 gpt-image-2。
-        const effectiveModel = referenceImages.length > 0 ? 'gpt-image-2-vip' : 'gpt-image-2';
+        // 根据选择的模型决定 effectiveModel 和 API 端点
+        // gpt-image-2: 调用 /api/generate，quality=low，尺寸无限制
+        // gpt-image-2-vip: 调用 /api/gpt-image-2-vip，通过 prompt 头部控制比例
+        // gpt-image-2-all: 调用 /api/gpt-image-2-all，通过 prompt 头部控制比例
+        const effectiveModel = selectedModel;
 
-        console.log('[Generate] fetch /api/generate start, model:', effectiveModel);
-        const response = await fetch('/api/generate', {
+        // 处理 prompt：如果是 vip/all 模型，添加比例标签到头部
+        let finalPrompt = englishPrompt || prompt.trim();
+        if (isReverseModel) {
+          const ratioTag = aspectRatios.find(r => r.value === selectedRatio)?.promptTag || '';
+          if (ratioTag) {
+            finalPrompt = `${ratioTag} ${finalPrompt}`;
+            console.log('[Generate] 添加比例标签:', ratioTag);
+          }
+        }
+
+        console.log('[Generate] fetch start, model:', effectiveModel, 'isReverse:', isReverseModel);
+
+        // 根据 model 选择 API 端点
+        const apiEndpoint = isReverseModel
+          ? (selectedModel === 'gpt-image-2-vip' ? '/api/gpt-image-2-vip' : '/api/gpt-image-2-all')
+          : '/api/generate';
+
+        const requestBody = isReverseModel
+          ? {
+              clientRequestId,
+              prompt: finalPrompt,
+              size: 'auto', // vip/all 不支持 size 参数，通过 prompt 控制
+              n: selectedCount,
+              model: effectiveModel,
+              scope: 'image-generator',
+              ...(referenceImages.length > 0 ? { referenceImages } : {}),
+            }
+          : {
+              clientRequestId,
+              prompt: finalPrompt,
+              size: selectedSize,
+              quality: 'low', // gpt-image-2 固定为 low
+              n: selectedCount,
+              model: effectiveModel,
+              scope: 'image-generator',
+              ...(referenceImages.length > 0 ? { referenceImages } : {}),
+            };
+
+        const response = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clientRequestId,
-            prompt: englishPrompt || prompt.trim(),
-            size: selectedSize,
-            quality: selectedQuality,
-            n: selectedCount,
-            model: effectiveModel,
-            scope: 'image-generator',
-            ...(referenceImages.length > 0 ? { referenceImages } : {}),
-          }),
+          body: JSON.stringify(requestBody),
           signal: abortControllerRef.current.signal,
         });
 
@@ -618,7 +664,13 @@ export default function ImageGeneratorWorkflow() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={selectedModel} onValueChange={setSelectedModel}>
+          <Select value={selectedModel} onValueChange={(v) => {
+            setSelectedModel(v);
+            // 切换到 vip/all 时重置比例为 auto
+            if (v === 'gpt-image-2-vip' || v === 'gpt-image-2-all') {
+              setSelectedRatio('auto');
+            }
+          }}>
             <SelectTrigger className="w-36 h-8 text-xs border-gray-200">
               <SelectValue placeholder="模型" />
             </SelectTrigger>
@@ -630,9 +682,14 @@ export default function ImageGeneratorWorkflow() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedSize} onValueChange={setSelectedSize}>
-            <SelectTrigger className="w-28 h-8 text-xs border-gray-200">
-              <SelectValue placeholder="尺寸" />
+          {/* 尺寸选择器：仅 gpt-image-2 模型可用 */}
+          <Select
+            value={selectedSize}
+            onValueChange={setSelectedSize}
+            disabled={isReverseModel}
+          >
+            <SelectTrigger className={`w-28 h-8 text-xs border-gray-200 ${isReverseModel ? 'opacity-50 cursor-not-allowed' : ''}`}>
+              <SelectValue placeholder={isReverseModel ? '（VIP/All用比例）' : '尺寸'} />
             </SelectTrigger>
             <SelectContent>
               {sizes.map((size) => (
@@ -642,6 +699,21 @@ export default function ImageGeneratorWorkflow() {
               ))}
             </SelectContent>
           </Select>
+          {/* 比例选择器：仅 vip/all 模型显示 */}
+          {isReverseModel && (
+            <Select value={selectedRatio} onValueChange={setSelectedRatio}>
+              <SelectTrigger className="w-24 h-8 text-xs border-gray-200">
+                <SelectValue placeholder="比例" />
+              </SelectTrigger>
+              <SelectContent>
+                {aspectRatios.map((ratio) => (
+                  <SelectItem key={ratio.value} value={ratio.value}>
+                    {ratio.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {/* gpt-image-2-vip 不接受 quality 参数，已移除画质选择器 */}
           <Select value={String(selectedCount)} onValueChange={(v) => setSelectedCount(Number(v))}>
             <SelectTrigger className="w-20 h-8 text-xs border-gray-200">

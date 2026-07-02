@@ -13,6 +13,8 @@ export const maxDuration = 300;
 const SUPPORTED_EDIT_SIZES = new Set([
   '1024x1024', '1024x1536', '1536x1024',
   '2048x2048', '2048x1536', '1536x2048', '2048x1152', '1152x2048',
+  // 前端尺寸选择器中的尺寸（确保全部覆盖）
+  '2048x1360', '1360x2048',
   // 新增尺寸
   '2880x2880', '1472x3040', '1088x3264', '1024x3072',
   // 比例尺寸
@@ -21,6 +23,9 @@ const SUPPORTED_EDIT_SIZES = new Set([
   '1536x1152',
   // 电脑端详情页
   '2416x1008',
+  // 4K 尺寸（官转 gpt-image-2 支持）
+  '3840x2160', '2160x3840', '2480x3312', '3312x2480', '2336x3520', '3520x2336',
+  '2560x3216', '3216x2560', '3840x1632',
 ]);
 
 function normalizeEditSize(width: number, height: number): string {
@@ -35,6 +40,47 @@ function normalizeEditSize(width: number, height: number): string {
 
 function containsChinese(text: string): boolean {
   return /[\u4e00-\u9fff]/.test(text);
+}
+
+/**
+ * 清洗无意义的质量标签词（对 gpt-image-2 无效的噪声词）
+ * 这些词在早期扩散模型（SD）中可能有效，但对 GPT-Image 系列完全无作用
+ */
+const NOISE_WORDS = [
+  // 分辨率标签（size 参数已锁定，这些词无效）
+  '8k', '16k', '32k', '64k', '128k', '4k', '2k',
+  // 质量标签（quality 参数已控制）
+  'award winning', 'masterpiece', 'best quality', 'ultra quality', 'super quality', 'high quality',
+  'best', 'ultra', 'super',
+  // 细节标签（模型内置细节控制）
+  'highly detailed', 'ultra detailed', 'super detailed', 'extremely detailed', 'intricate details',
+  'professional', 'professional quality', 'professional photo',
+  // 其他常见噪声词
+  'trending on artstation', 'deviantart', 'midjourney', 'stable diffusion',
+];
+
+function cleanNoiseWords(prompt: string): string {
+  let cleaned = prompt;
+
+  // 按词长度降序排列，避免部分匹配问题
+  const sortedNoise = [...NOISE_WORDS].sort((a, b) => b.length - a.length);
+
+  for (const word of sortedNoise) {
+    // 正则匹配：不区分大小写，匹配整个词（边界匹配）
+    const regex = new RegExp(`\\b${word.replace(/\s+/g, '\\s+')}\\b`, 'gi');
+    cleaned = cleaned.replace(regex, '');
+  }
+
+  // 清理多余空格、逗号和句号
+  cleaned = cleaned
+    .replace(/,\s*,/g, ',')       // 连续逗号
+    .replace(/\.\s*\./g, '.')     // 连续句号
+    .replace(/[,\s]+$/g, '')      // 末尾逗号/空格
+    .replace(/^[,\s]+/g, '')      // 开头逗号/空格
+    .replace(/\s{2,}/g, ' ')      // 多余空格
+    .trim();
+
+  return cleaned;
 }
 
 async function translateToEnglish(text: string): Promise<string> {
@@ -246,6 +292,13 @@ export async function POST(request: NextRequest) {
         { success: false, error: '缺少必要参数：prompt 或 product + scene' },
         { status: 400 }
       );
+    }
+
+    // 清洗无意义的质量标签词（对 gpt-image-2 无效的噪声）
+    const cleanedPrompt = cleanNoiseWords(finalPrompt);
+    if (cleanedPrompt !== finalPrompt) {
+      console.log('[Generate API] 已清洗噪声词:', { original: finalPrompt.substring(0, 100), cleaned: cleanedPrompt.substring(0, 100) });
+      finalPrompt = cleanedPrompt;
     }
 
     const spec = AMAZON_IMAGE_SPECS[specType as ImageSpecType];
