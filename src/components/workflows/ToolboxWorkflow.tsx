@@ -403,9 +403,23 @@ ${preserveFaces ? '   - 绝对禁止模糊或修改人脸细节\n' : ''}${isHoll
   }): Promise<string> => {
     updateResultStatus(resultId, 'generating');
     // 局部重绘：样机图=底图(image1)，设计图案=image2，蒙版标出替换区域。
-    // 提示词优先用用户自定义，否则用固定的“替换图案”。
+    // 提示词优先用用户自定义，否则用固定的替换规则。
     const replacePrompt = prompt.trim()
-      || '把图2的图案替换到图1中蒙版标出的区域，其余部分保持不变';
+      || `Replace only the masked area with the provided design. 
+
+CRITICAL: 
+- Only edit inside mask, do not change anything outside 
+- Do not extend or spill beyond mask boundary 
+- Design must fully cover the masked area edge-to-edge 
+- Keep original design colors exactly (no color shift or recolor) 
+
+SURFACE: 
+- Apply as printed texture on surface 
+- Preserve original lighting, shadows, folds, and material texture 
+- No blending of design colors with product 
+
+RULE: 
+Mask boundary is absolute. No content outside mask under any condition.`;
     return requestGeneratedImage({
       prompt: replacePrompt,
       referenceImages: [mockupPreview, productPreview],
