@@ -163,7 +163,6 @@ export default function ProductDetailWorkflow() {
   const [productName, setProductName] = useState('');
   const [productDescription, setProductDescription] = useState('');
   const [coreSellingPoint, setCoreSellingPoint] = useState('');
-  const [selectedQuality, setSelectedQuality] = useState('medium');
   const [emotionalScene, setEmotionalScene] = useState<EmotionalScene>('general');
   const [customEmotionalText, setCustomEmotionalText] = useState('');
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
@@ -587,21 +586,20 @@ ${productIntegrityClause}`;
         ? `${card.prompt}\n\nIMPORTANT — KEEP ALL VISUAL ELEMENTS UNCHANGED: This is a layout re-composition task. You MUST preserve the EXACT SAME visual content from the reference image: same people/subjects, same product, same scene, same colors, same mood, same lighting, same text content, same design elements, same background. Only adjust the layout and composition to fit the wider 2048x864 aspect ratio. Do NOT add, remove, replace, or reinterpret any element. Do NOT change product type, material, color, or wording. Keep all design elements consistent with the reference.`
         : card.prompt;
 
-      // gpt-image-2-vip 只支持 30 档固定尺寸，按设备映射：
-      // desktop（手机端详情，4:3）→ 2048x1536；mobile（电脑端详情，超宽）→ 2048x864
-      const vipSize = card.deviceType === 'mobile' ? '2048x864' : '2048x1536';
+      // gpt-image-2 模型，尺寸固定为 1254x1254
+      const fixedSize = '1254x1254';
 
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: promptForRequest,
-          // 按设备映射到 vip 30 档尺寸
-          size: vipSize,
-          quality: selectedQuality,
+          // 使用固定尺寸 1254x1254
+          size: fixedSize,
+          quality: 'low', // 固定质量为 low
           n: 1,
-          // 用 gpt-image-2-vip：支持 30 档锁尺寸 + 直接返回 url
-          model: 'gpt-image-2-vip',
+          // 使用 gpt-image-2（官转模型）
+          model: 'gpt-image-2',
           scope: 'detail-page',
           ...(referenceImages.length > 0 ? { referenceImages } : {}),
         }),
@@ -899,17 +897,7 @@ ${productIntegrityClause}`;
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={selectedQuality} onValueChange={setSelectedQuality}>
-            <SelectTrigger className="w-24 h-8 text-xs border-gray-200">
-              <SelectValue placeholder="画质" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="auto">Auto</SelectItem>
-            </SelectContent>
-          </Select>
+          <span className="text-xs text-gray-500">模型: gpt-image-2 | 尺寸: 1254x1254 | 质量: low</span>
         </div>
       </div>
 
