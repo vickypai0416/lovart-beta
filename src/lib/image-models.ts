@@ -37,6 +37,10 @@ const DEFAULT_ALL_MODEL_NAME = 'gpt-image-2-all';
 const DEFAULT_NANO_MODEL_NAME = 'gpt-5.4-nano';
 const DEFAULT_GPT_5_4_MODEL_NAME = 'gpt-5.4';
 
+// 云雾 API 备用配置（当 apiyi 余额不足时自动切换）
+const YUNWU_BACKUP_ENDPOINT = 'https://yunwu.ai/v1/images/edits';
+const YUNWU_BACKUP_GEN_ENDPOINT = 'https://yunwu.ai/v1/images/generations';
+
 // 文本模型（仅作为语言模型/对话模型用），各 scope 都使用默认 Key
 const TEXT_MODELS_BASE: Record<'gpt-5-nano' | 'gpt-5.4', Pick<ImageModelConfig, 'id' | 'name' | 'description' | 'type' | 'endpoint' | 'modelName'>> = {
   'gpt-5-nano': {
@@ -152,6 +156,26 @@ export function getImageEditModelConfig(scope?: ModelScope): ImageModelConfig {
     available: !!apiKey,
     apiKey,
     endpoint: BASE_GPT_IMAGE_2_ENDPOINT,
+    modelName: DEFAULT_MODEL_NAME,
+  };
+}
+
+/**
+ * 获取云雾 API 备用配置（当 apiyi 失败时自动切换）
+ * 云雾使用 TUCHUANG_KEY 作为认证
+ */
+export function getYunwuBackupConfig(type: 'edit' | 'gen' = 'edit'): ImageModelConfig {
+  const apiKey = process.env.TUCHUANG_KEY || '';
+  const endpoint = type === 'edit' ? YUNWU_BACKUP_ENDPOINT : YUNWU_BACKUP_GEN_ENDPOINT;
+  
+  return {
+    id: 'gpt-image-2',
+    name: 'GPT Image 2 (Yunwu Backup)',
+    description: '云雾 API 备用（当 apiyi 余额不足时自动切换）',
+    type: 'image',
+    available: !!apiKey,
+    apiKey,
+    endpoint,
     modelName: DEFAULT_MODEL_NAME,
   };
 }

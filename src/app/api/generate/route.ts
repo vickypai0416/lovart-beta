@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AMAZON_IMAGE_SPECS, ImageSpecType, getRecommendedSize } from '@/lib/image-specs';
-import { getImageEditModelConfig, getModelConfig, ModelScope } from '@/lib/image-models';
+import { getImageEditModelConfig, getModelConfig, ModelScope, getYunwuBackupConfig } from '@/lib/image-models';
 import { createGeneration, getAllGenerationRecords, updateGeneration } from '@/lib/analytics';
 import { parseUpstreamApiError } from '@/lib/upstream-api-error';
 import { uploadImageToHost, transferImageToHost } from '@/lib/image-host';
@@ -8,6 +8,42 @@ import { uploadImageToR2 } from '@/lib/r2-storage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+
+/**
+ * 判断是否应该切换到备用 API（云雾）
+ * 当 apiyi 失败且满足以下条件时自动切换：
+ * - 401 Unauthorized（认证失败/余额不足）
+ * - 403 Forbidden（权限不足）
+ * - 429 Too Many Requests（余额不足或请求过多）
+ * - 500 Internal Server Error（服务器错误）
+ */
+function shouldFallbackToBackup(status: number, errorText?: string): boolean {
+  // 认证失败、权限不足、余额不足等错误
+  if (status === 401 || status === 403 || status === 429) {
+    return true;
+  }
+  
+  // 服务器错误（可能是 apiyi 服务不可用）
+  if (status === 500) {
+    return true;
+  }
+  
+  // 检查错误文本中的特定关键词（如"余额不足"、"insufficient balance"等）
+  if (errorText) {
+    const lowerText = errorText.toLowerCase();
+    if (
+      lowerText.includes('余额不足') ||
+      lowerText.includes('insufficient') ||
+      lowerText.includes('balance') ||
+      lowerText.includes('quota') ||
+      lowerText.includes('limit')
+    ) {
+      return true;
+    }
+  }
+  
+  return false;
+}
 
 /** 云雾 gpt-image-2-all 编辑接口支持的常见尺寸（见 Apifox /v1/images/edits） */
 const SUPPORTED_EDIT_SIZES = new Set([
@@ -484,6 +520,89 @@ export async function POST(request: NextRequest) {
             console.error('[Generate API] 生图失败 - 状态码:', response.status, 'requestId:', upstream.requestId);
             console.error('[Generate API] 响应内容:', text.substring(0, 500));
 
+            // 判断是否应该切换到云雾备用 API
+            if (shouldFallbackToBackup(response.status, text)) {
+              console.log('[Generate API] 检测到 apiyi 失败，尝试切换到云雾备用 API...');
+              
+              const backupConfig = getYunwuBackupConfig('edit');
+              if (!backupConfig.apiKey) {
+                console.error('[Generate API] 云雾备用 API Key 未配置（TUCHUANG_KEY）');
+                // 如果已经生成了一些图片，返回已生成的
+                if (allImageUrls.length > 0) {
+                  console.log(`[Generate API] 部分成功，已生成 ${allImageUrls.length} 张图片`);
+                  break;
+                }
+                return NextResponse.json(
+                  {
+                    success: false,
+                    error: `图片生成失败：API 返回错误 ${response.status}，且云雾备用 API Key 未配置`,
+                    requestId: upstream.requestId,
+                    upstreamStatus: response.status,
+                  },
+                  { status: response.status === 429 ? 429 : 500 }
+                );
+              }
+
+              // 使用云雾备用 API 重试
+              console.log('[Generate API] 使用云雾备用端点:', backupConfig.endpoint);
+              const backupFormData = new FormData();
+              imageBlobs.forEach((blob, index) => {
+                backupFormData.append('image', blob, `product_${index + 1}.png`);
+              });
+              if (styleRefBlob) {
+                backupFormData.append('image', styleRefBlob, 'style_reference.png');
+              }
+              if (maskBlob) {
+                backupFormData.append('mask', maskBlob, 'mask.png');
+              }
+              backupFormData.append('prompt', promptForEdit);
+              backupFormData.append('model', backupConfig.modelName!);
+              backupFormData.append('size', editSize);
+              // 云雾 API 支持 quality 参数
+              if (quality && !isVip) {
+                backupFormData.append('quality', quality);
+              }
+
+              const backupResponse = await fetch(backupConfig.endpoint!, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${backupConfig.apiKey}`,
+                  'Accept': 'application/json',
+                },
+                body: backupFormData,
+              });
+
+              console.log('[Generate API] 云雾备用 HTTP状态码:', backupResponse.status);
+
+              if (backupResponse.ok) {
+                console.log('[Generate API] 云雾备用 API 成功！');
+                const backupResponseText = await backupResponse.text();
+                let backupData;
+                try {
+                  backupData = JSON.parse(backupResponseText);
+                } catch {
+                  console.error('[Generate API] 云雾备用响应不是有效 JSON');
+                  if (allImageUrls.length > 0) {
+                    break;
+                  }
+                  return NextResponse.json(
+                    { success: false, error: '图片生成失败：云雾备用 API 返回格式错误' },
+                    { status: 500 }
+                  );
+                }
+
+                const backupImageUrls = await extractImageUrls(backupData);
+                if (backupImageUrls.length > 0) {
+                  console.log(`[Generate API] 第 ${i + 1} 张图片通过云雾备用生成成功`);
+                  allImageUrls.push(backupImageUrls[0]);
+                  continue; // 继续下一张图片的生成
+                }
+              } else {
+                const backupErrorText = await backupResponse.text();
+                console.error('[Generate API] 云雾备用也失败:', backupErrorText.substring(0, 500));
+              }
+            }
+
             // 如果已经生成了一些图片，返回已生成的
             if (allImageUrls.length > 0) {
               console.log(`[Generate API] 部分成功，已生成 ${allImageUrls.length} 张图片`);
@@ -644,6 +763,83 @@ export async function POST(request: NextRequest) {
           const upstream = parseUpstreamApiError(response.status, text);
           console.error('[Generate API] 生图失败 - 状态码:', response.status, 'requestId:', upstream.requestId);
           console.error('[Generate API] 响应内容:', text.substring(0, 500));
+
+          // 判断是否应该切换到云雾备用 API
+          if (shouldFallbackToBackup(response.status, text)) {
+            console.log('[Generate API] 检测到 apiyi 失败，尝试切换到云雾备用 API...');
+            
+            const backupConfig = getYunwuBackupConfig('gen');
+            if (!backupConfig.apiKey) {
+              console.error('[Generate API] 云雾备用 API Key 未配置（TUCHUANG_KEY）');
+              // 如果已经生成了一些图片，返回已生成的
+              if (allImageUrls.length > 0) {
+                console.log(`[Generate API] 部分成功，已生成 ${allImageUrls.length} 张图片`);
+                break;
+              }
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: `图片生成失败：API 返回错误 ${response.status}，且云雾备用 API Key 未配置`,
+                  requestId: upstream.requestId,
+                  upstreamStatus: response.status,
+                },
+                { status: response.status === 429 ? 429 : 500 }
+              );
+            }
+
+            // 使用云雾备用 API 重试
+            console.log('[Generate API] 使用云雾备用端点:', backupConfig.endpoint);
+            const backupRequestBody: Record<string, unknown> = {
+              model: backupConfig.modelName!,
+              prompt: finalPrompt,
+              n: 1,
+              size: genSize,
+            };
+
+            if (quality) {
+              backupRequestBody.quality = quality;
+            }
+
+            const backupResponse = await fetch(backupConfig.endpoint!, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${backupConfig.apiKey}`,
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify(backupRequestBody),
+            });
+
+            console.log('[Generate API] 云雾备用 HTTP状态码:', backupResponse.status);
+
+            if (backupResponse.ok) {
+              console.log('[Generate API] 云雾备用 API 成功！');
+              const backupResponseText = await backupResponse.text();
+              let backupData;
+              try {
+                backupData = JSON.parse(backupResponseText);
+              } catch {
+                console.error('[Generate API] 云雾备用响应不是有效 JSON');
+                if (allImageUrls.length > 0) {
+                  break;
+                }
+                return NextResponse.json(
+                  { success: false, error: '图片生成失败：云雾备用 API 返回格式错误' },
+                  { status: 500 }
+                );
+              }
+
+              const backupImageUrls = await extractImageUrls(backupData);
+              if (backupImageUrls.length > 0) {
+                console.log(`[Generate API] 第 ${i + 1} 张图片通过云雾备用生成成功`);
+                allImageUrls.push(backupImageUrls[0]);
+                continue; // 继续下一张图片的生成
+              }
+            } else {
+              const backupErrorText = await backupResponse.text();
+              console.error('[Generate API] 云雾备用也失败:', backupErrorText.substring(0, 500));
+            }
+          }
 
           // 如果已经生成了一些图片，返回已生成的
           if (allImageUrls.length > 0) {
