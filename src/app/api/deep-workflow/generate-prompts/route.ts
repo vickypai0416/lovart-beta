@@ -2,6 +2,66 @@ import { NextResponse } from 'next/server';
 import { getTextModelFallback } from '@/lib/image-models';
 import type { ProductAnalysis, DesignBible, GeneratedPrompt, ListingBlueprint, ImageBlueprint } from '@/lib/deep-workflow/types';
 
+// ============================================================
+// GLOBAL CONSTANTS - Technical Standards for ALL Images
+// ============================================================
+
+// ===== Global Photography Standards =====
+const GLOBAL_PHOTOGRAPHY_STANDARDS = `
+PHOTOGRAPHY STANDARDS (Apply to ALL images):
+- Professional Amazon listing photography quality
+- Soft studio lighting with warm golden tones when appropriate
+- Natural ambient lighting for lifestyle/gifting scenes
+- Strategic spotlight on customization areas when needed
+- High-resolution 4K quality with sharp focus on details
+`;
+
+// ===== Global Customization Preservation Rules =====
+const GLOBAL_CUSTOMIZATION_PRESERVATION = `
+CRITICAL - PRESERVE EXISTING CUSTOMIZATION:
+- The product shows EXACT same custom design/print as in reference image
+- Preserve ALL existing personalization: names, photos, text, artwork
+- Do NOT change, alter, replace, or reinterpret the custom content
+- Keep customization locked and identical to reference
+`;
+
+// ===== Global Size Constraints =====
+const GLOBAL_SIZE_CONSTRAINTS = `
+SIZE & PROPORTION RULES:
+- MAINTAIN exact product proportions, size, and scale from reference
+- Show product at accurate true-to-life dimensions
+- Use hands/person/environment to demonstrate true scale when needed
+- Never distort or resize the product disproportionately
+`;
+
+// ===== Global Packaging Prohibitions =====
+const GLOBAL_PACKAGING_PROHIBITIONS = `
+STRICT PROHIBITIONS:
+- NO gift boxes, NO packaging, NO wrapping paper
+- NO ribbons, NO bows, NO decorative overlays
+- NO festive decorations covering the product
+- Product shown BARE / UNBOXED / as standalone item
+`;
+
+// ===== Global E-Commerce Typography Standards =====
+const GLOBAL_ECOMMERCE_TYPOGRAPHY = `
+E-COMMERCE TYPOGRAPHY (for images with text):
+- Amazon A+ premium listing standards
+- Clear visual hierarchy: headline > subheadline > body
+- Generous whitespace around product and text
+- Typography colors consistent with design bible
+- Professional layout with balanced composition
+`;
+
+// ===== Global Quality Standards =====
+const GLOBAL_QUALITY_STANDARDS = `
+QUALITY STANDARDS:
+- Premium bespoke presentation
+- Professional Amazon listing quality
+- Consistent with all other images in the set
+- Product is ALWAYS the hero
+`;
+
 interface GeneratePromptsRequest {
   analysis: ProductAnalysis;
   designBible: DesignBible;
@@ -323,15 +383,15 @@ function generateImageBlueprint(
     hero: {
       index: 1,
       type: '主图 - 白底展示',
-      goal: '纯白背景展示产品全貌，突出定制区域细节，强调个性化特征，保留参考图中现有的定制内容',
+      goal: '纯白背景展示产品全貌，突出定制区域细节，强调个性化特征',
       headline: analysis.product_name,
       subheadline: analysis.selling_points[0] || 'Premium Quality',
-      scene: 'Pure white background RGB 255,255,255, professional studio lighting, product with EXACT same custom design/print as shown in reference image - preserve existing personalization perfectly without any changes',
-      camera: 'Front-facing 3/4 angle with extreme close-up on customization area showing intricate details, product fills 85% of frame with dramatic lighting that makes personalized elements the undeniable focal point',
-      lighting: 'Soft diffused studio lighting with strategic spotlight on customization area, enhancing texture and making custom designs stand out sharply against the product surface',
-      emotion: 'Luxurious exclusivity, premium craftsmanship, emphasizing that this is a bespoke item made specifically for the customer',
-      composition: 'Product centered with visual hierarchy directing eye to personalized details - subtle shadowing creates depth while keeping focus on the unique customization, existing custom content preserved exactly as in reference',
-      elements: ['Existing personalization preserved exactly', 'Sharp focus on custom design details', 'Professional studio quality', 'Custom design as visual anchor', 'Premium bespoke presentation', 'Reference image customization maintained'],
+      scene: 'Pure white background RGB 255,255,255, product fills 85% of frame, centered with custom design clearly visible',
+      camera: 'Front-facing 3/4 angle with extreme close-up on customization area showing intricate details',
+      lighting: 'Soft diffused studio lighting with strategic spotlight on customization area',
+      emotion: 'Luxurious exclusivity, premium craftsmanship, emphasizing bespoke personalization',
+      composition: 'Product centered, visual hierarchy directing eye to personalized details',
+      elements: ['Sharp focus on custom design details', 'Custom design as visual anchor'],
       text_content: { headline: '', subheadline: '' }
     },
     
@@ -341,15 +401,15 @@ function generateImageBlueprint(
     customization: {
       index: 2,
       type: '定制流程展示',
-      goal: '展示人物手持产品，展示定制流程和工艺，保持产品原有尺寸和比例',
+      goal: '展示人物手持产品，展示定制流程和工艺',
       headline: 'Personalized Just for You',
       subheadline: 'Easy Customization Process',
-      scene: `Person holding product with clear view of customizable area, showing how to add personalization like engraving or design. ${analysis.dimensions ? `CRITICAL SIZE INFO: Product is ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Person should hold it in a way that clearly shows this true size - hands positioned to demonstrate scale, product should not appear larger or smaller than actual dimensions.` : 'MAINTAIN exact product proportions, size, and scale as shown in reference image'}`,
-      camera: 'Medium shot showing hands holding product with customization area highlighted, camera angle chosen to emphasize true product scale and size relative to hands, accurate scale representation',
+      scene: `Person holding product with clear view of customizable area, showing how to add personalization like engraving or design. ${analysis.dimensions ? `Product dimensions: ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Person should hold it showing true size.` : ''}`,
+      camera: 'Medium shot showing hands holding product with customization area highlighted',
       lighting: 'Clean studio lighting with focus on product details',
       emotion: 'Professional and informative, showcasing customization options clearly',
-      composition: 'Product centered with accurate size representation, hands positioned to show true scale, customization area prominently displayed, maintain true-to-life proportions',
-      elements: ['Person holding product at accurate scale with hands showing size reference', 'Customization area highlighted', 'Clear view of personalization options', 'Professional presentation', 'True-to-life product size', 'Hand scale reference'],
+      composition: 'Product centered with accurate size representation, hands showing scale',
+      elements: ['Person holding product at accurate scale', 'Customization area highlighted', 'Hand scale reference'],
       text_content: { headline: 'Easy to Customize', subheadline: 'Make It Yours' }
     },
     
@@ -359,15 +419,15 @@ function generateImageBlueprint(
     story: {
       index: 3,
       type: '情感故事',
-      goal: '讲述专属定制故事，强调"这是为谁定制的"以及背后的情感意义，突出独一无二的专属感，采用精美电商排版设计，保留产品上的现有定制内容',
+      goal: '讲述专属定制故事，强调"这是为谁定制的"以及背后的情感意义，突出独一无二的专属感',
       headline: 'Made for Someone Special',
       subheadline: 'One of a Kind',
-      scene: `${generateStoryScene(preferences.selectedAudiences)}. CRITICAL: The product shows the EXACT same custom design/print as the reference image - names, photos, artwork, or text must be preserved perfectly without any modification`,
-      camera: 'Professional product photography with artistic composition, product positioned strategically with existing custom design clearly visible and unchanged, beautiful text overlay elements',
-      lighting: 'Soft studio lighting with warm golden tones, creating luxurious atmosphere with gentle highlights on personalized details',
+      scene: generateStoryScene(preferences.selectedAudiences),
+      camera: 'Professional product photography with artistic composition',
+      lighting: 'Soft studio lighting with warm golden tones',
       emotion: 'Deeply personal connection, overwhelming joy, feeling of being uniquely seen and cherished',
-      composition: 'Modern e-commerce layout with product as hero showing preserved custom design, elegant text elements arranged artfully around it, decorative flourishes and subtle background patterns that enhance visual appeal without distraction',
-      elements: ['Beautifully styled product with preserved customization', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Emotional visual storytelling', 'Existing custom design maintained exactly'],
+      composition: 'Modern e-commerce layout with product as hero, elegant text elements arranged artfully',
+      elements: ['Beautifully styled product', 'Elegant typography elements', 'Soft decorative flourishes', 'Emotional visual storytelling'],
       text_content: { headline: 'EXCLUSIVELY YOURS', subheadline: 'A Gift Made Just for You' }
     },
     
@@ -377,27 +437,21 @@ function generateImageBlueprint(
     gifting: {
       index: 4,
       type: '真实送礼瞬间',
-      goal: '以专业电商排版的视觉语言展示一个真实人物之间正在互相送礼的瞬间：有人正把定制产品递给收礼人，收礼人正打开/看到/惊讶/微笑。突出收礼人看到定制内容那一刻的真实情感反应和礼物的独特性。要明确根据目标受众的人群（gender / age / role）来生成场景中的人物，禁止默认女性，禁止男女模糊。保持产品原图比例和定制内容不变。文案排版要求符合 Amazon A+ 专业电商排版标准：清晰层级、留白、字体、配色协调。',
+      goal: '展示真实人物之间互相送礼的瞬间，突出收礼人看到定制内容的真实情感反应',
       headline: holidayText.headline,
       subheadline: holidayText.subheadline,
-      scene: `A REAL gift-giving moment between two real people, composed with PROFESSIONAL E-COMMERCE TYPOGRAPHY: ${generateGiftingScene(holidayText.headline, preferences.selectedHolidays, preferences.selectedAudiences, preferences.customHoliday, preferences.customAudience)}. The scene depicts a genuine human moment — someone handing or opening the personalized product, the recipient showing an authentic reaction (surprise, smile, laughter, emotional response). Both people look and act like real human beings of the specified target audience (age, gender, role). DO NOT default to women; match the gender and age explicitly specified by the target audience. No studio backdrop, no gift box, no ribbon, no wrapping paper, no festive overlays. The product is shown BARE / unwrapped, being handed from one person to another. MAINTAIN exact product proportions, size, and scale as shown in reference image. Preserve the product's custom design exactly as the reference. The OVERALL LAYOUT must follow PROFESSIONAL E-COMMERCE TYPOGRAPHY: clear visual hierarchy, generous whitespace, headline + subheadline + body text balanced, typography colors and weights consistent with Amazon A+ premium listing standards.`,
-      camera: 'Natural candid photography, eye-level or slightly above, the two real people framed in a warm moment, both faces visible and showing genuine emotion, the personalized product clearly visible between them at accurate scale. The composition leaves clean room for headline + subheadline + body text overlays with professional e-commerce typography spacing',
-      lighting: 'Natural ambient lighting appropriate to the scene setting (warm home light, soft daylight, or a real environment) — NOT studio softbox. Captures skin tones and the product surface realistically',
+      scene: `A REAL gift-giving moment: ${generateGiftingScene(holidayText.headline, preferences.selectedHolidays, preferences.selectedAudiences, preferences.customHoliday, preferences.customAudience)}. The recipient showing authentic reaction (surprise, smile, laughter). Both people match the target audience (age, gender, role). DO NOT default to women; match gender/age explicitly. Product shown BARE / unwrapped, being handed from one person to another.`,
+      camera: 'Natural candid photography, eye-level, both faces visible showing genuine emotion',
+      lighting: 'Natural ambient lighting appropriate to scene setting',
       emotion: holidayText.headline
-        ? `Genuine authentic gifting moment, real human reaction of surprise and delight, ${holidayText.headline.toLowerCase()} warmth`
-        : 'Genuine authentic gifting moment, real human reaction of surprise and delight, warm celebratory feeling',
-      composition: 'Candid two-person composition. The gift-giver is on one side, the recipient is on the other side, the personalized product is in the center between them or being handed over. Both people are fully in frame, faces and emotion clearly visible. Real environment background (home, cafe, workshop, etc.) — not a studio backdrop. Product size/proportions must match the reference image exactly. Apply PROFESSIONAL E-COMMERCE TYPOGRAPHY layout: clear headline / subheadline / body hierarchy, generous whitespace around the product, well-balanced composition, typography and color palette consistent with Amazon A+ premium listing standards',
+        ? `Genuine authentic gifting moment, ${holidayText.headline.toLowerCase()} warmth`
+        : 'Genuine authentic gifting moment, warm celebratory feeling',
+      composition: 'Candid two-person composition, product in center between them, real environment background',
       elements: [
-        'Two real human subjects in a candid moment',
-        'Real environment (home, cafe, workshop, etc.), not studio',
-        'Personalized product handed or being opened between them',
-        'Both subjects showing authentic emotional reaction',
-        'Product at accurate true-to-life size, custom design preserved',
-        'Natural ambient lighting, no studio softbox',
-        'No gift box, no wrapping, no ribbon, no packaging',
-        'No festive decorative overlays',
-        'Professional e-commerce typography: headline + subheadline + body text with clear hierarchy',
-        'Generous whitespace and balanced visual composition'
+        'Two real human subjects in candid moment',
+        'Real environment (home, cafe, workshop)',
+        'Personalized product handed or being opened',
+        'Both subjects showing authentic emotional reaction'
       ],
       text_content: holidayText.headline
         ? { headline: `Celebrate with ${holidayText.headline}`, subheadline: 'An Exclusive Gift Made Just for You' }
@@ -410,15 +464,15 @@ function generateImageBlueprint(
     features: {
       index: 5,
       type: '产品特点展示',
-      goal: '展示4个核心产品特点，同时突出定制选项和个性化可能性，创造视觉层次，保持产品原有尺寸和比例',
+      goal: '展示4个核心产品特点，同时突出定制选项和个性化可能性',
       headline: 'Why You\'ll Love It',
       subheadline: 'Personalized Perfection',
-      scene: 'Elegant styled composition featuring product with beautiful visible personalization - showing existing custom design on product - surrounded by 4 beautifully presented feature highlights showcasing premium materials, artisanal craftsmanship, unlimited customization options, and exceptional quality. MAINTAIN exact product proportions, size, and scale as shown in reference image',
-      camera: 'Artistic arrangement with product as centerpiece at accurate scale, each feature highlighted with visual cues pointing to customization possibilities',
-      lighting: 'Studio lighting with dramatic shadows creating depth, highlighting both product features and personalized details',
-      emotion: 'Premium craftsmanship, endless personalization possibilities, desirable bespoke luxury, confidence in custom quality',
-      composition: 'Product with visible customization as centerpiece at accurate true-to-life size, 4 feature highlights arranged artistically around it, maintain correct product proportions throughout',
-      elements: ['Product at accurate true-to-life size', 'Artistic feature presentation', 'Premium materials showcased', 'Existing customization preserved', 'Professional styling with visual hierarchy', 'Correct product scale maintained'],
+      scene: 'Elegant styled composition featuring product with visible personalization, surrounded by 4 feature highlights: premium materials, artisanal craftsmanship, customization options, exceptional quality',
+      camera: 'Artistic arrangement with product as centerpiece, each feature highlighted with visual cues',
+      lighting: 'Studio lighting with dramatic shadows creating depth',
+      emotion: 'Premium craftsmanship, endless personalization possibilities, desirable bespoke luxury',
+      composition: 'Product as centerpiece, 4 feature highlights arranged artistically around it',
+      elements: ['Product as centerpiece', 'Artistic feature presentation', 'Premium materials showcased'],
       text_content: { 
         headline: 'Personalized Quality', 
         subheadline: 'Unique • Custom • Yours' 
@@ -431,15 +485,15 @@ function generateImageBlueprint(
     lifestyle: {
       index: 6,
       type: '生活方式展示',
-      goal: '展示个性化产品在真实生活中的意义和使用场景，强调定制内容如何融入日常生活，突出专属定制带来的独特生活体验，采用精美电商排版设计，保持产品原有尺寸和比例，保留产品上的现有定制内容',
+      goal: '展示个性化产品在真实生活中的意义和使用场景，强调定制内容如何融入日常生活',
       headline: 'Part of Your Story',
       subheadline: 'Uniquely Yours',
-      scene: `${generateLifestyleScene(preferences.selectedAudiences)}. ${analysis.dimensions ? `IMPORTANT: The product dimensions are ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Show the product at its TRUE SIZE - it should appear appropriately large/small relative to the person and surroundings.` : ''} CRITICAL: The product displays the EXACT same custom design/print as shown in the reference image - preserve all existing personalization (names, photos, text, artwork) perfectly without any changes`,
-      camera: 'Professional lifestyle photography with artistic composition, product in use at accurate scale with existing custom design clearly visible and unchanged, camera positioned to clearly show size relationship between product and person/environment, beautiful text elements arranged artfully around the scene',
-      lighting: 'Soft natural lighting with warm golden tones, creating inviting atmosphere with gentle highlights on personalized details and text elements',
-      emotion: 'Comforting familiarity with exclusive luxury touch, cherished daily ritual, seeing the product in real use brings emotional connection',
-      composition: 'Modern e-commerce layout with personalized product in use at accurate true-to-life size showing preserved custom design, person interacting with product naturally showing proper scale, elegant headline text at top or side, lifestyle elements framing the scene, clean visual hierarchy with decorative flourishes',
-      elements: ['Product in authentic use at accurate scale with preserved customization', 'Person naturally interacting with product showing true size', 'Elegant typography elements', 'Soft decorative flourishes', 'Premium background texture', 'Artistic composition', 'Professional e-commerce styling', 'Real lifestyle atmosphere', 'Clear size reference', 'Existing custom design maintained exactly'],
+      scene: `${generateLifestyleScene(preferences.selectedAudiences)}. ${analysis.dimensions ? `Product dimensions: ${analysis.dimensions.length || ''} x ${analysis.dimensions.width || ''} x ${analysis.dimensions.height || ''}. Show product at TRUE SIZE.` : ''}`,
+      camera: 'Professional lifestyle photography with artistic composition, product in use',
+      lighting: 'Soft natural lighting with warm golden tones',
+      emotion: 'Comforting familiarity with exclusive luxury touch, cherished daily ritual',
+      composition: 'Modern e-commerce layout with personalized product in use, person interacting naturally',
+      elements: ['Product in authentic use', 'Person naturally interacting with product', 'Elegant typography elements', 'Real lifestyle atmosphere'],
       text_content: { headline: 'YOURS ONLY', subheadline: 'A Piece That Tells Your Story' }
     },
   };
@@ -490,6 +544,16 @@ function generateImagePrompt(
   // ===== Build complete prompt =====
   const basePrompt = `Amazon listing product photography. ${analysis.product_name}. 
 
+${GLOBAL_PHOTOGRAPHY_STANDARDS}
+
+${GLOBAL_CUSTOMIZATION_PRESERVATION}
+
+${GLOBAL_SIZE_CONSTRAINTS}
+
+${GLOBAL_PACKAGING_PROHIBITIONS}
+
+${GLOBAL_QUALITY_STANDARDS}
+
 DESIGN BIBLE (apply to ALL images):
 - Visual Style: ${designBible.visual_style}
 - Color Palette: Primary ${palette.primary}, Secondary ${palette.secondary}, Accent ${palette.accent}, Background ${palette.background}, Text ${palette.text}
@@ -512,15 +576,11 @@ TEXT CONTENT (if applicable):
 Headline: "${blueprint.text_content.headline}"
 Subheadline: "${blueprint.text_content.subheadline}"
 
-REQUIREMENTS:
+${GLOBAL_ECOMMERCE_TYPOGRAPHY}
+
+ADDITIONAL REQUIREMENTS:
 - Use EXACT colors from Design Bible palette
-- Use EXACT font style specified
-- Product is ALWAYS the hero
-- NO packaging elements, NO decorative ribbons, NO wrapping materials
-- Clean, professional Amazon listing quality
-- Consistent with all other images in the set
-${analysis.dimensions ? '- Show product at accurate scale and proportion' : ''}
-- CRITICAL: PRESERVE EXISTING CUSTOMIZATION - The reference image shows the product with existing custom design/print. You MUST maintain this exact customization in the generated image. Do NOT change, alter, or replace the existing personalized content (names, photos, text, artwork) shown on the product. Only change the background, lighting, composition, and presentation style while keeping the product's custom design identical to the reference.`;
+- Use EXACT font style specified`;
 
   return basePrompt;
 }
