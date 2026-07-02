@@ -313,9 +313,9 @@ class FileStorageAdapter implements StorageAdapter {
 class KVStorageAdapter implements StorageAdapter {
   private kv: any;
   private initialized = false;
-  // TTL 设置为不过期（永久存储）
-  // 如需恢复过期，改为：private static readonly TTL_SECONDS = 24 * 60 * 60; (24小时)
-  private static readonly TTL_SECONDS = Number.MAX_SAFE_INTEGER; // 永不过期
+  // TTL 设置为 24 小时（86400 秒）
+  // 如需永久存储，改为：private static readonly TTL_SECONDS = Number.MAX_SAFE_INTEGER;
+  private static readonly TTL_SECONDS = 24 * 60 * 60; // 24小时
 
   private async init(): Promise<void> {
     if (this.initialized) return;
